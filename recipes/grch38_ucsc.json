@@ -1,0 +1,188 @@
+{
+  "_doc": "UCSC hg38 FASTAs (hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips). Applied by pipeline/run_recipes.py. UCSC replaces IUPAC codes with N and soft-masks repeats (RepeatMasker + TRF); the soft-mask is not reproduced. Order of hg38 and hg38.p14: as if UCSC concatenated per-file FASTAs in filename order: each chromosome, then its unlocalized scaffolds as one file ('chrN_random', in AGP order), the unplaced as one file ('chrUn', in AGP order); the alts form one block between chr9* and chrM (sorted as 'chrAlt', inferred), in the GRC's own order; the patches come last ('~'), by the UCSC build that added them (p11 for GRC p1-p11, then p12, p13, p14), then chromosome, then start on the parent.",
+  "recipes": [
+    {
+      "flavor": "UCSC_hg38",
+      "published": "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.15",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "ucsc"
+      },
+      "order": {
+        "default": [
+          "name"
+        ],
+        "by_role": {
+          "alt-scaffold": [
+            {
+              "literal": "chrAlt"
+            },
+            "assembly_unit",
+            "molecule",
+            "object_rank"
+          ],
+          "unlocalized-scaffold": [
+            {
+              "template": "{stem}_random"
+            },
+            "object_rank"
+          ],
+          "unplaced-scaffold": [
+            {
+              "literal": "chrUn"
+            },
+            "object_rank"
+          ]
+        }
+      },
+      "format": {
+        "case": "soft",
+        "line_width": 50
+      }
+    },
+    {
+      "flavor": "UCSC_hg38.p14",
+      "published": "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.29",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ]
+        },
+        {
+          "assembly": "GCA_000001405.28",
+          "roles": [
+            "fix-patch"
+          ],
+          "accessions": [
+            "KQ759759.1",
+            "KQ759762.1"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "ucsc"
+      },
+      "order": {
+        "default": [
+          "name"
+        ],
+        "by_role": {
+          "alt-scaffold": [
+            {
+              "literal": "chrAlt"
+            },
+            "assembly_unit",
+            "molecule",
+            "object_rank"
+          ],
+          "fix-patch": [
+            {
+              "literal": "~"
+            },
+            {
+              "key": "first_release",
+              "min": 11
+            },
+            "molecule",
+            "parent_start"
+          ],
+          "novel-patch": [
+            {
+              "literal": "~"
+            },
+            {
+              "key": "first_release",
+              "min": 11
+            },
+            "molecule",
+            "parent_start"
+          ],
+          "unlocalized-scaffold": [
+            {
+              "template": "{stem}_random"
+            },
+            "object_rank"
+          ],
+          "unplaced-scaffold": [
+            {
+              "literal": "chrUn"
+            },
+            "object_rank"
+          ]
+        }
+      },
+      "format": {
+        "case": "soft",
+        "line_width": 50
+      }
+    },
+    {
+      "flavor": "UCSC_hg38.analysisSet",
+      "published": "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/analysisSet/hg38.analysisSet.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.15",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "hardmask_grc",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "AJ507799.2": "chrEBV"
+        }
+      },
+      "order": [
+        "select",
+        "role",
+        "assembly_unit",
+        "molecule",
+        "object_rank"
+      ],
+      "format": {
+        "case": "soft",
+        "line_width": 50
+      }
+    }
+  ]
+}

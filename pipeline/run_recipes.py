@@ -3,20 +3,36 @@
 A recipe (see recipes/*.json) is data. The operations, in the order applied:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
-           accession.version>, "roles": [...]} (rows of assembly_members) or
-           {"roots": [...]} (roots in no assembly, e.g. EBV)
+           accession.version>, "roles": [...], "accessions": [...]?} (rows of
+           assembly_members, optionally only those accessions) or {"roots":
+           [...]} (roots in no assembly, e.g. EBV)
 - mask     [{"layer": <name>, "with": "N"}]: hard-mask the spans of
            layer_<name> that fall on selected roots
-- rename   {"namespace": "ucsc", "map": {root: name}, "template":
-           {assembly: "...{accession_v}..."}}; map wins, then template (for
-           that assembly's roots; accession_v is the accession with "." -> "v"),
-           then the namespace column of assembly_members
+- alphabet {"iupac": "N"}: replace every IUPAC code (layer_iupac) with N
+- rename   {"namespace": "ucsc", "by_role": {role: namespace}, "map": {root:
+           name}, "template": {assembly: "...{accession_v}..."}}; map wins,
+           then template (for that assembly's roots; accession_v is the
+           accession with "." -> "v"), then the by_role namespace for the
+           root's role, then the default namespace. A namespace is a name
+           column of assembly_members: ucsc, sequence (the GRC
+           Sequence-Name), genbank (the accession) or refseq
 - order    sort keys, applied in turn: "select" (entry index), "role" (index
            in the entry's roles), "assembly_unit" (unit name as text),
            "molecule" (assigned molecule, in the report's chromosome order),
-           "object_rank" (position in the root's AGP file)
-- format   {"case": ..., "line_width": ...}: checked against the published
-           file's case and line width, not materialized
+           "object_rank" (position in the root's AGP file), "name" (the new
+           name, as text), "parent_start" (start on the parent in the root's
+           earliest placement), {"literal": "..."} (a constant, to place a
+           block of roles among the names), {"template": "{stem}..."} (the
+           same, built from the name up to its first "_"), {"key":
+           "first_release", "min": n}
+           (earliest GRCh38 release with the root, floored at n). Either a
+           list for every root, or {"default": [...], "by_role": {role:
+           [...]}}; per-role lists should start with a literal that sets the
+           block apart, so keys of different roles are never compared
+- format   {"case": "upper" | "soft", "line_width": ...}: checked against the
+           published file, not materialized. "soft" means the file has
+           lowercase repeats; digests ignore case, and the soft-mask itself is
+           not reproduced
 
 Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u) and compares each flavor, position by
@@ -69,8 +85,9 @@ def select(recipe: dict, members: list[dict], roots: dict) -> list[dict]:
         for m in rows:
             if m["role"] == "assembled-molecule" and m["assigned_molecule"] not in molecules:
                 molecules.append(m["assigned_molecule"])
+        only = set(entry.get("accessions", [])) or None
         for m in rows:
-            if m["role"] in entry["roles"]:
+            if m["role"] in entry["roles"] and (only is None or m["genbank_accession"] in only):
                 mol = m["assigned_molecule"]
                 out.append({"root_id": m["genbank_accession"], "select": i,
                             "role": entry["roles"].index(m["role"]),
@@ -90,36 +107,70 @@ def name_of(s: dict, rename: dict) -> str:
     template = rename.get("template", {}).get(s["assembly"])
     if template:
         return template.format(accession=acc, accession_v=acc.replace(".", "v"))
-    name = s["member"] and s["member"].get(f"{rename['namespace']}_name")
+    m = s["member"]
+    ns = rename.get("by_role", {}).get(m and m["role"], rename["namespace"])
+    name = m and m.get(NAMESPACES[ns])
     if not name:
-        sys.exit(f"{acc}: no {rename['namespace']} name and no rule to make one")
+        sys.exit(f"{acc}: no {ns} name and no rule to make one")
     return name
 
 
+# Recipe namespace -> assembly_members column.
+NAMESPACES = {"ucsc": "ucsc_name", "sequence": "sequence_name",
+              "genbank": "genbank_accession", "refseq": "refseq_accession"}
+
+
+def sort_key(s: dict, order) -> tuple:
+    if isinstance(order, dict):
+        role = s["member"] and s["member"]["role"]
+        order = order["by_role"].get(role, order["default"])
+    key = []
+    for k in order:
+        if isinstance(k, str):
+            key.append(s[k])
+        elif "literal" in k:
+            key.append(k["literal"])
+        elif "template" in k:
+            key.append(k["template"].format(stem=s["name"].split("_")[0]))
+        else:
+            key.append(max(k.get("min", s[k["key"]]), s[k["key"]]))
+    return tuple(key)
+
+
 def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
-        masks: dict) -> list[dict]:
+        masks: dict, iupac: dict, first_release: dict, parent_start: dict) -> list[dict]:
     sel = select(recipe, members, roots)
     for s in sel:
-        s["object_rank"] = rank.get(s["root_id"], 0)
-    sel.sort(key=lambda s: tuple(s[k] for k in recipe["order"]))
+        acc = s["root_id"]
+        s["object_rank"] = rank.get(acc, 0)
+        s["first_release"] = first_release.get(acc, 0)
+        s["parent_start"] = parent_start.get(acc, 0)
+        s["name"] = name_of(s, recipe["rename"])
+    sel.sort(key=lambda s: sort_key(s, recipe["order"]))
     spans = defaultdict(list)
     for m in recipe.get("mask", []):
         if m["with"] != "N":
             sys.exit(f"{recipe['flavor']}: only N masks are implemented")
         for acc, start, end in masks[m["layer"]]:
             spans[acc].append((start, end))
+    alphabet = recipe.get("alphabet", {})
+    if alphabet not in ({}, {"iupac": "N"}):
+        sys.exit(f"{recipe['flavor']}: only the alphabet change iupac -> N is implemented")
     out = []
     for pos, s in enumerate(sel):
         acc = s["root_id"]
         r = roots[acc]
         md5, sq = r["md5"], r["sha512t24u"]
-        if spans.get(acc):
+        to_n = iupac.get(acc, []) if alphabet else []
+        if spans.get(acc) or to_n:
             bases = root_bases(build, acc)
-            for start, end in spans[acc]:
+            for start, end in spans.get(acc, []):
                 bases[start:end] = b"N" * (end - start)
+            for p in to_n:
+                bases[p] = ord("N")
             md5, sq = digests(bytes(bases))
         out.append({"flavor": recipe["flavor"], "position": pos,
-                    "name": name_of(s, recipe["rename"]), "root_id": acc,
+                    "name": s["name"], "root_id": acc,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
     return out
 
@@ -137,6 +188,8 @@ def compare(recipe: dict, got: list[dict], observed: list[dict]) -> list[str]:
     fmt = recipe.get("format", {})
     if fmt.get("case") == "upper" and any(o["n_lower"] for o in observed):
         errs.append("published file has lowercase; recipe says upper")
+    if fmt.get("case") == "soft" and not any(o["n_lower"] for o in observed):
+        errs.append("published file has no lowercase; recipe says soft")
     widths = {o["line_width"] for o in observed if o["length"] > o["line_width"]}
     if "line_width" in fmt and widths != {fmt["line_width"]}:
         errs.append(f"published line widths {widths}; recipe says {fmt['line_width']}")
@@ -161,9 +214,26 @@ def main() -> None:
         t = pq.read_table(build / f"layer_{name}.parquet", columns=["root_id", "start", "end"])
         masks[name] = list(zip(*(t[c].to_pylist() for c in ("root_id", "start", "end"))))
 
+    iupac = defaultdict(list)
+    t = pq.read_table(build / "layer_iupac.parquet", columns=["root_id", "pos"])
+    for acc, p in zip(t["root_id"].to_pylist(), t["pos"].to_pylist()):
+        iupac[acc].append(p)
+
+    first_release = {}
+    for m in members:
+        if m["assembly_accession"].startswith("GCA_000001405."):
+            acc = m["genbank_accession"]
+            first_release[acc] = min(first_release.get(acc, m["release"]), m["release"])
+    parent_start = {}
+    for p in sorted(pq.read_table(build / "layer_placements.parquet",
+                                  columns=["root_id", "parent_start", "first_release"]).to_pylist(),
+                    key=lambda p: p["first_release"]):
+        parent_start.setdefault(p["root_id"], p["parent_start"])
+
     rows, failed = [], []
     for recipe in recipes:
-        got = run(recipe, build, members, roots, rank, masks)
+        got = run(recipe, build, members, roots, rank, masks, iupac, first_release,
+                  parent_start)
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
         errs = compare(recipe, got, observed)
         print(f"{recipe['flavor']}: {len(got)} sequences, "
