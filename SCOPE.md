@@ -437,9 +437,16 @@ distribution and the library.
 2. **Does soft-masking reproduce?** Do UCSC's published rmsk and simpleRepeat
    tracks reproduce `hg38.fa`'s lowercase exactly? It isn't part of identity,
    but it is a test of whether the soft-mask layers are faithful.
-3. **Block size and layout of `root_blocks`.** Fixed 64 kb rows, or rows per
-   AGP component so that gaps take no space? What are the row-group sizes for
-   HTTP range reads?
+3. **Block size and layout of `root_blocks`.** Settled (measured in
+   `experiments/root_blocks_layout.py`). Keep fixed 64 kb rows. Gaps cost
+   nothing (all 2,219 all-N blocks compress to ~17 kB), and AGP components vary
+   from <1 kb to 4.8 Mb, which would make fetch cost uneven and need a lookup.
+   Use row groups of 32 blocks that never span roots, statistics on
+   `root_id`/`start` only (statistics on `bases` made the footer 9 MB), and a
+   page index with one row per page. A 1 kb fetch then reads ~0.5 MB in any
+   engine (row-group pruning) and ~18 kB in DataFusion/polars-bio (page
+   pruning; DuckDB from duckdb/duckdb#27326). Pages must be limited by rows,
+   not bytes, because pruning happens on the small `start` column.
 4. **Patch release membership.** Settled: patch releases add sequences and never change existing ones
    (see Roots). What remains is to find which patch release each provider's
    build actually corresponds to. For example, Ensembl 116 lacks 3 of the p14

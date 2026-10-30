@@ -30,6 +30,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ref_registry import blocks as root_blocks  # the root_blocks storage layout
+
 NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
 P14 = "GCA_000001405.29_GRCh38.p14"
 SUPERSEDED = ["KQ759759.1", "KQ759762.1"]
@@ -131,7 +133,7 @@ def build_members(raw: Path) -> pa.Table:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
-    ap.add_argument("--block-size", type=int, default=65536)
+    ap.add_argument("--block-size", type=int, default=root_blocks.BLOCK_SIZE)
     args = ap.parse_args()
     raw = args.registry / "raw"
     out = args.registry / "build" / "grch38"
@@ -164,10 +166,7 @@ def main() -> None:
         "n_runs": {"root_id": [], "start": [], "end": []},
         "iupac": {"root_id": [], "pos": [], "code": []},
     }
-    blocks_schema = pa.schema([("root_id", pa.string()), ("start", pa.int64()),
-                               ("bases", pa.string())])
-    blocks = pq.ParquetWriter(out / "root_blocks.parquet", blocks_schema,
-                              compression="zstd")
+    blocks = root_blocks.writer(out / "root_blocks.parquet")
     seen = set()
     for path, url in sources:
         for acc, seq in read_fasta(path):
@@ -204,11 +203,11 @@ def main() -> None:
                          ("n_lower", n_lower), ("source", url)):
                 roots[k].append(v)
             starts = range(0, len(up), args.block_size)
-            blocks.write_table(pa.table({
+            root_blocks.write_root(blocks, pa.table({
                 "root_id": [acc] * len(starts),
                 "start": list(starts),
                 "bases": [up[s:s + args.block_size].decode() for s in starts],
-            }, schema=blocks_schema))
+            }, schema=root_blocks.SCHEMA))
             print(f"{acc}\t{len(up)}\t{md5}", file=sys.stderr)
     blocks.close()
 

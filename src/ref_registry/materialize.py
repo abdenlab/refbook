@@ -6,7 +6,7 @@ identity operations, hard masks and alphabet; selection, names and order come
 from the reproduced flavor. Soft-masking is a layer, not part of the bases, so
 sequences are uppercase. Formatting (line width, deflines) is out of band.
 
-Hosted roots come from root_blocks.parquet (one row group per root). External
+Hosted roots come from root_blocks.parquet (their row groups; see blocks.py). External
 roots (IMGT/HLA) are never hosted: their bases are read from the source release,
 a local mirror if there is one, else downloaded into a cache, and checked
 against the catalog's digests.
@@ -24,6 +24,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ref_registry.blocks import row_groups_by_root
 from ref_registry.catalog import Catalog
 from ref_registry.seqcol import sha512t24u
 
@@ -43,21 +44,15 @@ class Bases:
     def __init__(self, cat: Catalog, cache: str | Path | None = None):
         self.cat = cat
         self.blocks = pq.ParquetFile(cat.path / "root_blocks.parquet")
-        md = self.blocks.metadata
-        self.row_group = {}
-        for i in range(md.num_row_groups):
-            stats = md.row_group(i).column(0).statistics
-            if stats.min != stats.max:
-                raise ValueError("root_blocks row group spans several roots")
-            self.row_group[stats.min] = i
+        self.row_groups = row_groups_by_root(self.blocks)
         self.mirror = cat.path.parent.parent / "raw"  # REGISTRY/raw next to REGISTRY/build/grch38
         self.cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE",
                                                   Path.home() / ".cache" / "ref-registry"))
         self._external_files: dict[str, dict] = {}
 
     def get(self, root_id: str) -> bytearray:
-        if root_id in self.row_group:
-            t = self.blocks.read_row_group(self.row_group[root_id], columns=["start", "bases"])
+        if root_id in self.row_groups:
+            t = self.blocks.read_row_groups(self.row_groups[root_id], columns=["start", "bases"])
             blocks = sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist()))
             return bytearray(b"".join(b.encode("ascii") for _, b in blocks))
         if root_id in self.cat.external:
