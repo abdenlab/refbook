@@ -4,7 +4,9 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
            accession.version>, "roles": [...], "accessions": [...]?} (rows of
-           assembly_members, optionally only those accessions), {"roots":
+           assembly_members, optionally only those accessions, and with
+           "placed_on": ["chromosome"] only roots placed, if at all, on those
+           parent types: layer_placements.parent_type), {"roots":
            [...]} (roots in no assembly, e.g. EBV) or {"collection": ...,
            "groups": [...]} (external roots, roots_external.parquet, in their
            collection's rank order; never materialized)
@@ -23,7 +25,8 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
            in the entry's roles), "assembly_unit" (unit name as text),
            "molecule" (assigned molecule, in the report's chromosome order),
            "object_rank" (position in the root's AGP file), "name" (the new
-           name, as text), "parent_start" (start on the parent in the root's
+           name, as text), "sequence_name" (the GRC Sequence-Name, as text,
+           whatever the root is renamed to), "parent_start" (start on the parent in the root's
            earliest placement), {"literal": "..."} (a constant, to place a
            block of roles among the names), {"template": "{stem}..."} (the
            same, built from the name up to its first "_"), {"key":
@@ -74,7 +77,8 @@ def root_bases(build: Path, acc: str) -> bytearray:
     return bytearray(b"".join(b.encode() for _, b in order))
 
 
-def select(recipe: dict, members: list[dict], roots: dict, external: list[dict]) -> list[dict]:
+def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
+           parent_types: dict) -> list[dict]:
     """The selected roots, each with the attributes the later steps need."""
     out = []
     for i, entry in enumerate(recipe["select"]):
@@ -104,8 +108,12 @@ def select(recipe: dict, members: list[dict], roots: dict, external: list[dict])
             if m["role"] == "assembled-molecule" and m["assigned_molecule"] not in molecules:
                 molecules.append(m["assigned_molecule"])
         only = set(entry.get("accessions", [])) or None
+        placed_on = set(entry.get("placed_on", [])) or None
         for m in rows:
-            if m["role"] in entry["roles"] and (only is None or m["genbank_accession"] in only):
+            acc = m["genbank_accession"]
+            if placed_on and parent_types.get(acc, placed_on) - placed_on:
+                continue  # placed on a parent type the flavor leaves out
+            if m["role"] in entry["roles"] and (only is None or acc in only):
                 mol = m["assigned_molecule"]
                 out.append({"root_id": m["genbank_accession"], "select": i,
                             "role": entry["roles"].index(m["role"]),
@@ -163,14 +171,15 @@ def sort_key(s: dict, order) -> tuple:
 
 def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
         masks: dict, iupac: dict, first_release: dict, parent_start: dict,
-        external: list[dict]) -> list[dict]:
-    sel = select(recipe, members, roots, external)
+        external: list[dict], parent_types: dict) -> list[dict]:
+    sel = select(recipe, members, roots, external, parent_types)
     for s in sel:
         acc = s["root_id"]
         s["object_rank"] = s["external"]["rank"] if s.get("external") else rank.get(acc, 0)
         s["first_release"] = first_release.get(acc, 0)
         s["parent_start"] = parent_start.get(acc, 0)
         s["length"] = roots[acc]["length"]
+        s["sequence_name"] = (s["member"] or {}).get("sequence_name") or acc
         s["name"] = name_of(s, recipe["rename"])
     sel.sort(key=lambda s: sort_key(s, recipe["order"]))
     spans = defaultdict(list)
@@ -257,6 +266,10 @@ def main() -> None:
         if m["assembly_accession"].startswith("GCA_000001405."):
             acc = m["genbank_accession"]
             first_release[acc] = min(first_release.get(acc, m["release"]), m["release"])
+    parent_types = defaultdict(set)
+    for p in pq.read_table(build / "layer_placements.parquet",
+                           columns=["root_id", "parent_type"]).to_pylist():
+        parent_types[p["root_id"]].add(p["parent_type"])
     parent_start = {}
     for p in sorted(pq.read_table(build / "layer_placements.parquet",
                                   columns=["root_id", "parent_start", "first_release"]).to_pylist(),
@@ -266,7 +279,7 @@ def main() -> None:
     rows, failed = [], []
     for recipe in recipes:
         got = run(recipe, build, members, roots, rank, masks, iupac, first_release,
-                  parent_start, external)
+                  parent_start, external, parent_types)
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
         errs = compare(recipe, got, observed)
         print(f"{recipe['flavor']}: {len(got)} sequences, "

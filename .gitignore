@@ -3,3 +3,4 @@ _scratch/
 .venv/
 __pycache__/
 .nfs*
+build/

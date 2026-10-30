@@ -1,0 +1,127 @@
+{
+  "_doc": "GENCODE release 50 genome FASTAs (ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50). The primary assembly has the bases of the Ensembl 116 primary assembly (IUPAC -> N), with chromosomes named UCSC-style (chr1..chrM) in karyotype order, then the scaffolds by GenBank accession, sorted as text. Deflines are '>chr1 1' (UCSC name, then Ensembl name). Applied by pipeline/run_recipes.py. GRCh38.p14.genome has the bases of Ensembl 116 toplevel (so it too leaves out the 3 patches placed on alt scaffolds), every non-chromosome named by GenBank accession; after the chromosomes come the alts and patches, sorted by GRC Sequence-Name (HG1012_PATCH, ...) though labeled by accession, then the scaffolds by accession.",
+  "recipes": [
+    {
+      "flavor": "GENCODE50_primary_assembly",
+      "published": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.primary_assembly.genome.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.29",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "ucsc"
+        }
+      },
+      "order": {
+        "default": [
+          {
+            "literal": "~0"
+          },
+          "molecule"
+        ],
+        "by_role": {
+          "unlocalized-scaffold": [
+            {
+              "literal": "~2"
+            },
+            "name"
+          ],
+          "unplaced-scaffold": [
+            {
+              "literal": "~2"
+            },
+            "name"
+          ]
+        }
+      },
+      "format": {
+        "case": "upper",
+        "line_width": 60
+      }
+    },
+    {
+      "flavor": "GENCODE50_p14",
+      "published": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.p14.genome.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.29",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ],
+          "placed_on": [
+            "chromosome"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "ucsc"
+        }
+      },
+      "order": {
+        "default": [
+          {
+            "literal": "~0"
+          },
+          "molecule"
+        ],
+        "by_role": {
+          "alt-scaffold": [
+            {
+              "literal": "~1"
+            },
+            "sequence_name"
+          ],
+          "fix-patch": [
+            {
+              "literal": "~1"
+            },
+            "sequence_name"
+          ],
+          "novel-patch": [
+            {
+              "literal": "~1"
+            },
+            "sequence_name"
+          ],
+          "unlocalized-scaffold": [
+            {
+              "literal": "~2"
+            },
+            "name"
+          ],
+          "unplaced-scaffold": [
+            {
+              "literal": "~2"
+            },
+            "name"
+          ]
+        }
+      },
+      "format": {
+        "case": "upper",
+        "line_width": 60
+      }
+    }
+  ]
+}

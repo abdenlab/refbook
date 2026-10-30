@@ -55,4 +55,14 @@ for f in README.20150309.GRCh38_full_analysis_set_plus_decoy_hla \
          GRCh38_full_analysis_set_plus_decoy_hla-extra.fa; do
     wget_mirror "$G1K/$f"
 done
+# iGenomes (Illumina/AWS): metadata only. Single-part S3 ETags are MD5s.
+IGENOMES=https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens
+for v in NCBI/GRCh38 NCBI/GRCh38Decoy UCSC/hg38; do
+    for f in genome.dict genome.fa.fai; do
+        wget_mirror "$IGENOMES/$v/Sequence/WholeGenomeFasta/$f"
+    done
+done
+for f in Homo_sapiens_assembly38.dict Homo_sapiens_assembly38.fasta.fai; do
+    wget_mirror "$IGENOMES/GATK/GRCh38/Sequence/WholeGenomeFasta/$f"
+done
 echo "fetch complete" >&2
