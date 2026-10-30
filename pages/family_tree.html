@@ -154,6 +154,9 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const fmtN = n => n.toLocaleString("en-US");
 const basisOf = n => n.baseline ? null : (n.checked_against && n.checked_against.endsWith(".dict") ? ".dict" : "FASTA");
 const fileOf = url => url ? url.replace(/^https?:\/\//, "") : "";
+const fmtText = (k, v) => k === "line_width" ? `${v}-column lines`
+  : k === "keep_case" ? (v && v !== "None" ? "hs38d1 decoys keep NCBI soft-masking" : "no kept soft-masking")
+  : `case ${v}`;
 
 function chips(diff) {
   const out = [];
@@ -165,7 +168,7 @@ function chips(diff) {
   if (diff.order) out.push(["cosmetic", "order"]);
   for (const [k, v] of Object.entries(diff.format || {})) {
     const [a, c] = v.split(" -> ");
-    out.push(["cosmetic", k === "line_width" ? `${a} → ${c} columns` : `case ${a} → ${c}`]);
+    out.push(["cosmetic", k === "line_width" ? `${a} → ${c} columns` : k === "keep_case" ? fmtText(k, c) : `case ${a} → ${c}`]);
   }
   return out;
 }
@@ -196,8 +199,8 @@ function renderNode(f) {
       const [gn, gp] = label(g.flavor);
       const b = el("b", null, `${gp} ${gn}`.trim());
       s.append(b);
-      const fmtDiff = Object.entries(g.format || {}).filter(([k, v]) => (n.format || {})[k] !== v)
-        .map(([k, v]) => k === "line_width" ? `${v}-column lines` : `case ${v}`);
+      const fmtDiff = Object.entries(g.format || {}).filter(([k, v]) => JSON.stringify((n.format || {})[k]) !== JSON.stringify(v))
+        .map(([k, v]) => fmtText(k, v));
       const basis = g.checked_against && g.checked_against.endsWith(".dict") ? ".dict" : "FASTA";
       s.append(` (${[...fmtDiff, basis].join(", ")})`);
       if (i < n.same_as.length - 1) s.append("; ");

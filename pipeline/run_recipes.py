@@ -38,10 +38,13 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
            list for every root, or {"default": [...], "by_role": {role:
            [...]}}; per-role lists should start with a literal that sets the
            block apart, so keys of different roles are never compared
-- format   {"case": "upper" | "soft", "line_width": ...}: checked against the
-           published file, not materialized. "soft" means the file has
-           lowercase repeats; digests ignore case, and the soft-mask itself is
-           not reproduced
+- format   {"case": "upper" | "soft", "line_width": ..., "keep_case":
+           [assembly, ...]}: checked against the published file, not
+           materialized. "soft" means the file has lowercase repeats; digests
+           ignore case, and the soft-mask itself is not reproduced. With
+           keep_case, the roots of those assemblies keep NCBI's soft-mask
+           (layer softmask_ncbi) and all else is upper: each sequence's
+           lowercase count must equal its root's
 
 Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u) and compares each flavor, position by
@@ -212,7 +215,8 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
     return out
 
 
-def compare(recipe: dict, got: list[dict], observed: list[dict]) -> list[str]:
+def compare(recipe: dict, got: list[dict], observed: list[dict], lower: dict,
+            assembly_of: dict) -> list[str]:
     errs = []
     if len(got) != len(observed):
         errs.append(f"{len(got)} sequences, published has {len(observed)}")
@@ -225,7 +229,13 @@ def compare(recipe: dict, got: list[dict], observed: list[dict]) -> list[str]:
     fmt = recipe.get("format", {})
     if any(o["n_lower"] is None for o in observed):
         return errs  # observed from a .dict: no case or line width to check
-    if fmt.get("case") == "upper" and any(o["n_lower"] for o in observed):
+    keep = set(fmt.get("keep_case", []))
+    if fmt.get("case") == "upper" and keep:
+        for g, o in zip(got, observed):
+            want = lower.get(g["root_id"], 0) if assembly_of.get(g["root_id"], set()) & keep else 0
+            if o["n_lower"] != want:
+                errs.append(f"position {g['position']}: {o['n_lower']} lowercase, expected {want}")
+    elif fmt.get("case") == "upper" and any(o["n_lower"] for o in observed):
         errs.append("published file has lowercase; recipe says upper")
     if fmt.get("case") == "soft" and not any(o["n_lower"] for o in observed):
         errs.append("published file has no lowercase; recipe says soft")
@@ -276,12 +286,18 @@ def main() -> None:
                     key=lambda p: p["first_release"]):
         parent_start.setdefault(p["root_id"], p["parent_start"])
 
+    lower = {r["root_id"]: r["n_lower"] for r in pq.read_table(
+        build / "roots.parquet", columns=["root_id", "n_lower"]).to_pylist()}
+    assembly_of = defaultdict(set)
+    for m in members:
+        assembly_of[m["genbank_accession"]].add(m["assembly_accession"])
+
     rows, failed = [], []
     for recipe in recipes:
         got = run(recipe, build, members, roots, rank, masks, iupac, first_release,
                   parent_start, external, parent_types)
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
-        errs = compare(recipe, got, observed)
+        errs = compare(recipe, got, observed, lower, assembly_of)
         print(f"{recipe['flavor']}: {len(got)} sequences, "
               f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES'}", file=sys.stderr)
         for e in errs[:20]:

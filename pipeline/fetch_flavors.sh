@@ -42,9 +42,11 @@ for f in GRCh38.primary_assembly.genome.fa.gz GRCh38.p14.genome.fa.gz MD5SUMS _R
     wget_mirror "$GENCODE/$f"
 done
 # Broad/GATK and 1000 Genomes (bwakit hs38DH: full_plus_hs38d1 + HLA):
-# metadata only for now (.dict carries M5 per sequence).
+# .dict carries M5 per sequence; the Broad FASTA (3.2 GB, GCS md5 in
+# x-goog-hash) checks the content too. 1000 Genomes: metadata only.
 BROAD=https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0
-for f in Homo_sapiens_assembly38.dict Homo_sapiens_assembly38.fasta.fai; do
+for f in Homo_sapiens_assembly38.dict Homo_sapiens_assembly38.fasta.fai \
+         Homo_sapiens_assembly38.fasta; do
     wget_mirror "$BROAD/$f"
 done
 G1K=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome
