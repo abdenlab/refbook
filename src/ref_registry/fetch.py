@@ -27,8 +27,12 @@ Engines (`engine=`): "datafusion" reads only the needed blocks with
 DataFusion (the `datafusion` extra, the engine under polars-bio). It issues one
 semi-join with filter pushdown, or, when every sequence needs at most 20
 blocks, per-sequence `IN` lists that the page index prunes to single pages.
-"pyarrow" reads whole row groups. "auto" (the default) uses DataFusion if it
-is installed (and the catalog is local or https://).
+"pyarrow" reads whole row groups (remotely, prefetched in parallel).
+"auto" (the default) uses DataFusion for a local catalog if it is installed,
+and pyarrow for a remote one. DataFusion's HTTP store re-follows a host's
+redirect on every request and cannot send a token or keep a signed URL's
+query string, so on hosts like Hugging Face it pays a redirect per request and
+gets rate-limited (HTTP 429) on dense queries; plain http:// is refused.
 """
 
 import json
@@ -118,8 +122,7 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
     bases = bases or Bases(cat)
     roots = [seqs[n].root_id for n in names]
     if engine == "auto":
-        plain_http = cat.remote and cat.url.startswith("http://")
-        engine = "datafusion" if reader is not None or (_have_datafusion() and not plain_http) else "pyarrow"
+        engine = "datafusion" if reader is not None or (_have_datafusion() and not cat.remote) else "pyarrow"
     blocks = None
     if engine == "datafusion":
         need = {(r, k * BLOCK_SIZE) for r, a, z in zip(roots, lo, hi) if r in bases.row_groups and z > a
@@ -130,8 +133,24 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
 
     out = [None] * table.num_rows
     # Visit intervals in genome order so row groups are read once; write back in input order.
-    for i in sorted(range(table.num_rows), key=lambda i: (roots[i], lo[i])):
+    order = sorted(range(table.num_rows), key=lambda i: (roots[i], lo[i]))
+    if blocks is None and bases.http is not None:
+        # Over HTTP: prefetch the row groups in visit order, 64 at a time, concurrently.
+        needed = []
+        for i in order:
+            if roots[i] in bases.row_groups and hi[i] > lo[i]:
+                needed += [g for g in bases.row_groups_for(roots[i], lo[i], hi[i]) if g not in needed[-8:]]
+        needed = list(dict.fromkeys(needed))
+        batches = {g: k // 64 for k, g in enumerate(needed)}
+        fetched = None
+    for i in order:
         root = roots[i]
+        if blocks is None and bases.http is not None and root in bases.row_groups and hi[i] > lo[i]:
+            batch = batches[bases.row_groups_for(root, lo[i], hi[i])[0]]
+            if batch != fetched:
+                bases._cache.clear()
+                bases.prefetch(needed[batch * 64:(batch + 1) * 64])
+                fetched = batch
         if blocks is not None and root in bases.row_groups:
             b = bytearray(_from_blocks(blocks, root, lo[i], hi[i]))
         else:

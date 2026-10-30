@@ -44,6 +44,7 @@ class Bases:
     def __init__(self, cat: Catalog, cache: str | Path | None = None):
         self.cat = cat
         self.blocks = cat.open_blocks()
+        self.http = cat.blocks_http if cat.remote else None   # this Bases' own range reader
         self.row_groups = row_groups_by_root(self.blocks)
         # A local mirror of the sources (REGISTRY/raw), when the catalog sits in REGISTRY/*/*.
         self.mirror = None if cat.remote else cat.path.parent.parent / "raw"
@@ -55,12 +56,38 @@ class Bases:
 
     def get(self, root_id: str) -> bytearray:
         if root_id in self.row_groups:
+            self.prefetch(self.row_groups[root_id])
             t = self.blocks.read_row_groups(self.row_groups[root_id], columns=["start", "bases"])
             blocks = sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist()))
             return bytearray(b"".join(b.encode("ascii") for _, b in blocks))
         if root_id in self.cat.external:
             return bytearray(self._external(root_id))
         raise KeyError(f"{root_id}: no bases (not a hosted or external root)")
+
+    def row_groups_for(self, root_id: str, start: int, end: int) -> list[int]:
+        """Row groups of a hosted root that hold bases [start, end)."""
+        if root_id not in self._spans:
+            md = self.blocks.metadata
+            self._spans[root_id] = [(md.row_group(i).column(1).statistics.min,
+                                     md.row_group(i).column(1).statistics.max, i)
+                                    for i in self.row_groups[root_id]]
+        first, last = start // BLOCK_SIZE * BLOCK_SIZE, max(end - 1, start) // BLOCK_SIZE * BLOCK_SIZE
+        return [i for lo, hi, i in self._spans[root_id] if not (hi < first or lo > last)]
+
+    def prefetch(self, row_groups: list[int]) -> None:
+        """Over HTTP: fetch these row groups' start and bases chunks concurrently."""
+        http = self.http
+        if http is None:
+            return
+        md, spans = self.blocks.metadata, []
+        for i in row_groups:
+            cols = [md.row_group(i).column(c) for c in (1, 2)]          # start, bases
+            lo = min(c.dictionary_page_offset if c.has_dictionary_page else c.data_page_offset for c in cols)
+            hi = max((c.dictionary_page_offset if c.has_dictionary_page else c.data_page_offset)
+                     + c.total_compressed_size for c in cols)
+            spans.append((lo, hi))
+        http.clear()
+        http.prefetch(spans)
 
     def slice(self, root_id: str, start: int, end: int) -> bytes:
         """Bases [start, end) of a root, reading only the row groups that cover them."""

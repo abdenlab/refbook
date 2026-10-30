@@ -10,14 +10,13 @@ read by HTTP range requests.
 
 import json
 import os
-import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ref_registry.remote import USER_AGENT, HttpFile, download
+from ref_registry.remote import HttpFile, _open, download
 
 KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocalized scaffolds",
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
@@ -40,8 +39,8 @@ class Catalog:
         self.remote = str(source).startswith(("http://", "https://"))
         if self.remote:
             self.url = str(source).rstrip("/") + "/"
-            req = urllib.request.Request(self.url + "catalog.json", headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            r, _ = _open(self.url + "catalog.json")
+            with r:
                 self.manifest = json.load(r)
             cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE", Path.home() / ".cache" / "ref-registry"))
             self.path = cache / "catalog" / self.manifest["version"]
