@@ -222,3 +222,39 @@ def test_fetch_coordinates_bounds_and_names(cat):
     hla = fetch(cat, "Broad_Homo_sapiens_assembly38",
                 pa.table({"chrom": ["HLA-A*01:01:01:01"], "start": [0], "end": [3503]}))
     assert hashlib.md5(hla["sequence"][0].as_py().encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
+
+
+@needs_catalog
+def test_sequence_by_md5_and_unknown(cat, tmp_path):
+    from ref_registry import populate_ref_cache, sequence_by_md5
+    chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519")
+    assert len(chrM) == 16569 and hashlib.md5(chrM).hexdigest() == "c68f52674c9fb33aef52dcf399755519"
+    r = populate_ref_cache(cat, ["c68f52674c9fb33aef52dcf399755519", "0" * 32], tmp_path)
+    assert r["written"] == ["c68f52674c9fb33aef52dcf399755519"] and r["unknown"] == ["0" * 32]
+    assert (tmp_path / "c6" / "8f" / "52674c9fb33aef52dcf399755519").read_bytes() == chrM
+    again = populate_ref_cache(cat, ["c68f52674c9fb33aef52dcf399755519"], tmp_path)
+    assert again["present"] == ["c68f52674c9fb33aef52dcf399755519"] and not again["written"]
+
+
+@needs_catalog
+@pytest.mark.skipif(not __import__("shutil").which("samtools"), reason="no samtools")
+def test_cram_round_trip_through_ref_cache(cat, tmp_path):
+    """Write a CRAM against chrM, delete the reference, decode it through a filled REF_CACHE."""
+    import subprocess
+    from ref_registry import populate_ref_cache, sequence_by_md5
+    chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519").decode()
+    (tmp_path / "ref.fa").write_text(">chrM\n" + chrM + "\n")      # samtools needs a FASTA to write CRAM
+    read = chrM[1000:1050]
+    (tmp_path / "x.sam").write_text("@HD\tVN:1.6\n@SQ\tSN:chrM\tLN:16569\n"
+                                    f"r1\t0\tchrM\t1001\t60\t50M\t*\t0\t0\t{read}\t{'I' * 50}\n")
+    subprocess.run(["samtools", "faidx", "ref.fa"], cwd=tmp_path, check=True)
+    subprocess.run(["samtools", "view", "-C", "-T", "ref.fa", "-o", "x.cram", "x.sam"], cwd=tmp_path, check=True)
+    (tmp_path / "ref.fa").unlink(); (tmp_path / "ref.fa.fai").unlink()
+
+    header = read_header(tmp_path / "x.cram")
+    assert header.format == "cram" and header.entries[0].md5 == "c68f52674c9fb33aef52dcf399755519"
+    populate_ref_cache(cat, [e.md5 for e in header.entries], tmp_path / "cache")
+    env = {**os.environ, "REF_PATH": "/nonexistent", "REF_CACHE": f"{tmp_path}/cache/%2s/%2s/%s"}
+    out = subprocess.run(["samtools", "view", "x.cram"], cwd=tmp_path, env=env, check=True,
+                         capture_output=True, text=True).stdout
+    assert out.split("\t")[9] == read
