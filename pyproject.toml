@@ -8,6 +8,14 @@ dependencies = [
     "pyarrow>=25",
 ]
 
-[tool.uv]
-# pipeline/ is a set of scripts, not an installable package.
-package = false
+[project.scripts]
+ref-registry = "ref_registry.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+# src/ref_registry is the library; pipeline/ holds the build scripts, run
+# directly with `uv run python -I pipeline/<script>.py`.
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
