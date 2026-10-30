@@ -62,4 +62,24 @@ for acc in KQ759759.1 KQ759762.1; do
     [ -s "$out" ] || curl -sSfL --retry 5 -o "$out" \
         "$EUTILS?db=nuccore&id=${acc}&rettype=fasta&retmode=text"
 done
+
+# Roots outside GRCh38 that GRCh38 flavors add (the GRC analysis sets):
+# the hs38d1 decoys, and EBV.
+HS38D1=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1
+for suffix in assembly_report.txt assembly_stats.txt fcs_report.txt genomic.fna.gz; do
+    wget_mirror "$HS38D1/GCA_000786075.2_hs38d1_${suffix}"
+done
+for f in md5checksums.txt uncompressed_checksums.txt assembly_status.txt README.txt; do
+    wget_mirror "$HS38D1/$f"
+done
+wget_mirror --recursive --no-parent --level=inf \
+    --reject 'index.html*,*.fna.gz,*.fa.gz' \
+    "$HS38D1/GCA_000786075.2_hs38d1_assembly_structure/"
+
+# EBV is in no assembly: its sequence, and its GenBank record (topology, source).
+for rettype in fasta gb; do
+    out="eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.${rettype}"
+    [ -s "$out" ] || curl -sSfL --retry 5 -o "$out" \
+        "$EUTILS?db=nuccore&id=AJ507799.2&rettype=${rettype}&retmode=text"
+done
 echo "fetch complete" >&2

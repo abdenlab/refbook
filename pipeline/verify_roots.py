@@ -1,11 +1,12 @@
-"""Check the GRCh38 root digests against two independent sources.
+"""Check the root digests against two independent sources.
 
 1. ENA's refget server (its own copy of INSDC): GET /sequence/{md5}/metadata
    must exist and report the same length.
 2. GRC analysis-set FASTA deflines, which carry `AC:<accession.version>` and
    `M5:<md5>` per sequence. For sequences the GRC did not mask, M5 must equal
    our MD5; for the ones it documents as masked (chr5, 14, 19, 21, 22, Y) it
-   must differ.
+   must differ. Pass a *_plus_hs38d1_analysis_set to also cover the decoys
+   and EBV.
 
 Writes REGISTRY/build/grch38/verify_roots.tsv and prints a summary.
 

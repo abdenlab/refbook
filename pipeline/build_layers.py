@@ -4,7 +4,8 @@ Reads REGISTRY/raw (see fetch_grch38.sh) and REGISTRY/build/grch38/roots.parquet
 and writes Parquet to REGISTRY/build/grch38:
 
 - layer_agp.parquet   one row per AGP part of each root's component-level AGP
-                      (*.comp.agp.gz, *.scaf.agp.gz); start/end are 0-based
+                      (*.comp.agp.gz, *.scaf.agp.gz of GRCh38 and hs38d1; EBV,
+                      in no assembly, has none); start/end are 0-based
                       half-open on the root, component_start/end likewise on
                       the component. Gap rows have null component columns and
                       vice versa.
@@ -24,6 +25,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
+HS38D1 = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
 
 
 # Known disagreements between genomic_regions_definitions.txt (authoritative
@@ -47,6 +49,11 @@ def releases(raw: Path) -> list[Path]:
     return [d for d in dirs if 15 <= int(d.name.split("_")[1].split(".")[1]) <= 29]
 
 
+def assemblies(raw: Path) -> list[Path]:
+    """Every assembly directory with a report: GRCh38 p0-p14, then hs38d1."""
+    return releases(raw) + [raw / HS38D1]
+
+
 def agp_files(release: Path) -> list[Path]:
     return sorted(p for p in release.glob("*_assembly_structure/**/AGP/*.agp.gz")
                   if p.name.endswith((".comp.agp.gz", ".scaf.agp.gz")))
@@ -65,8 +72,9 @@ def read_agp(path: Path) -> dict[str, list[tuple]]:
 
 
 def build_agp(raw: Path, roots: set[str]) -> pa.Table:
+    """AGP of every root in `roots` (the assembly members; EBV has none)."""
     agp, source = {}, {}
-    for d in releases(raw):
+    for d in assemblies(raw):
         for path in agp_files(d):
             for obj, rows in read_agp(path).items():
                 if obj not in roots:
@@ -262,9 +270,10 @@ def main() -> None:
     length = dict(zip(roots["root_id"].to_pylist(), roots["length"].to_pylist()))
     members = pq.read_table(out / "assembly_members.parquet").to_pylist()
 
-    agp = build_agp(raw, set(length))
+    in_assembly = {m["genbank_accession"] for m in members}
+    agp = build_agp(raw, in_assembly)
     pq.write_table(agp, out / "layer_agp.parquet", compression="zstd")
-    print(f"layer_agp: {agp.num_rows} parts on {len(length)} roots", file=sys.stderr)
+    print(f"layer_agp: {agp.num_rows} parts on {len(in_assembly)} roots", file=sys.stderr)
 
     regions, region_spans = build_regions(raw, members)
     pq.write_table(regions, out / "layer_regions.parquet", compression="zstd")

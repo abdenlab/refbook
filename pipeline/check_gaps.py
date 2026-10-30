@@ -1,10 +1,11 @@
-"""Check that every run of N in the GRCh38 roots is explained by the AGP.
+"""Check that every run of N in the roots is explained by the AGP.
 
-Reads the component-level AGPs (*.comp.agp.gz, *.scaf.agp.gz) of every release
-in REGISTRY/raw, plus REGISTRY/build/grch38/{roots,layer_n_runs}.parquet, and
-checks:
+Reads the component-level AGPs (*.comp.agp.gz, *.scaf.agp.gz) of every GRCh38
+release and of hs38d1 in REGISTRY/raw, plus
+REGISTRY/build/grch38/{roots,layer_n_runs,assembly_members}.parquet, and checks:
 
-- every root has an AGP, identical in every release that has it, tiling 1..length
+- every root in an assembly has an AGP (EBV is in none), identical in every
+  release that has it, tiling 1..length
 - every AGP gap (N/U line) is entirely N in the root
 - every N-run is exactly one AGP gap, or else is classified (N inside a
   component, gap plus adjacent component N, ...)
@@ -27,6 +28,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
+HS38D1 = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
 # Shortest component N-run that genomic_gaps.txt lists. Observed, not documented:
 # GRCh38 has listed runs of >= 10 and unlisted runs of <= 7, nothing in between.
 MIN_COMPONENT_N = 10
@@ -38,6 +40,11 @@ def releases(raw: Path) -> list[Path]:
         key=lambda p: int(p.name.split("_")[1].split(".")[1]),
     )
     return [d for d in dirs if 15 <= int(d.name.split("_")[1].split(".")[1]) <= 29]
+
+
+def assemblies(raw: Path) -> list[Path]:
+    """Every assembly directory with a report: GRCh38 p0-p14, then hs38d1."""
+    return releases(raw) + [raw / HS38D1]
 
 
 def agp_files(release: Path) -> list[Path]:
@@ -100,12 +107,15 @@ def main() -> None:
     runs = defaultdict(list)
     for acc, s, e in zip(*(runs_t[c].to_pylist() for c in ("root_id", "start", "end"))):
         runs[acc].append((s, e))
+    in_assembly = set(pq.read_table(out / "assembly_members.parquet",
+                                    columns=["genbank_accession"])
+                      ["genbank_accession"].to_pylist())
 
     errors = []
     agp, first_seen = {}, {}
     rel_objs = {}  # release name -> roots with an AGP in that release
     rel_gg = {}    # release name -> its genomic_gaps.txt, where published
-    for d in releases(raw):
+    for d in assemblies(raw):
         rel_objs[d.name] = set()
         for path in agp_files(d):
             for obj, rows in read_agp(path).items():
@@ -119,9 +129,9 @@ def main() -> None:
         gg_path = d / f"{d.name}_genomic_gaps.txt.gz"
         if gg_path.exists():  # only published for p7, p13, p14
             rel_gg[d.name] = read_genomic_gaps(gg_path)
-    print(f"AGP for {len(agp)} of {len(length)} roots, {len(rel_objs)} releases",
-          file=sys.stderr)
-    for acc in sorted(set(length) - set(agp)):
+    print(f"AGP for {len(agp)} of {len(length)} roots, {len(rel_objs)} assembly "
+          f"releases", file=sys.stderr)
+    for acc in sorted(in_assembly - set(agp)):
         errors.append(f"{acc}: no AGP in any release")
     for obj, rows in agp.items():
         errors += check_tiling(obj, rows, length[obj])
