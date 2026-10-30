@@ -185,4 +185,5 @@ server's build directory) and are skipped when it is absent.
 
 ## License
 
-The catalog data is CC-BY-4.0. The code's license is not yet chosen.
+The code is released under the [MIT License](LICENSE). The catalog data is
+CC-BY-4.0.

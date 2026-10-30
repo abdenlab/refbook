@@ -3,6 +3,8 @@ name = "refbook"
 version = "0.0.0"
 description = "Catalog of human reference genome sequences: roots, layers and flavor recipes"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "pyarrow>=25",
