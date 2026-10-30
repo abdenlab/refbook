@@ -134,3 +134,34 @@ def test_other_assembly_is_no_good_match(cat, tmp_path):
     res = run(sizes, cat)
     assert res.best[0].verdict == "partial"
     assert res.best[0].matched * 2 < 3
+
+
+@needs_catalog
+def test_materialize_subset_variants_and_batches(cat):
+    from ref_registry.materialize import SCHEMA, materialize
+    variants = {}
+    for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "UCSC_hg38", "Ensembl116_primary_assembly"):
+        name = "21" if flavor.startswith("Ensembl") else "chr21"
+        t = materialize(cat, flavor, names=[name]).read_all()
+        assert t.schema.equals(SCHEMA, check_metadata=False)
+        assert "ref_registry:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
+        seq = t["sequence"][0].as_py()
+        assert len(seq) == 46709983 and seq == seq.upper()
+        variants[flavor] = hashlib.md5(seq.encode()).hexdigest()
+    # chr21 in four published versions: masked or not, IUPAC -> N or not.
+    assert variants["GRCh38_no_alt_analysis_set"] == "974dc7aec0b755b19f031418fdedf293"
+    assert len(set(variants.values())) == 3  # Ensembl and UCSC hg38 share the IUPAC -> N version
+    assert variants["UCSC_hg38"] == variants["Ensembl116_primary_assembly"]
+
+    batches = list(materialize(cat, "GRCh38_no_alt_analysis_set", names=["chrM", "chrEBV", "chr22"],
+                               max_batch_bytes=200_000))
+    # Flavor order (chr22, chrM, chrEBV), not request order; chr22 alone exceeds the limit.
+    assert [b.column("name").to_pylist() for b in batches] == [["chr22"], ["chrM", "chrEBV"]]
+
+
+@needs_catalog
+def test_materialize_external_hla(cat):
+    from ref_registry.materialize import materialize
+    t = materialize(cat, "Broad_Homo_sapiens_assembly38", names=["HLA-A*01:01:01:01"]).read_all()
+    seq = t["sequence"][0].as_py()
+    assert len(seq) == 3503 and hashlib.md5(seq.encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
