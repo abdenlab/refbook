@@ -24,7 +24,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ref_registry.blocks import row_groups_by_root
+from ref_registry.blocks import BLOCK_SIZE, row_groups_by_root
 from ref_registry.catalog import Catalog
 from ref_registry.seqcol import sha512t24u
 
@@ -49,6 +49,8 @@ class Bases:
         self.cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE",
                                                   Path.home() / ".cache" / "ref-registry"))
         self._external_files: dict[str, dict] = {}
+        self._spans: dict[str, list[tuple[int, int, int]]] = {}
+        self._cache: dict[int, list[tuple[int, str]]] = {}
 
     def get(self, root_id: str) -> bytearray:
         if root_id in self.row_groups:
@@ -58,6 +60,32 @@ class Bases:
         if root_id in self.cat.external:
             return bytearray(self._external(root_id))
         raise KeyError(f"{root_id}: no bases (not a hosted or external root)")
+
+    def slice(self, root_id: str, start: int, end: int) -> bytes:
+        """Bases [start, end) of a root, reading only the row groups that cover them."""
+        if root_id not in self.row_groups:
+            return bytes(self.get(root_id)[start:end])  # external roots are small; read whole
+        if root_id not in self._spans:
+            md = self.blocks.metadata
+            self._spans[root_id] = [(md.row_group(i).column(1).statistics.min,
+                                     md.row_group(i).column(1).statistics.max, i)
+                                    for i in self.row_groups[root_id]]
+        first, last = start // BLOCK_SIZE * BLOCK_SIZE, max(end - 1, start) // BLOCK_SIZE * BLOCK_SIZE
+        parts = []
+        for lo, hi, i in self._spans[root_id]:
+            if hi < first or lo > last:
+                continue
+            if i not in self._cache:
+                if len(self._cache) > 64:
+                    self._cache.clear()
+                t = self.blocks.read_row_group(i, columns=["start", "bases"])
+                self._cache[i] = sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist()))
+            parts += [(s, b) for s, b in self._cache[i] if first <= s <= last]
+        if not parts:
+            return b""
+        parts.sort()
+        off = parts[0][0]
+        return "".join(b for _, b in parts).encode("ascii")[start - off:end - off]
 
     def _external(self, root_id: str) -> bytes:
         e = self.cat.external[root_id]

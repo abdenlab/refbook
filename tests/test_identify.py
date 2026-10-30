@@ -165,3 +165,56 @@ def test_materialize_external_hla(cat):
     t = materialize(cat, "Broad_Homo_sapiens_assembly38", names=["HLA-A*01:01:01:01"]).read_all()
     seq = t["sequence"][0].as_py()
     assert len(seq) == 3503 and hashlib.md5(seq.encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
+
+
+def _revcomp(s: str) -> str:
+    return s.translate(str.maketrans("ACGTRYKMBDHVSWN", "TGCAYRMKVHDBSWN"))[::-1]
+
+
+@needs_catalog
+def test_fetch_matches_materialize(cat):
+    import random
+    import pyarrow as pa
+    from ref_registry import fetch
+    from ref_registry.materialize import materialize
+    rng = random.Random(7)
+    for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "Ensembl116_primary_assembly"):
+        names = ["21", "Y", "1"] if flavor.startswith("Ensembl") else ["chr21", "chrY", "chr1"]
+        full = {n: s for n, s in zip(*materialize(cat, flavor, names=names).read_all()
+                                     .select(["name", "sequence"]).to_pydict().values())}
+        rows = []
+        for n, s in full.items():
+            L = len(s)
+            rows += [(n, a, a + w, st) for a, w, st in
+                     [(rng.randrange(L - 5000), rng.choice([1, 100, 5000]), rng.choice(["+", "-", None]))
+                      for _ in range(30)]]
+            rows += [(n, 65536 - 7, 65536 + 7, "+"),                  # across a block boundary
+                     (n, 32 * 65536 - 3, 32 * 65536 + 3, "-"),        # across a row-group boundary
+                     (n, L - 10, L, None), (n, 5, 5, "+")]            # the end, and an empty interval
+        iv = pa.table({"chrom": [r[0] for r in rows], "start": [r[1] for r in rows],
+                       "end": [r[2] for r in rows], "strand": [r[3] for r in rows]})
+        got = fetch(cat, flavor, iv, strand="strand")
+        for (n, a, b, st), seq in zip(rows, got["sequence"].to_pylist()):
+            want = full[n][a:b]
+            assert seq == (_revcomp(want) if st == "-" else want), (flavor, n, a, b, st)
+
+
+@needs_catalog
+def test_fetch_coordinates_bounds_and_names(cat):
+    import pyarrow as pa
+    from ref_registry import fetch
+    zero = fetch(cat, "GRCh38_no_alt_analysis_set", pa.table({"chrom": ["chr1"], "start": [99], "end": [110]}))
+    one = pa.table({"chrom": ["chr1"], "start": [100], "end": [110]}).replace_schema_metadata(
+        {b"bio.coordinate_system_zero_based": b"false"})           # polars-bio's 1-based closed
+    assert fetch(cat, "GRCh38_no_alt_analysis_set", one)["sequence"][0] == zero["sequence"][0]
+    with pytest.raises(ValueError, match="contradicts|say"):
+        fetch(cat, "GRCh38_no_alt_analysis_set", one, zero_based=True)
+    past = pa.table({"chrom": ["chrM"], "start": [16560], "end": [16600]})
+    with pytest.raises(ValueError, match="outside"):
+        fetch(cat, "GRCh38_no_alt_analysis_set", past)
+    assert len(fetch(cat, "GRCh38_no_alt_analysis_set", past, clip=True)["sequence"][0].as_py()) == 9
+    with pytest.raises(KeyError, match="no sequence named"):
+        fetch(cat, "GRCh38_no_alt_analysis_set", pa.table({"chrom": ["1"], "start": [0], "end": [1]}))
+    hla = fetch(cat, "Broad_Homo_sapiens_assembly38",
+                pa.table({"chrom": ["HLA-A*01:01:01:01"], "start": [0], "end": [3503]}))
+    assert hashlib.md5(hla["sequence"][0].as_py().encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
