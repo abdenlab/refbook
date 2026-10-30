@@ -193,10 +193,14 @@ def test_fetch_matches_materialize(cat):
                      (n, L - 10, L, None), (n, 5, 5, "+")]            # the end, and an empty interval
         iv = pa.table({"chrom": [r[0] for r in rows], "start": [r[1] for r in rows],
                        "end": [r[2] for r in rows], "strand": [r[3] for r in rows]})
-        got = fetch(cat, flavor, iv, strand="strand")
-        for (n, a, b, st), seq in zip(rows, got["sequence"].to_pylist()):
-            want = full[n][a:b]
-            assert seq == (_revcomp(want) if st == "-" else want), (flavor, n, a, b, st)
+        for engine in ("pyarrow", "datafusion"):
+            got = fetch(cat, flavor, iv, strand="strand", engine=engine)
+            for (n, a, b, st), seq in zip(rows, got["sequence"].to_pylist()):
+                want = full[n][a:b]
+                assert seq == (_revcomp(want) if st == "-" else want), (engine, flavor, n, a, b, st)
+        few = iv.slice(0, 3)  # few blocks per sequence: the per-sequence IN-list path
+        assert (fetch(cat, flavor, few, strand="strand", engine="datafusion")["sequence"].to_pylist()
+                == fetch(cat, flavor, few, strand="strand", engine="pyarrow")["sequence"].to_pylist())
 
 
 @needs_catalog

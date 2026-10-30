@@ -8,6 +8,10 @@ dependencies = [
     "pyarrow>=25",
 ]
 
+[project.optional-dependencies]
+# Faster fetch: page-index pruning and parallel reads (the engine under polars-bio).
+datafusion = ["datafusion>=55"]
+
 [project.scripts]
 ref-registry = "ref_registry.cli:main"
 

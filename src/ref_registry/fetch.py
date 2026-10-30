@@ -22,6 +22,13 @@ Conventions:
 
 Output schema metadata records the flavor and its seqcol digest, so a slice
 identifies its reference by content.
+
+Engines (`engine=`): "datafusion" reads only the needed blocks with
+DataFusion (the `datafusion` extra, the engine under polars-bio). It issues one
+semi-join with filter pushdown, or, when every sequence needs at most 20
+blocks, per-sequence `IN` lists that the page index prunes to single pages.
+"pyarrow" reads whole row groups. "auto" (the default) uses DataFusion if it
+is installed.
 """
 
 import json
@@ -30,6 +37,7 @@ from collections import defaultdict
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ref_registry.blocks import BLOCK_SIZE
 from ref_registry.catalog import Catalog
 from ref_registry.materialize import IUPAC_TO_N, Bases
 
@@ -62,7 +70,8 @@ def _to_arrow(intervals) -> tuple[pa.Table, bool | None]:
 
 def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: str = "start",
           end: str = "end", strand: str | None = None, zero_based: bool | None = None,
-          clip: bool = False, bases: Bases | None = None) -> pa.Table:
+          clip: bool = False, engine: str = "auto", bases: Bases | None = None,
+          reader: "DataFusionBlocks | None" = None) -> pa.Table:
     if flavor not in cat.flavors:
         raise KeyError(f"{flavor}: not a reproduced flavor")
     table, flag = _to_arrow(intervals)
@@ -107,12 +116,25 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
             spans[r].append((s, e))
     to_n = recipe.get("alphabet", {}).get("iupac") == "N"
     bases = bases or Bases(cat)
+    roots = [seqs[n].root_id for n in names]
+    if engine == "auto":
+        engine = "datafusion" if reader is not None or _have_datafusion() else "pyarrow"
+    blocks = None
+    if engine == "datafusion":
+        need = {(r, k * BLOCK_SIZE) for r, a, z in zip(roots, lo, hi) if r in bases.row_groups and z > a
+                for k in range(a // BLOCK_SIZE, (z - 1) // BLOCK_SIZE + 1)}
+        blocks = (reader or DataFusionBlocks(cat)).get(sorted(need))
+    elif engine != "pyarrow":
+        raise ValueError(f"engine must be auto, datafusion or pyarrow, not {engine!r}")
 
     out = [None] * table.num_rows
     # Visit intervals in genome order so row groups are read once; write back in input order.
-    for i in sorted(range(table.num_rows), key=lambda i: (seqs[names[i]].root_id, lo[i])):
-        root = seqs[names[i]].root_id
-        b = bytearray(bases.slice(root, lo[i], hi[i]))
+    for i in sorted(range(table.num_rows), key=lambda i: (roots[i], lo[i])):
+        root = roots[i]
+        if blocks is not None and root in bases.row_groups:
+            b = bytearray(_from_blocks(blocks, root, lo[i], hi[i]))
+        else:
+            b = bytearray(bases.slice(root, lo[i], hi[i]))
         for s, e in spans.get(root, ()):
             if s < hi[i] and e > lo[i]:
                 a, z = max(s, lo[i]) - lo[i], min(e, hi[i]) - lo[i]
@@ -131,3 +153,69 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
     result = table.append_column(pa.field("sequence", pa.large_string(), nullable=False),
                                  pa.array(out, pa.large_string()))
     return result.replace_schema_metadata(meta)
+
+
+def _have_datafusion() -> bool:
+    try:
+        import datafusion  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _from_blocks(blocks: dict, root: str, start: int, end: int) -> bytes:
+    if end <= start:
+        return b""
+    first = start // BLOCK_SIZE * BLOCK_SIZE
+    joined = "".join(blocks[(root, k)] for k in range(first, end, BLOCK_SIZE))
+    return joined[start - first:end - first].encode("ascii")
+
+
+class DataFusionBlocks:
+    """Reads chosen (root_id, start) blocks from root_blocks.parquet with DataFusion.
+
+    Few blocks per sequence: one query per sequence with an `IN` list, which
+    the page index prunes to single pages (DataFusion only prunes `IN` lists of
+    up to 20 values). Otherwise: one semi-join against the needed blocks, with
+    filter pushdown so `bases` pages are decoded only for matching rows (the
+    join's dynamic filter alone is just min/max bounds, which prune nothing).
+    """
+
+    MAX_IN_LIST = 20
+
+    def __init__(self, cat: Catalog):
+        import datafusion
+        self._df = datafusion
+        cfg = datafusion.SessionConfig({"datafusion.execution.parquet.pushdown_filters": "true"})
+        self.ctx = datafusion.SessionContext(cfg)
+        self.ctx.register_parquet("blocks", str(cat.path / "root_blocks.parquet"))
+        self._n = 0
+
+    def get(self, need: list[tuple[str, int]]) -> dict[tuple[str, int], str]:
+        if not need:
+            return {}
+        by_root = defaultdict(list)
+        for r, s in need:
+            by_root[r].append(s)
+        tables = []
+        if max(len(v) for v in by_root.values()) <= self.MAX_IN_LIST:
+            for r, starts in by_root.items():
+                tables.append(self.ctx.sql(
+                    f"SELECT root_id, start, bases FROM blocks WHERE root_id = '{r}' "
+                    f"AND start IN ({', '.join(map(str, starts))})").to_arrow_table())
+        else:
+            self._n += 1
+            name = f"need_{self._n}"
+            self.ctx.register_record_batches(name, [[pa.record_batch(
+                {"root_id": [r for r, _ in need], "start": [s for _, s in need]})]])
+            tables.append(self.ctx.sql(
+                f"SELECT b.root_id, b.start, b.bases FROM blocks b JOIN {name} n "
+                "ON b.root_id = n.root_id AND b.start = n.start").to_arrow_table())
+            self.ctx.deregister_table(name)
+        out = {}
+        for t in tables:
+            out.update(zip(zip(t["root_id"].to_pylist(), t["start"].to_pylist()), t["bases"].to_pylist()))
+        missing = set(need) - set(out)
+        if missing:
+            raise KeyError(f"root_blocks has no block {sorted(missing)[0]}")
+        return out
