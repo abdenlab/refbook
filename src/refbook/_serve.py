@@ -4,7 +4,7 @@ Python's http.server ignores Range, so it cannot stand in for a static host.
 This one serves a directory with single-range support and an optional added
 latency per request.
 
-Usage: python -m ref_registry._serve DIR [--port 8765] [--latency-ms 0]
+Usage: python -m refbook._serve DIR [--port 8765] [--latency-ms 0]
 """
 
 import argparse

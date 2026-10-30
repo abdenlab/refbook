@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ref_registry.remote import HttpFile, _open, download
+from refbook.remote import HttpFile, _open, download
 
 KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocalized scaffolds",
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
@@ -42,7 +42,7 @@ class Catalog:
             r, _ = _open(self.url + "catalog.json")
             with r:
                 self.manifest = json.load(r)
-            cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE", Path.home() / ".cache" / "ref-registry"))
+            cache = Path(cache or os.environ.get("REFBOOK_CACHE", Path.home() / ".cache" / "refbook"))
             self.path = cache / "catalog" / self.manifest["version"]
         else:
             self.url = None

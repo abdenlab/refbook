@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-USER_AGENT = "ref-registry (reference genome catalog)"
+USER_AGENT = "refbook (reference genome catalog)"
 TOKEN_HOSTS = {"huggingface.co"}
 
 

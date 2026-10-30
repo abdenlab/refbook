@@ -453,4 +453,6 @@ distribution and the library.
    fix patches. Is it a clean earlier release, or a mix?
 5. **Seqcol interoperability.** How the coordinate-system and cognate notions
    are exposed to seqcol. Deferred for now.
-6. **Name.** "Registry" suggests stewardship, which isn't claimed here.
+6. **Name.** Settled: **refbook**, a reference book and the referee's rulebook
+   (recipes are the rules; a flavor counts once it is reproduced "by the
+   book"). "Registry" suggested stewardship, which isn't claimed here.

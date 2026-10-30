@@ -20,8 +20,8 @@ from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 
-from ref_registry.catalog import Catalog
-from ref_registry.materialize import Bases, sequences
+from refbook.catalog import Catalog
+from refbook.materialize import Bases, sequences
 
 
 def _locate(cat: Catalog, md5s: Iterable[str]) -> tuple[dict[str, list[tuple[str, str]]], list[str]]:

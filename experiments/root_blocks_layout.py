@@ -36,7 +36,7 @@ Results (2026-10-29/30; pyarrow 26, DuckDB 2.0.0, Polars 2.1, DataFusion 55):
   page index (vs 515 kB without it). The file grows ~3%. DuckDB 2.0.0 does not
   use the page index; duckdb/duckdb#27326 (merged 2026-10-29) adds it. pyarrow
   and Polars prune by row group only.
-- Adopted (src/ref_registry/blocks.py): 32-block row groups that never span
+- Adopted (src/refbook/blocks.py): 32-block row groups that never span
   roots, statistics on root_id/start only, page index with 1 row per page.
 """
 

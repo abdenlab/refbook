@@ -15,9 +15,9 @@ import sys
 import time
 from pathlib import Path
 
-from ref_registry import Catalog, materialize
-from ref_registry.materialize import SCHEMA, Bases
-from ref_registry.seqcol import digests, sha512t24u
+from refbook import Catalog, materialize
+from refbook.materialize import SCHEMA, Bases
+from refbook.seqcol import digests, sha512t24u
 
 
 def main() -> None:

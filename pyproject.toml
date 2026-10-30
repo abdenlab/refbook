@@ -1,8 +1,8 @@
 [project]
-name = "ref-registry"
+name = "refbook"
 version = "0.0.0"
 description = "Catalog of human reference genome sequences: roots, layers and flavor recipes"
-readme = "SCOPE.md"
+readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pyarrow>=25",
@@ -13,12 +13,12 @@ dependencies = [
 datafusion = ["datafusion>=55"]
 
 [project.scripts]
-ref-registry = "ref_registry.cli:main"
+refbook = "refbook.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
 
-# src/ref_registry is the library; pipeline/ holds the build scripts, run
+# src/refbook is the library; pipeline/ holds the build scripts, run
 # directly with `uv run python -I pipeline/<script>.py`.
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]

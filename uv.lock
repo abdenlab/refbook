@@ -142,7 +142,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ref-registry"
+name = "refbook"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [

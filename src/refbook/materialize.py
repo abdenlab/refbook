@@ -24,9 +24,9 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ref_registry.blocks import BLOCK_SIZE, row_groups_by_root
-from ref_registry.catalog import Catalog
-from ref_registry.seqcol import sha512t24u
+from refbook.blocks import BLOCK_SIZE, row_groups_by_root
+from refbook.catalog import Catalog
+from refbook.seqcol import sha512t24u
 
 SCHEMA = pa.schema([
     pa.field("name", pa.string(), nullable=False),
@@ -35,7 +35,7 @@ SCHEMA = pa.schema([
 ])
 # Uppercase IUPAC codes other than N, to N: the recipe alphabet step iupac -> N.
 IUPAC_TO_N = bytes.maketrans(b"BDHKMRSVWY", b"N" * 10)
-USER_AGENT = "ref-registry (reference genome catalog)"
+USER_AGENT = "refbook (reference genome catalog)"
 
 
 class Bases:
@@ -48,8 +48,8 @@ class Bases:
         self.row_groups = row_groups_by_root(self.blocks)
         # A local mirror of the sources (REGISTRY/raw), when the catalog sits in REGISTRY/*/*.
         self.mirror = None if cat.remote else cat.path.parent.parent / "raw"
-        self.cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE",
-                                                  Path.home() / ".cache" / "ref-registry"))
+        self.cache = Path(cache or os.environ.get("REFBOOK_CACHE",
+                                                  Path.home() / ".cache" / "refbook"))
         self._external_files: dict[str, dict] = {}
         self._spans: dict[str, list[tuple[int, int, int]]] = {}
         self._cache: dict[int, list[tuple[int, str]]] = {}
@@ -189,10 +189,10 @@ def materialize(cat: Catalog, flavor: str, names: list[str] | None = None, *,
                 max_batch_bytes: int = 1 << 30, verify: bool = True,
                 bases: Bases | None = None) -> pa.RecordBatchReader:
     """A flavor as a Sequence 0.1 stream. Batches end early at max_batch_bytes of sequence."""
-    meta = {"ref_registry:flavor": flavor,
-            "ref_registry:seqcol_digest": cat.recipes[flavor]["seqcol_digest"]}
+    meta = {"refbook:flavor": flavor,
+            "refbook:seqcol_digest": cat.recipes[flavor]["seqcol_digest"]}
     schema = SCHEMA.with_metadata(meta) if names is None else SCHEMA.with_metadata(
-        {"ref_registry:flavor": flavor})
+        {"refbook:flavor": flavor})
 
     def batches() -> Iterator[pa.RecordBatch]:
         rows: list[tuple[str, bytes]] = []

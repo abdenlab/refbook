@@ -1,7 +1,7 @@
 """Tests for seqcol digests, header parsing and identify.
 
 Identify tests need the catalog (REGISTRY/build/grch38); they are skipped
-when it is not there. Set REF_REGISTRY_CATALOG to point elsewhere.
+when it is not there. Set REFBOOK_CATALOG to point elsewhere.
 """
 
 import gzip
@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from ref_registry import seqcol
-from ref_registry.parse import read_header
+from refbook import seqcol
+from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CATALOG = Path(os.environ.get("REF_REGISTRY_CATALOG", "/net/common/genomes/registry/build/grch38"))
+CATALOG = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/build/grch38"))
 needs_catalog = pytest.mark.skipif(not (CATALOG / "recipes.parquet").exists(), reason="no catalog")
 
 
@@ -64,12 +64,12 @@ def test_real_headers_parse():
 
 @pytest.fixture(scope="module")
 def cat():
-    from ref_registry.catalog import Catalog
+    from refbook.catalog import Catalog
     return Catalog(CATALOG)
 
 
 def run(path, cat):
-    from ref_registry.identify import identify
+    from refbook.identify import identify
     return identify(read_header(path), cat)
 
 
@@ -117,7 +117,7 @@ def test_renamed_by_md5_and_variant_swap(cat, tmp_path):
     assert res.best[0].flavor == "Ensembl116_primary_assembly"
     assert res.best[0].matched == 194 and res.best[0].order_differs
 
-    from ref_registry.identify import describe
+    from refbook.identify import describe
     ucsc_chr21 = next(s.md5 for s in cat.flavors["UCSC_hg38.analysisSet"] if s.name == "chr21")
     broad = [(s.name, s.length, ucsc_chr21 if s.name == "chr21" else s.md5)
              for s in cat.flavors["Broad_Homo_sapiens_assembly38"]]
@@ -138,13 +138,13 @@ def test_other_assembly_is_no_good_match(cat, tmp_path):
 
 @needs_catalog
 def test_materialize_subset_variants_and_batches(cat):
-    from ref_registry.materialize import SCHEMA, materialize
+    from refbook.materialize import SCHEMA, materialize
     variants = {}
     for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "UCSC_hg38", "Ensembl116_primary_assembly"):
         name = "21" if flavor.startswith("Ensembl") else "chr21"
         t = materialize(cat, flavor, names=[name]).read_all()
         assert t.schema.equals(SCHEMA, check_metadata=False)
-        assert "ref_registry:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
+        assert "refbook:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
         seq = t["sequence"][0].as_py()
         assert len(seq) == 46709983 and seq == seq.upper()
         variants[flavor] = hashlib.md5(seq.encode()).hexdigest()
@@ -161,7 +161,7 @@ def test_materialize_subset_variants_and_batches(cat):
 
 @needs_catalog
 def test_materialize_external_hla(cat):
-    from ref_registry.materialize import materialize
+    from refbook.materialize import materialize
     t = materialize(cat, "Broad_Homo_sapiens_assembly38", names=["HLA-A*01:01:01:01"]).read_all()
     seq = t["sequence"][0].as_py()
     assert len(seq) == 3503 and hashlib.md5(seq.encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
@@ -175,8 +175,8 @@ def _revcomp(s: str) -> str:
 def test_fetch_matches_materialize(cat):
     import random
     import pyarrow as pa
-    from ref_registry import fetch
-    from ref_registry.materialize import materialize
+    from refbook import fetch
+    from refbook.materialize import materialize
     rng = random.Random(7)
     for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "Ensembl116_primary_assembly"):
         names = ["21", "Y", "1"] if flavor.startswith("Ensembl") else ["chr21", "chrY", "chr1"]
@@ -206,7 +206,7 @@ def test_fetch_matches_materialize(cat):
 @needs_catalog
 def test_fetch_coordinates_bounds_and_names(cat):
     import pyarrow as pa
-    from ref_registry import fetch
+    from refbook import fetch
     zero = fetch(cat, "GRCh38_no_alt_analysis_set", pa.table({"chrom": ["chr1"], "start": [99], "end": [110]}))
     one = pa.table({"chrom": ["chr1"], "start": [100], "end": [110]}).replace_schema_metadata(
         {b"bio.coordinate_system_zero_based": b"false"})           # polars-bio's 1-based closed
@@ -226,7 +226,7 @@ def test_fetch_coordinates_bounds_and_names(cat):
 
 @needs_catalog
 def test_sequence_by_md5_and_unknown(cat, tmp_path):
-    from ref_registry import populate_ref_cache, sequence_by_md5
+    from refbook import populate_ref_cache, sequence_by_md5
     chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519")
     assert len(chrM) == 16569 and hashlib.md5(chrM).hexdigest() == "c68f52674c9fb33aef52dcf399755519"
     r = populate_ref_cache(cat, ["c68f52674c9fb33aef52dcf399755519", "0" * 32], tmp_path)
@@ -241,7 +241,7 @@ def test_sequence_by_md5_and_unknown(cat, tmp_path):
 def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     """Write a CRAM against chrM, delete the reference, decode it through a filled REF_CACHE."""
     import subprocess
-    from ref_registry import populate_ref_cache, sequence_by_md5
+    from refbook import populate_ref_cache, sequence_by_md5
     chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519").decode()
     (tmp_path / "ref.fa").write_text(">chrM\n" + chrM + "\n")      # samtools needs a FASTA to write CRAM
     read = chrM[1000:1050]
@@ -260,7 +260,7 @@ def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     assert out.split("\t")[9] == read
 
 
-RELEASE = Path(os.environ.get("REF_REGISTRY_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
+RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
 
 
 @pytest.mark.skipif(not (RELEASE / "catalog.json").exists(), reason="no exported catalog release")
@@ -268,8 +268,8 @@ def test_remote_catalog_over_http(tmp_path):
     """Open an exported release by URL from a local Range-honoring server; compare with local."""
     import threading
     import pyarrow as pa
-    from ref_registry import Catalog, fetch, identify
-    from ref_registry._serve import serve
+    from refbook import Catalog, fetch, identify
+    from refbook._serve import serve
     server = serve(str(RELEASE), port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:

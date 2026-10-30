@@ -30,7 +30,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ref_registry import blocks as root_blocks  # the root_blocks storage layout
+from refbook import blocks as root_blocks  # the root_blocks storage layout
 
 NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
 P14 = "GCA_000001405.29_GRCh38.p14"

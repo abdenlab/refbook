@@ -20,9 +20,9 @@ by what they are: an MD5 we know, or a name that is an alias of a root.
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from ref_registry.catalog import Catalog, Seq
-from ref_registry.parse import Entry, Header
-from ref_registry import seqcol
+from refbook.catalog import Catalog, Seq
+from refbook.parse import Entry, Header
+from refbook import seqcol
 
 
 @dataclass

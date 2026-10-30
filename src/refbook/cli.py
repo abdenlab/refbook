@@ -1,16 +1,17 @@
-"""Command line: `ref-registry identify FILE... [--catalog DIR] [--json]`."""
+"""Command line: `refbook identify FILE... [--catalog DIR] [--json]`."""
 
 import argparse
 import json
 import os
 import sys
 
-from ref_registry.catalog import Catalog
-from ref_registry.identify import describe, identify
-from ref_registry.parse import read_header
-from ref_registry.refcache import populate_ref_cache
+from refbook.catalog import Catalog
+from refbook.identify import describe, identify
+from refbook.parse import read_header
+from refbook.refcache import populate_ref_cache
 
-DEFAULT_CATALOG = "/net/common/genomes/registry/build/grch38"
+# The published release; set REFBOOK_CATALOG (or --catalog) to a local copy or another release.
+DEFAULT_CATALOG = "https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.1.0/"
 
 
 def report(path: str, cat: Catalog, as_json: bool) -> dict:
@@ -69,17 +70,17 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="ref-registry")
+    ap = argparse.ArgumentParser(prog="refbook")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("identify", help="identify a .fai, .dict/SAM header, BAM, VCF or FASTA")
     p.add_argument("files", nargs="+")
-    p.add_argument("--catalog", default=os.environ.get("REF_REGISTRY_CATALOG", DEFAULT_CATALOG))
+    p.add_argument("--catalog", default=os.environ.get("REFBOOK_CATALOG", DEFAULT_CATALOG))
     p.add_argument("--json", action="store_true")
     q = sub.add_parser("populate-ref-cache",
                        help="fill htslib's REF_CACHE with the sequences a CRAM/BAM/SAM header names by M5")
     q.add_argument("files", nargs="+", help="CRAM, BAM, SAM header or .dict files, or bare MD5s")
     q.add_argument("--root", required=True, help="cache root; then use REF_CACHE=ROOT/%%2s/%%2s/%%s")
-    q.add_argument("--catalog", default=os.environ.get("REF_REGISTRY_CATALOG", DEFAULT_CATALOG))
+    q.add_argument("--catalog", default=os.environ.get("REFBOOK_CATALOG", DEFAULT_CATALOG))
     args = ap.parse_args()
     cat = Catalog(args.catalog)
     if args.cmd == "populate-ref-cache":

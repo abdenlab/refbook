@@ -1,4 +1,4 @@
-"""Rewrite root_blocks.parquet in the current storage layout (ref_registry.blocks).
+"""Rewrite root_blocks.parquet in the current storage layout (refbook.blocks).
 
 Same rows, new row groups, statistics and page index. Writes next to the file,
 checks that every root has the same blocks (count, starts and a digest of its
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ref_registry import blocks
+from refbook import blocks
 
 
 def fingerprint(f: pq.ParquetFile, groups: list[int]) -> tuple[int, str]:

@@ -41,9 +41,9 @@ from collections import defaultdict
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ref_registry.blocks import BLOCK_SIZE
-from ref_registry.catalog import Catalog
-from ref_registry.materialize import IUPAC_TO_N, Bases
+from refbook.blocks import BLOCK_SIZE
+from refbook.catalog import Catalog
+from refbook.materialize import IUPAC_TO_N, Bases
 
 COMPLEMENT = bytes.maketrans(b"ACGTRYKMBDHVSWN", b"TGCAYRMKVHDBSWN")
 ARROW_KEY = b"bio.coordinate_system_zero_based"
@@ -167,8 +167,8 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
         out[i] = b.decode("ascii")
 
     meta = dict(table.schema.metadata or {})
-    meta.update({b"ref_registry:flavor": flavor.encode(),
-                 b"ref_registry:seqcol_digest": cat.recipes[flavor]["seqcol_digest"].encode(),
+    meta.update({b"refbook:flavor": flavor.encode(),
+                 b"refbook:seqcol_digest": cat.recipes[flavor]["seqcol_digest"].encode(),
                  ARROW_KEY: b"true" if zb else b"false"})
     result = table.append_column(pa.field("sequence", pa.large_string(), nullable=False),
                                  pa.array(out, pa.large_string()))
