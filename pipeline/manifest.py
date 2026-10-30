@@ -22,13 +22,13 @@ def sha256(path: Path) -> str:
 
 
 def source_url(rel: Path) -> str:
-    # efetch results are saved under a synthetic name; the rest mirror the URL.
+    # efetch results are saved as nuccore_<acc>.<rettype>; the rest mirror the URL.
     parts = rel.parts
     if parts[0] == "eutils.ncbi.nlm.nih.gov":
         acc = rel.stem.removeprefix("nuccore_")
         return (
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-            f"?db=nuccore&id={acc}&rettype=fasta&retmode=text"
+            f"?db=nuccore&id={acc}&rettype={rel.suffix[1:]}&retmode=text"
         )
     return "https://" + "/".join(parts)
 
