@@ -76,6 +76,20 @@ wget_mirror --recursive --no-parent --level=inf \
     --reject 'index.html*,*.fna.gz,*.fa.gz' \
     "$HS38D1/GCA_000786075.2_hs38d1_assembly_structure/"
 
+# The GRC analysis sets: the first recipe targets, and the GRC's hard-mask
+# definitions (unmasked_cognates_of_masked_CEN_PAR.txt). Skip the annotation
+# files and the aligner index tarballs.
+SETS="$NCBI/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids"
+for f in README_analysis_sets.txt md5checksums.txt \
+         unmasked_cognates_of_masked_CEN_PAR.txt GCA_000001405.15_GRCh38_GRC_exclusions.bed; do
+    wget_mirror "$SETS/$f"
+done
+for s in full full_plus_hs38d1 no_alt no_alt_plus_hs38d1; do
+    for ext in fna.gz fna.fai; do
+        wget_mirror "$SETS/GCA_000001405.15_GRCh38_${s}_analysis_set.${ext}"
+    done
+done
+
 # EBV is in no assembly: its sequence, and its GenBank record (topology, source).
 for rettype in fasta gb; do
     out="eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.${rettype}"

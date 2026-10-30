@@ -8,7 +8,13 @@ and writes Parquet to REGISTRY/build/grch38:
                       in no assembly, has none); start/end are 0-based
                       half-open on the root, component_start/end likewise on
                       the component. Gap rows have null component columns and
-                      vice versa.
+                      vice versa. `object_rank` is the root's position among
+                      the objects of its `source` file (flavors order by it).
+- layer_regions.parquet, layer_placements.parquet   see build_regions and
+                      build_placements
+- layer_hardmask_grc.parquet   the spans the GRC hard-masks with N in its
+                      analysis sets (CEN/WGS duplicates on chr5, 14, 19, 21,
+                      22; PAR on chrY), with each span's unmasked cognate
 
 A root's AGP is the same in every release (checked by check_gaps.py and again
 here), so each root appears once.
@@ -73,16 +79,16 @@ def read_agp(path: Path) -> dict[str, list[tuple]]:
 
 def build_agp(raw: Path, roots: set[str]) -> pa.Table:
     """AGP of every root in `roots` (the assembly members; EBV has none)."""
-    agp, source = {}, {}
+    agp, source, rank = {}, {}, {}
     for d in assemblies(raw):
         for path in agp_files(d):
-            for obj, rows in read_agp(path).items():
+            for i, (obj, rows) in enumerate(read_agp(path).items()):
                 if obj not in roots:
                     continue  # placed scaffolds are AGP objects but not roots
                 if obj in agp and agp[obj] != rows:
                     sys.exit(f"{obj}: AGP in {path} differs from {source[obj]}")
                 if obj not in agp:
-                    agp[obj], source[obj] = rows, path
+                    agp[obj], source[obj], rank[obj] = rows, path, i
     if roots - set(agp):
         sys.exit(f"no AGP for: {sorted(roots - set(agp))}")
 
@@ -90,12 +96,14 @@ def build_agp(raw: Path, roots: set[str]) -> pa.Table:
         "root_id", "part_number", "start", "end", "component_type",
         "component_id", "component_start", "component_end", "orientation",
         "gap_length", "gap_type", "linkage", "linkage_evidence", "source",
+        "object_rank",
     )}
     raw_prefix = len(str(raw)) + 1
     for obj in sorted(agp):
         url = "https://" + str(source[obj])[raw_prefix:]
         for r in agp[obj]:
             gap = r[3] in ("N", "U")
+            cols["object_rank"].append(rank[obj])
             cols["root_id"].append(obj)
             cols["part_number"].append(int(r[2]))
             cols["start"].append(int(r[0]) - 1)
@@ -260,6 +268,38 @@ def build_placements(raw: Path, members: list[dict], length: dict,
     return pa.table(cols)
 
 
+def build_hardmask_grc(raw: Path, length: dict, regions: pa.Table) -> pa.Table:
+    """The GRC analysis-set hard masks, from unmasked_cognates_of_masked_CEN_PAR.txt.
+
+    Each masked span is an exact duplicate of its unmasked cognate, so the two
+    must have the same length; the chrY spans must be its PAR regions.
+    """
+    path = (raw / NCBI / "GCA_000001405.15_GRCh38" / "seqs_for_alignment_pipelines.ucsc_ids"
+            / "unmasked_cognates_of_masked_CEN_PAR.txt")
+    cols = {k: [] for k in ("root_id", "start", "end", "name", "cognate_root_id",
+                            "cognate_start", "cognate_end", "cognate_name")}
+    for r in read_tsv(path, "#masked_copy_chr_accn"):
+        span = (r["masked_copy_chr_accn"], int(r["masked_copy_start"]) - 1,
+                int(r["masked_copy_stop"]))
+        cog = (r["unmasked_cognate_chr_accn"], int(r["unmasked_cognate_start"]) - 1,
+               int(r["unmasked_cognate_stop"]))
+        if span[2] - span[1] != cog[2] - cog[1]:
+            sys.exit(f"{span}: masked span and cognate {cog} differ in length")
+        if span[2] > length[span[0]] or cog[2] > length[cog[0]]:
+            sys.exit(f"{span}: past the end of the root")
+        for k, v in zip(cols, (*span, r["masked_scaf_or_region_name"], *cog,
+                               r["unmasked_scaf_or_region_name"])):
+            cols[k].append(v)
+    par_y = sorted((s, e) for n, a, s, e, t, f in zip(*(regions[c].to_pylist() for c in (
+        "region_name", "root_id", "start", "end", "region_type", "first_release")))
+        if t == "PAR" and a == "CM000686.2" and f == 0)
+    masked_y = sorted((s, e) for a, s, e in zip(cols["root_id"], cols["start"], cols["end"])
+                      if a == "CM000686.2")
+    if par_y != masked_y:
+        sys.exit(f"chrY masks {masked_y} != PAR regions {par_y}")
+    return pa.table(cols)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
@@ -282,6 +322,12 @@ def main() -> None:
     placements = build_placements(raw, members, length, region_spans)
     pq.write_table(placements, out / "layer_placements.parquet", compression="zstd")
     print(f"layer_placements: {placements.num_rows} alt scaffolds and patches",
+          file=sys.stderr)
+
+    hardmask = build_hardmask_grc(raw, length, regions)
+    pq.write_table(hardmask, out / "layer_hardmask_grc.parquet", compression="zstd")
+    print(f"layer_hardmask_grc: {hardmask.num_rows} spans, "
+          f"{sum(e - s for s, e in zip(hardmask['start'].to_pylist(), hardmask['end'].to_pylist()))} bp",
           file=sys.stderr)
 
 
