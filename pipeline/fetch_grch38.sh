@@ -96,4 +96,16 @@ for rettype in fasta gb; do
     [ -s "$out" ] || curl -sSfL --retry 5 -o "$out" \
         "$EUTILS?db=nuccore&id=AJ507799.2&rettype=${rettype}&retmode=text"
 done
+
+# IPD-IMGT/HLA release 3.18.0, the HLA alleles in bwakit's hs38DH (Broad,
+# 1000 Genomes). External roots: kept here for digests only, never hosted
+# (CC BY-ND; see LICENSE.md in the release branch). One FASTA per gene.
+IMGT=https://raw.githubusercontent.com/ANHIG/IMGTHLA/3180
+wget_mirror "$IMGT/LICENSE.md" "$IMGT/README.md" "$IMGT/Allelelist.3180.txt"
+curl -sSf "https://api.github.com/repos/ANHIG/IMGTHLA/git/trees/3180?recursive=1" \
+    | python3 -I -c 'import json, sys
+for x in json.load(sys.stdin)["tree"]:
+    if x["path"].startswith("fasta/") and x["path"].endswith("_gen.fasta"):
+        print(x["path"])' \
+    | while read -r path; do wget_mirror "$IMGT/$path"; done
 echo "fetch complete" >&2

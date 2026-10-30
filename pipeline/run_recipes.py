@@ -4,15 +4,18 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
            accession.version>, "roles": [...], "accessions": [...]?} (rows of
-           assembly_members, optionally only those accessions) or {"roots":
-           [...]} (roots in no assembly, e.g. EBV)
+           assembly_members, optionally only those accessions), {"roots":
+           [...]} (roots in no assembly, e.g. EBV) or {"collection": ...,
+           "groups": [...]} (external roots, roots_external.parquet, in their
+           collection's rank order; never materialized)
 - mask     [{"layer": <name>, "with": "N"}]: hard-mask the spans of
            layer_<name> that fall on selected roots
 - alphabet {"iupac": "N"}: replace every IUPAC code (layer_iupac) with N
 - rename   {"namespace": "ucsc", "by_role": {role: namespace}, "map": {root:
-           name}, "template": {assembly: "...{accession_v}..."}}; map wins,
-           then template (for that assembly's roots; accession_v is the
-           accession with "." -> "v"), then the by_role namespace for the
+           name}, "template": {assembly or collection: "...{accession_v}..."}};
+           map wins, then template (for that assembly's roots; accession_v is
+           the accession with "." -> "v", name an external root's name), then
+           the by_role namespace for the
            root's role, then the default namespace. A namespace is a name
            column of assembly_members: ucsc, sequence (the GRC
            Sequence-Name), genbank (the accession) or refseq
@@ -25,7 +28,10 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
            block of roles among the names), {"template": "{stem}..."} (the
            same, built from the name up to its first "_"), {"key":
            "first_release", "min": n}
-           (earliest GRCh38 release with the root, floored at n). Either a
+           (earliest GRCh38 release with the root, floored at n), {"key":
+           "length", "reverse": true} (longest first), {"explicit": [root,
+           ...]} (that order, listed roots first: for ties no rule explains).
+           Either a
            list for every root, or {"default": [...], "by_role": {role:
            [...]}}; per-role lists should start with a literal that sets the
            block apart, so keys of different roles are never compared
@@ -37,7 +43,8 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
 Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u) and compares each flavor, position by
 position, with REGISTRY/build/grch38/observed/<flavor>.parquet (from
-observe_fasta.py). Exits nonzero if any flavor does not reproduce.
+observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
+Exits nonzero if any flavor does not reproduce.
 
 Usage: uv run --with pyarrow python run_recipes.py REGISTRY_DIR RECIPES.json
 """
@@ -67,10 +74,21 @@ def root_bases(build: Path, acc: str) -> bytearray:
     return bytearray(b"".join(b.encode() for _, b in order))
 
 
-def select(recipe: dict, members: list[dict], roots: dict) -> list[dict]:
+def select(recipe: dict, members: list[dict], roots: dict, external: list[dict]) -> list[dict]:
     """The selected roots, each with the attributes the later steps need."""
     out = []
     for i, entry in enumerate(recipe["select"]):
+        if "collection" in entry:
+            rows = [e for e in external if e["collection"] == entry["collection"]
+                    and e["group"] in entry["groups"]]
+            if not rows:
+                sys.exit(f"{recipe['flavor']}: nothing in {entry['collection']} {entry['groups']}")
+            for e in rows:
+                out.append({"root_id": e["root_id"], "select": i, "role": 0,
+                            "assembly_unit": "", "molecule": 0,
+                            "assembly": entry["collection"], "member": None,
+                            "external": e})
+            continue
         if "roots" in entry:
             for acc in entry["roots"]:
                 if acc not in roots:
@@ -106,7 +124,9 @@ def name_of(s: dict, rename: dict) -> str:
         return rename["map"][acc]
     template = rename.get("template", {}).get(s["assembly"])
     if template:
-        return template.format(accession=acc, accession_v=acc.replace(".", "v"))
+        ext = s.get("external") or {}
+        return template.format(accession=acc, accession_v=acc.replace(".", "v"),
+                               name=ext.get("name"))
     m = s["member"]
     ns = rename.get("by_role", {}).get(m and m["role"], rename["namespace"])
     name = m and m.get(NAMESPACES[ns])
@@ -132,19 +152,25 @@ def sort_key(s: dict, order) -> tuple:
             key.append(k["literal"])
         elif "template" in k:
             key.append(k["template"].format(stem=s["name"].split("_")[0]))
+        elif "explicit" in k:
+            ids = k["explicit"]
+            key.append(ids.index(s["root_id"]) if s["root_id"] in ids else len(ids))
         else:
-            key.append(max(k.get("min", s[k["key"]]), s[k["key"]]))
+            v = max(k.get("min", s[k["key"]]), s[k["key"]])
+            key.append(-v if k.get("reverse") else v)
     return tuple(key)
 
 
 def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
-        masks: dict, iupac: dict, first_release: dict, parent_start: dict) -> list[dict]:
-    sel = select(recipe, members, roots)
+        masks: dict, iupac: dict, first_release: dict, parent_start: dict,
+        external: list[dict]) -> list[dict]:
+    sel = select(recipe, members, roots, external)
     for s in sel:
         acc = s["root_id"]
-        s["object_rank"] = rank.get(acc, 0)
+        s["object_rank"] = s["external"]["rank"] if s.get("external") else rank.get(acc, 0)
         s["first_release"] = first_release.get(acc, 0)
         s["parent_start"] = parent_start.get(acc, 0)
+        s["length"] = roots[acc]["length"]
         s["name"] = name_of(s, recipe["rename"])
     sel.sort(key=lambda s: sort_key(s, recipe["order"]))
     spans = defaultdict(list)
@@ -162,6 +188,8 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
         r = roots[acc]
         md5, sq = r["md5"], r["sha512t24u"]
         to_n = iupac.get(acc, []) if alphabet else []
+        if s.get("external") and (spans.get(acc) or r["n_iupac"] and alphabet):
+            sys.exit(f"{acc}: external root (bases not hosted) would need materializing")
         if spans.get(acc) or to_n:
             bases = root_bases(build, acc)
             for start, end in spans.get(acc, []):
@@ -181,11 +209,13 @@ def compare(recipe: dict, got: list[dict], observed: list[dict]) -> list[str]:
         errs.append(f"{len(got)} sequences, published has {len(observed)}")
     for g, o in zip(got, observed):
         for k in ("name", "length", "md5", "sha512t24u"):
-            if g[k] != o[k]:
+            if o[k] is not None and g[k] != o[k]:  # a .dict observation lacks SQ.
                 errs.append(f"position {g['position']} {k}: {g[k]} != published {o[k]}")
         if o["defline_ac"] and o["defline_ac"] != g["root_id"]:
             errs.append(f"position {g['position']}: root {g['root_id']} != AC:{o['defline_ac']}")
     fmt = recipe.get("format", {})
+    if any(o["n_lower"] is None for o in observed):
+        return errs  # observed from a .dict: no case or line width to check
     if fmt.get("case") == "upper" and any(o["n_lower"] for o in observed):
         errs.append("published file has lowercase; recipe says upper")
     if fmt.get("case") == "soft" and not any(o["n_lower"] for o in observed):
@@ -204,8 +234,11 @@ def main() -> None:
     build = args.registry / "build" / "grch38"
 
     members = pq.read_table(build / "assembly_members.parquet").to_pylist()
-    roots = {r["root_id"]: r for r in pq.read_table(
-        build / "roots.parquet", columns=["root_id", "length", "md5", "sha512t24u"]).to_pylist()}
+    cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
+    roots = {r["root_id"]: r for r in pq.read_table(build / "roots.parquet", columns=cols).to_pylist()}
+    ext_path = build / "roots_external.parquet"
+    external = pq.read_table(ext_path).to_pylist() if ext_path.exists() else []
+    roots.update({e["root_id"]: {k: e[k] for k in cols} for e in external})
     agp = pq.read_table(build / "layer_agp.parquet", columns=["root_id", "object_rank"])
     rank = dict(zip(agp["root_id"].to_pylist(), agp["object_rank"].to_pylist()))
     recipes = json.loads(args.recipes.read_text())["recipes"]
@@ -233,7 +266,7 @@ def main() -> None:
     rows, failed = [], []
     for recipe in recipes:
         got = run(recipe, build, members, roots, rank, masks, iupac, first_release,
-                  parent_start)
+                  parent_start, external)
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
         errs = compare(recipe, got, observed)
         print(f"{recipe['flavor']}: {len(got)} sequences, "

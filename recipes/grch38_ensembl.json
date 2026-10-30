@@ -1,0 +1,73 @@
+{
+  "_doc": "Ensembl 116 FASTAs (ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna, the unmasked 'dna' files). Applied by pipeline/run_recipes.py. Ensembl replaces IUPAC codes with N. Names: chromosomes by GRC Sequence-Name (1..22, X, Y, MT), scaffolds by GenBank accession. Order: chromosomes by name as text, then the scaffolds longest first. Two pairs of scaffolds tie on length (1,428 bp: KI270340.1 before KI270338.1; 1,048 bp: KI270335.1 before KI270378.1). Name order explains one and not the other, AGP order neither, so the observed order is listed explicitly.",
+  "recipes": [
+    {
+      "flavor": "Ensembl116_primary_assembly",
+      "published": "https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.29",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "sequence"
+        }
+      },
+      "order": {
+        "default": [
+          "name"
+        ],
+        "by_role": {
+          "unlocalized-scaffold": [
+            {
+              "literal": "~"
+            },
+            {
+              "key": "length",
+              "reverse": true
+            },
+            {
+              "explicit": [
+                "KI270340.1",
+                "KI270338.1",
+                "KI270335.1",
+                "KI270378.1"
+              ]
+            }
+          ],
+          "unplaced-scaffold": [
+            {
+              "literal": "~"
+            },
+            {
+              "key": "length",
+              "reverse": true
+            },
+            {
+              "explicit": [
+                "KI270340.1",
+                "KI270338.1",
+                "KI270335.1",
+                "KI270378.1"
+              ]
+            }
+          ]
+        }
+      },
+      "format": {
+        "case": "upper",
+        "line_width": 60
+      }
+    }
+  ]
+}
