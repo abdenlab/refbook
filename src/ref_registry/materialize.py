@@ -43,9 +43,10 @@ class Bases:
 
     def __init__(self, cat: Catalog, cache: str | Path | None = None):
         self.cat = cat
-        self.blocks = pq.ParquetFile(cat.path / "root_blocks.parquet")
+        self.blocks = cat.open_blocks()
         self.row_groups = row_groups_by_root(self.blocks)
-        self.mirror = cat.path.parent.parent / "raw"  # REGISTRY/raw next to REGISTRY/build/grch38
+        # A local mirror of the sources (REGISTRY/raw), when the catalog sits in REGISTRY/*/*.
+        self.mirror = None if cat.remote else cat.path.parent.parent / "raw"
         self.cache = Path(cache or os.environ.get("REF_REGISTRY_CACHE",
                                                   Path.home() / ".cache" / "ref-registry"))
         self._external_files: dict[str, dict] = {}
@@ -101,8 +102,8 @@ class Bases:
         return seq
 
     def _fetch(self, url: str) -> Path:
-        local = self.mirror / url.split("://", 1)[1]
-        if local.exists():
+        local = self.mirror / url.split("://", 1)[1] if self.mirror else None
+        if local and local.exists():
             return local
         cached = self.cache / url.split("://", 1)[1]
         if not cached.exists():
@@ -138,7 +139,7 @@ def sequences(cat: Catalog, flavor: str, names: list[str] | None = None,
     bases = bases or Bases(cat)
     spans = defaultdict(list)
     for m in recipe.get("mask", []):
-        layer = pq.read_table(cat.path / f"layer_{m['layer']}.parquet", columns=["root_id", "start", "end"])
+        layer = pq.read_table(cat.file(f"layer_{m['layer']}.parquet"), columns=["root_id", "start", "end"])
         for r, s, e in zip(*(layer[c].to_pylist() for c in ("root_id", "start", "end"))):
             spans[r].append((s, e))
     to_n = recipe.get("alphabet", {}).get("iupac") == "N"

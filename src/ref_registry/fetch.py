@@ -28,7 +28,7 @@ DataFusion (the `datafusion` extra, the engine under polars-bio). It issues one
 semi-join with filter pushdown, or, when every sequence needs at most 20
 blocks, per-sequence `IN` lists that the page index prunes to single pages.
 "pyarrow" reads whole row groups. "auto" (the default) uses DataFusion if it
-is installed.
+is installed (and the catalog is local or https://).
 """
 
 import json
@@ -111,14 +111,15 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
     recipe = json.loads(cat.recipes[flavor]["recipe"])
     spans = defaultdict(list)
     for m in recipe.get("mask", []):
-        layer = pq.read_table(cat.path / f"layer_{m['layer']}.parquet", columns=["root_id", "start", "end"])
+        layer = pq.read_table(cat.file(f"layer_{m['layer']}.parquet"), columns=["root_id", "start", "end"])
         for r, s, e in zip(*(layer[c].to_pylist() for c in ("root_id", "start", "end"))):
             spans[r].append((s, e))
     to_n = recipe.get("alphabet", {}).get("iupac") == "N"
     bases = bases or Bases(cat)
     roots = [seqs[n].root_id for n in names]
     if engine == "auto":
-        engine = "datafusion" if reader is not None or _have_datafusion() else "pyarrow"
+        plain_http = cat.remote and cat.url.startswith("http://")
+        engine = "datafusion" if reader is not None or (_have_datafusion() and not plain_http) else "pyarrow"
     blocks = None
     if engine == "datafusion":
         need = {(r, k * BLOCK_SIZE) for r, a, z in zip(roots, lo, hi) if r in bases.row_groups and z > a
@@ -188,7 +189,16 @@ class DataFusionBlocks:
         self._df = datafusion
         cfg = datafusion.SessionConfig({"datafusion.execution.parquet.pushdown_filters": "true"})
         self.ctx = datafusion.SessionContext(cfg)
-        self.ctx.register_parquet("blocks", str(cat.path / "root_blocks.parquet"))
+        location = cat.blocks_location()
+        if cat.remote and location.startswith("http://"):
+            raise ValueError("DataFusion's HTTP object store requires https:// (datafusion-python "
+                             "does not expose object_store's allow_http); use engine='pyarrow'")
+        if cat.remote:
+            from urllib.parse import urlparse
+            from datafusion.object_store import Http
+            u = urlparse(location)
+            self.ctx.register_object_store(f"{u.scheme}://", Http(f"{u.scheme}://{u.netloc}"), u.netloc)
+        self.ctx.register_parquet("blocks", location)
         self._n = 0
 
     def get(self, need: list[tuple[str, int]]) -> dict[tuple[str, int], str]:

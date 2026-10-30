@@ -258,3 +258,32 @@ def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     out = subprocess.run(["samtools", "view", "x.cram"], cwd=tmp_path, env=env, check=True,
                          capture_output=True, text=True).stdout
     assert out.split("\t")[9] == read
+
+
+RELEASE = Path(os.environ.get("REF_REGISTRY_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
+
+
+@pytest.mark.skipif(not (RELEASE / "catalog.json").exists(), reason="no exported catalog release")
+def test_remote_catalog_over_http(tmp_path):
+    """Open an exported release by URL from a local Range-honoring server; compare with local."""
+    import threading
+    import pyarrow as pa
+    from ref_registry import Catalog, fetch, identify
+    from ref_registry._serve import serve
+    server = serve(str(RELEASE), port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/"
+        remote, local = Catalog(url, cache=tmp_path), Catalog(RELEASE)
+        assert remote.manifest["version"] == local.manifest["version"]
+        assert not (tmp_path / "catalog" / remote.manifest["version"] / "root_blocks.parquet").exists()
+        res = identify(read_header(FIXTURES / "giab_HG002_GRCh38_v4.2.1.vcf"), remote)
+        assert res.best[0].verdict == "consistent"
+        iv = pa.table({"chrom": ["chr1", "chrY", "chrM"], "start": [1_000_000, 10_000, 0],
+                       "end": [1_000_100, 10_050, 16569]})
+        got = fetch(remote, "GRCh38_no_alt_analysis_set", iv)  # auto -> pyarrow over plain http
+        want = fetch(local, "GRCh38_no_alt_analysis_set", iv, engine="pyarrow")
+        assert got["sequence"].to_pylist() == want["sequence"].to_pylist()
+        assert 0 < remote.blocks_http.requests < 20
+    finally:
+        server.shutdown()
