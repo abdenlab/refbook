@@ -6,7 +6,7 @@ publisher's M5 are known. md5 is the M5 as published (not a digest we computed);
 the fields a .dict lacks (sha512t24u, n_N, n_lower, line_width, defline_ac)
 are null, and run_recipes.py skips them.
 
-Usage: uv run --with pyarrow python observe_dict.py FILE.dict OUT.parquet
+Usage: uv run python -I pipeline/observe_dict.py FILE.dict OUT.parquet
 """
 
 import sys

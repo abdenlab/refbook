@@ -5,7 +5,7 @@ sequence: position, name, length, refget digests (MD5, SQ.) of the uppercased
 bases, counts of N and lowercase, the line width, and the defline's `AC:` and
 `M5:` tags where present (GRC analysis sets).
 
-Usage: uv run --with pyarrow python observe_fasta.py FASTA[.gz] OUT.parquet
+Usage: uv run python -I pipeline/observe_fasta.py FASTA[.gz] OUT.parquet
 """
 
 import base64

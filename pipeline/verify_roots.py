@@ -10,7 +10,7 @@
 
 Writes REGISTRY/build/grch38/verify_roots.tsv and prints a summary.
 
-Usage: uv run --with pyarrow python verify_roots.py REGISTRY_DIR ANALYSIS_SET_FNA_GZ
+Usage: uv run python -I pipeline/verify_roots.py REGISTRY_DIR ANALYSIS_SET_FNA_GZ
 """
 
 import gzip

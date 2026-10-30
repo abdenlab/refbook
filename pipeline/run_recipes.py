@@ -46,7 +46,7 @@ position, with REGISTRY/build/grch38/observed/<flavor>.parquet (from
 observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
 Exits nonzero if any flavor does not reproduce.
 
-Usage: uv run --with pyarrow python run_recipes.py REGISTRY_DIR RECIPES.json
+Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR RECIPES.json
 """
 
 import argparse

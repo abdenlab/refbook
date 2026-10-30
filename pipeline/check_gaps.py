@@ -15,7 +15,7 @@ REGISTRY/build/grch38/{roots,layer_n_runs,assembly_members}.parquet, and checks:
 Writes REGISTRY/build/grch38/check_gaps.tsv (one row per N-run or gap that is
 not an exact match) and prints a summary. Exits nonzero on a hard failure.
 
-Usage: uv run --with pyarrow python check_gaps.py REGISTRY_DIR
+Usage: uv run python -I pipeline/check_gaps.py REGISTRY_DIR
 """
 
 import argparse

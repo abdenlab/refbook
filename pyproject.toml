@@ -1,0 +1,13 @@
+[project]
+name = "ref-registry"
+version = "0.0.0"
+description = "Catalog of human reference genome sequences: roots, layers and flavor recipes"
+readme = "SCOPE.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pyarrow>=25",
+]
+
+[tool.uv]
+# pipeline/ is a set of scripts, not an installable package.
+package = false

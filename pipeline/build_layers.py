@@ -19,7 +19,7 @@ and writes Parquet to REGISTRY/build/grch38:
 A root's AGP is the same in every release (checked by check_gaps.py and again
 here), so each root appears once.
 
-Usage: uv run --with pyarrow python build_layers.py REGISTRY_DIR
+Usage: uv run python -I pipeline/build_layers.py REGISTRY_DIR
 """
 
 import argparse

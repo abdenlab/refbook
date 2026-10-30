@@ -1,2 +1,5 @@
 .DS_Store
 _scratch/
+.venv/
+__pycache__/
+.nfs*
