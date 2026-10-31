@@ -1,4 +1,4 @@
-"""Load the catalog: reproduced flavors, roots, aliases and sequence variants.
+"""Load the catalog: reproduced flavors, roots, aliases and sequence derivatives.
 
 A catalog is a directory of the pipeline's Parquet outputs: a release made by
 pipeline/export_catalog.py (with a catalog.json manifest), or the build
@@ -71,12 +71,15 @@ class Catalog:
         for m in pq.read_table(self.file("assembly_members.parquet")).to_pylist():
             self.role.setdefault(m["genbank_accession"], (m["assembly_name"], m["role"]))
 
-        # Every published version of each root: md5 -> (root, how it was made).
-        self.variant = {md5: (root, "as submitted (INSDC)") for md5, root in self.root_by_md5.items()}
+        # Every published derivative of each root: md5 -> (root, how it was made).
+        # Release 0.1.0 calls them "variants".
+        self.derivative = {md5: (root, "as submitted (INSDC)") for md5, root in self.root_by_md5.items()}
         if self.exists("family_tree.json"):
-            for v in json.loads(self.file("family_tree.json").read_text())["variants"]:
-                for x in v["variants"]:
-                    self.variant.setdefault(x["md5"], (v["root_id"], " or ".join(x["why"])))
+            tree = json.loads(self.file("family_tree.json").read_text())
+            key = "derivatives" if "derivatives" in tree else "variants"
+            for d in tree[key]:
+                for x in d[key]:
+                    self.derivative.setdefault(x["md5"], (d["root_id"], " or ".join(x["why"])))
         self.flavors_with_md5 = defaultdict(set)
         for f, seqs in self.flavors.items():
             for s in seqs:

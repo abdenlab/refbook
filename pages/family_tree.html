@@ -71,7 +71,7 @@ header { display: grid; gap: 14px; }
 .file { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
 .baseline .node-name { font-family: var(--display); font-stretch: 85%; font-weight: 750; font-size: 1.15rem; }
 
-/* Variants. */
+/* Derivatives. */
 .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
 table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
@@ -111,7 +111,7 @@ section { display: grid; gap: 14px; min-width: 0; }
     <h2>One chromosome, four sequences</h2>
     <p>Two operations, the GRC's hard-mask and replacing IUPAC codes with N, are all it takes to split a single
       chromosome into several sequences that share a name and a length. These are the roots published in more than one version.</p>
-    <div class="scroll"><table id="variants"></table></div>
+    <div class="scroll"><table id="derivatives"></table></div>
   </section>
 
   <section class="notes">
@@ -225,23 +225,23 @@ function renderFacts() {
   const facts = [
     [files, "published files reproduced"],
     [sets, "distinct sequence sets"],
-    [DATA.variants.length, "roots published in more than one version"],
+    [DATA.derivatives.length, "roots published in more than one version"],
   ];
   const box = document.getElementById("facts");
   for (const [n, t] of facts) { const d = el("div"); d.append(el("b", null, fmtN(n)), el("span", null, t)); box.append(d); }
 }
 
-function renderVariants() {
-  const t = document.getElementById("variants");
+function renderDerivatives() {
+  const t = document.getElementById("derivatives");
   const head = el("tr");
   for (const h of ["Sequence", "MD5", "Made by", "Published in"]) head.append(el("th", null, h));
   const thead = el("thead"); thead.append(head); t.append(thead);
   const tb = el("tbody");
-  for (const v of DATA.variants) {
-    v.variants.forEach((x, i) => {
+  for (const v of DATA.derivatives) {
+    v.derivatives.forEach((x, i) => {
       const tr = el("tr");
       if (i === 0) {
-        const td = el("td", null); td.rowSpan = v.variants.length;
+        const td = el("td", null); td.rowSpan = v.derivatives.length;
         td.append(el("b", null, v.name)); td.append(el("div", "count", `${fmtN(v.length)} bp · ${v.root_id}`));
         tr.append(td);
       }
@@ -258,5 +258,5 @@ function renderVariants() {
 renderFacts();
 const tree = document.getElementById("tree");
 for (const f of Object.keys(DATA.nodes).filter(k => DATA.nodes[k].parent === null)) tree.append(renderNode(f));
-renderVariants();
+renderDerivatives();
 </script>

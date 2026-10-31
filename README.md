@@ -5,7 +5,7 @@ fetch and reconstruct them.**
 
 "GRCh38" names dozens of different FASTA files. UCSC, Ensembl, GENCODE, the
 GRC's own analysis sets, Broad/GATK, 1000 Genomes and iGenomes each publish a
-variant: different sequences included, different names and order, some bases
+version: different sequences included, different names and order, some bases
 masked or rewritten. Two files that both say "hg38" may disagree on chr21.
 
 refbook describes every published version as a **recipe** over the same

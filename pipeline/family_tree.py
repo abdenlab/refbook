@@ -161,7 +161,7 @@ def main() -> None:
                 best = (cost(d), p, d)
         tree[f] = {"parent": best[1], "diff": best[2]}
 
-    # Sequence variants: the distinct sequences published under one root, and why.
+    # Derivatives: the distinct sequences published under one root, and why.
     masked = set(pq.read_table(build / "layer_hardmask_grc.parquet", columns=["root_id"])
                  ["root_id"].to_pylist())
     has_iupac = {r["root_id"] for r in pq.read_table(
@@ -181,16 +181,16 @@ def main() -> None:
             if acc in has_iupac and r.get("alphabet"):
                 why.append("IUPAC -> N")
             by_root[acc][s["md5"]].append((f, " + ".join(why) or "as submitted (INSDC)"))
-    variants = []
+    derivatives = []
     for acc, md5s in by_root.items():
         if len(md5s) < 2:
             continue
-        variants.append({
+        derivatives.append({
             "root_id": acc, "name": ucsc.get(acc, acc), "length": roots[acc]["length"],
-            "variants": [{"md5": md5, "why": sorted({w for _, w in fl}),
+            "derivatives": [{"md5": md5, "why": sorted({w for _, w in fl}),
                           "flavors": sorted({f for f, _ in fl})} for md5, fl in md5s.items()],
         })
-    variants.sort(key=lambda v: (-len(v["variants"]), v["root_id"]))
+    derivatives.sort(key=lambda d: (-len(d["derivatives"]), d["root_id"]))
 
     out = {"nodes": {f: {"sequences": len(nodes[f]["seqs"]), "baseline": nodes[f]["baseline"],
                          "same_as": [{"flavor": g, "format": nodes[g]["recipe"].get("format", {}),
@@ -200,7 +200,7 @@ def main() -> None:
                          "parent": tree[f]["parent"], "diff": tree[f]["diff"],
                          **{k: v for k, v in nodes[f]["recipe"].items() if k != "mask_layers"}}
                      for f in order},
-           "variants": variants}
+           "derivatives": derivatives}
     (build / "family_tree.json").write_text(json.dumps(out, indent=2) + "\n")
 
     children = defaultdict(list)

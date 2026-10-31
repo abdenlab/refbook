@@ -139,7 +139,7 @@ def test_other_assembly_is_no_good_match(cat, tmp_path):
 @needs_catalog
 def test_materialize_subset_variants_and_batches(cat):
     from refbook.materialize import SCHEMA, materialize
-    variants = {}
+    md5s = {}
     for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "UCSC_hg38", "Ensembl116_primary_assembly"):
         name = "21" if flavor.startswith("Ensembl") else "chr21"
         t = materialize(cat, flavor, names=[name]).read_all()
@@ -147,11 +147,11 @@ def test_materialize_subset_variants_and_batches(cat):
         assert "refbook:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
         seq = t["sequence"][0].as_py()
         assert len(seq) == 46709983 and seq == seq.upper()
-        variants[flavor] = hashlib.md5(seq.encode()).hexdigest()
+        md5s[flavor] = hashlib.md5(seq.encode()).hexdigest()
     # chr21 in four published versions: masked or not, IUPAC -> N or not.
-    assert variants["GRCh38_no_alt_analysis_set"] == "974dc7aec0b755b19f031418fdedf293"
-    assert len(set(variants.values())) == 3  # Ensembl and UCSC hg38 share the IUPAC -> N version
-    assert variants["UCSC_hg38"] == variants["Ensembl116_primary_assembly"]
+    assert md5s["GRCh38_no_alt_analysis_set"] == "974dc7aec0b755b19f031418fdedf293"
+    assert len(set(md5s.values())) == 3  # Ensembl and UCSC hg38 share the IUPAC -> N version
+    assert md5s["UCSC_hg38"] == md5s["Ensembl116_primary_assembly"]
 
     batches = list(materialize(cat, "GRCh38_no_alt_analysis_set", names=["chrM", "chrEBV", "chr22"],
                                max_batch_bytes=200_000))

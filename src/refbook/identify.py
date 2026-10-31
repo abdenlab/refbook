@@ -40,8 +40,8 @@ class Comparison:
 
 
 def _root_of(e: Entry, cat: Catalog, roots_here: set[str]) -> str | None:
-    if e.md5 and e.md5 in cat.variant:
-        return cat.variant[e.md5][0]
+    if e.md5 and e.md5 in cat.derivative:
+        return cat.derivative[e.md5][0]
     hits = cat.by_alias.get(e.name, set()) & roots_here
     if len(hits) == 1:
         return next(iter(hits))
@@ -116,8 +116,8 @@ def _base_differences(a: str, b: str, cat: Catalog) -> str | None:
         return None
     hows = Counter()
     for r in diff:
-        how_a = cat.variant.get(sa[r], (r, "?"))[1]
-        how_b = cat.variant.get(next(s.md5 for s in cat.flavors[b] if s.root_id == r), (r, "?"))[1]
+        how_a = cat.derivative.get(sa[r], (r, "?"))[1]
+        how_b = cat.derivative.get(next(s.md5 for s in cat.flavors[b] if s.root_id == r), (r, "?"))[1]
         hows[f"{how_a} vs {how_b}"] += 1
     return f"{len(diff)} sequences differ in bases (" + "; ".join(f"{n}: {h}" for h, n in hows.items()) + ")"
 
@@ -162,7 +162,7 @@ def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
     if c.extra:
         known = defaultdict(list)
         for e in c.extra:
-            root = cat.variant.get(e.md5, (None,))[0] if e.md5 else None
+            root = cat.derivative.get(e.md5, (None,))[0] if e.md5 else None
             if root is None:
                 hits = cat.by_alias.get(e.name, set())
                 root = next(iter(hits)) if len(hits) == 1 else None
@@ -173,12 +173,12 @@ def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
         out.append("only in header: " + ", ".join(
             f"{len(v)} {k} ({', '.join(v[:limit])}{', ...' if len(v) > limit else ''})" for k, v in known.items()))
     for e, s in c.different_bases[:limit]:
-        root, how = cat.variant.get(e.md5, (None, None))
+        root, how = cat.derivative.get(e.md5, (None, None))
         if root == s.root_id:
             seen = sorted(cat.flavors_with_md5.get(e.md5, ()))
             where = f"; as in {', '.join(seen[:2])}" if seen else ""
             out.append(f"{e.name}: a different version of the same sequence: header has it {how}, "
-                       f"{c.flavor} has it {cat.variant.get(s.md5, (None, '?'))[1]}{where}")
+                       f"{c.flavor} has it {cat.derivative.get(s.md5, (None, '?'))[1]}{where}")
         else:
             out.append(f"{e.name}: different bases (header MD5 {e.md5} is not a version of {s.root_id} we know)")
     if len(c.different_bases) > limit:

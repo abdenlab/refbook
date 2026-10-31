@@ -252,6 +252,12 @@ A **flavor** is a recipe applied to roots. The operations:
 6. **order** the sequences;
 7. **format** the output: line width, and the FASTA, 2bit or Arrow encoding.
 
+A root after the sequence-level operations (mask, alphabet) is a
+**derivative**: one distinct sequence, with its own MD5 and `SQ.` digest. Most
+sequences in published files are a root as submitted, the identity
+derivative. The others are, for example, chrY with the GRC hard-mask, or chr1
+with IUPAC→`N`. ("Variant" would read as a mutation, so it isn't used.)
+
 **Reconstruction is the verification.** A flavor counts as catalogd only
 once running its recipe reproduces the per-sequence digests of the published
 file. A label can't be wrong because it isn't asserted; it is the name of a
@@ -361,7 +367,7 @@ to do it, and neither needs a hosted server:
    CRAM's `@SQ` M5s and look each up in `flavor_sequences`. Apply the recipe to
    the root, check the MD5, and write the file into `REF_CACHE`. Only the
    contigs the CRAM names are built, and contigs already present are skipped.
-   The cost is the full contig length on disk per distinct derived variant:
+   The cost is the full contig length on disk per distinct derivative:
    about 3 GB for a whole human flavor, less what flavors share.
 2. **Serve lazily on localhost.** Point `REF_PATH=http://localhost:PORT/%s` at a
    small process that builds sequences from the Parquet roots on request.
