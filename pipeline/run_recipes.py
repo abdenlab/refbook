@@ -50,7 +50,7 @@ Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u) and compares each flavor, position by
 position, with REGISTRY/build/grch38/observed/<flavor>.parquet (from
 observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
-Exits nonzero if any flavor does not reproduce.
+Exits nonzero, writing nothing, if any flavor does not reproduce.
 
 Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR RECIPES.json
 """
@@ -306,13 +306,13 @@ def main() -> None:
             failed.append(recipe["flavor"])
         rows += got
 
+    if failed:  # a flavor is cataloged only once it reproduces: write nothing
+        sys.exit(f"not reproduced: {failed}")
     out = build / "flavor_sequences.parquet"
     existing = pq.read_table(out).to_pylist() if out.exists() else []
     done = {r["flavor"] for r in recipes}
     rows = [r for r in existing if r["flavor"] not in done] + rows
     pq.write_table(pa.Table.from_pylist(rows), out, compression="zstd")
-    if failed:
-        sys.exit(f"not reproduced: {failed}")
 
 
 if __name__ == "__main__":

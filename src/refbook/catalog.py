@@ -73,7 +73,9 @@ class Catalog:
 
         # Every published derivative of each root: md5 -> (root, how it was made).
         # Release 0.1.0 calls them "variants".
-        self.derivative = {md5: (root, "as submitted (INSDC)") for md5, root in self.root_by_md5.items()}
+        self.derivative = {md5: (root, f"as released ({self.external[root]['collection']})"
+                                 if root in self.external else "as submitted (INSDC)")
+                           for md5, root in self.root_by_md5.items()}
         if self.exists("family_tree.json"):
             tree = json.loads(self.file("family_tree.json").read_text())
             key = "derivatives" if "derivatives" in tree else "variants"
