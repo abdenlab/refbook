@@ -22,32 +22,6 @@
         "by_role": {
           "assembled-molecule": "ucsc"
         }
-      },
-      "order": {
-        "default": [
-          {
-            "literal": "~0"
-          },
-          "molecule"
-        ],
-        "by_role": {
-          "unlocalized-scaffold": [
-            {
-              "literal": "~2"
-            },
-            "name"
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "~2"
-            },
-            "name"
-          ]
-        }
-      },
-      "format": {
-        "case": "upper",
-        "line_width": 60
       }
     },
     {
@@ -77,50 +51,6 @@
         "by_role": {
           "assembled-molecule": "ucsc"
         }
-      },
-      "order": {
-        "default": [
-          {
-            "literal": "~0"
-          },
-          "molecule"
-        ],
-        "by_role": {
-          "alt-scaffold": [
-            {
-              "literal": "~1"
-            },
-            "sequence_name"
-          ],
-          "fix-patch": [
-            {
-              "literal": "~1"
-            },
-            "sequence_name"
-          ],
-          "novel-patch": [
-            {
-              "literal": "~1"
-            },
-            "sequence_name"
-          ],
-          "unlocalized-scaffold": [
-            {
-              "literal": "~2"
-            },
-            "name"
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "~2"
-            },
-            "name"
-          ]
-        }
-      },
-      "format": {
-        "case": "upper",
-        "line_width": 60
       }
     }
   ]

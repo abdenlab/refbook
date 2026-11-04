@@ -21,36 +21,18 @@ A recipe (see recipes/*.json) is data. The operations, in the order applied:
            root's role, then the default namespace. A namespace is a name
            column of assembly_members: ucsc, sequence (the GRC
            Sequence-Name), genbank (the accession) or refseq
-- order    sort keys, applied in turn: "select" (entry index), "role" (index
-           in the entry's roles), "assembly_unit" (unit name as text),
-           "molecule" (assigned molecule, in the report's chromosome order),
-           "object_rank" (position in the root's AGP file), "name" (the new
-           name, as text), "sequence_name" (the GRC Sequence-Name, as text,
-           whatever the root is renamed to), "parent_start" (start on the parent in the root's
-           earliest placement), {"literal": "..."} (a constant, to place a
-           block of roles among the names), {"template": "{stem}..."} (the
-           same, built from the name up to its first "_"), {"key":
-           "first_release", "min": n}
-           (earliest GRCh38 release with the root, floored at n), {"key":
-           "length", "reverse": true} (longest first), {"explicit": [root,
-           ...]} (that order, listed roots first: for ties no rule explains).
-           Either a
-           list for every root, or {"default": [...], "by_role": {role:
-           [...]}}; per-role lists should start with a literal that sets the
-           block apart, so keys of different roles are never compared
-- format   {"case": "upper" | "soft", "line_width": ..., "keep_case":
-           [assembly, ...]}: checked against the published file, not
-           materialized. "soft" means the file has lowercase repeats; digests
-           ignore case, and the soft-mask itself is not reproduced. With
-           keep_case, the roots of those assemblies keep NCBI's soft-mask
-           (layer softmask_ncbi) and all else is upper: each sequence's
-           lowercase count must equal its root's
+A recipe defines a named sequence set: it has no order and no formatting.
+Reproduction is order-free: the recipe's sequences must match the target's
+observation by name (same names, and for each the same length and digests,
+where the observation has them). The target's order is taken from its
+observation.
 
 Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
-root_id, length, md5, sha512t24u) and compares each flavor, position by
-position, with REGISTRY/build/grch38/observed/<flavor>.parquet (from
+root_id, length, md5, sha512t24u): each target's sequences, in the target's
+observed order, from REGISTRY/build/grch38/observed/<target>.parquet (from
 observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
-Exits nonzero, writing nothing, if any flavor does not reproduce.
+("flavor" there is still the target; build_flavors.py groups targets into
+flavors.) Exits nonzero, writing nothing, if any target does not reproduce.
 
 The output holds exactly the recipes given, so pass every recipe file.
 
@@ -104,34 +86,28 @@ def derivative_digests(build: Path, acc: str, spans: tuple, positions: tuple) ->
 
 def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
            parent_types: dict) -> list[dict]:
-    """The selected roots, each with the attributes the later steps need."""
+    """The selected roots: each with the entry's assembly (or collection) and the
+    report row or external record it was selected through, which rename uses."""
     out = []
-    for i, entry in enumerate(recipe["select"]):
+    for entry in recipe["select"]:
         if "collection" in entry:
             rows = [e for e in external if e["collection"] == entry["collection"]
                     and e["group"] in entry["groups"]]
             if not rows:
                 sys.exit(f"{recipe['flavor']}: nothing in {entry['collection']} {entry['groups']}")
             for e in rows:
-                out.append({"root_id": e["root_id"], "select": i, "role": 0,
-                            "assembly_unit": "", "molecule": 0,
-                            "assembly": entry["collection"], "member": None,
-                            "external": e})
+                out.append({"root_id": e["root_id"], "assembly": entry["collection"],
+                            "member": None, "external": e})
             continue
         if "roots" in entry:
             for acc in entry["roots"]:
                 if acc not in roots:
                     sys.exit(f"{recipe['flavor']}: no root {acc}")
-                out.append({"root_id": acc, "select": i, "role": 0, "assembly_unit": "",
-                            "molecule": 0, "assembly": None, "member": None})
+                out.append({"root_id": acc, "assembly": None, "member": None})
             continue
         rows = [m for m in members if m["assembly_accession"] == entry["assembly"]]
         if not rows:
             sys.exit(f"{recipe['flavor']}: no assembly {entry['assembly']}")
-        molecules = []
-        for m in rows:
-            if m["role"] == "assembled-molecule" and m["assigned_molecule"] not in molecules:
-                molecules.append(m["assigned_molecule"])
         only = set(entry.get("accessions", [])) or None
         placed_on = set(entry.get("placed_on", [])) or None
         for m in rows:
@@ -139,12 +115,7 @@ def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
             if placed_on and parent_types.get(acc, placed_on) - placed_on:
                 continue  # placed on a parent type the flavor leaves out
             if m["role"] in entry["roles"] and (only is None or acc in only):
-                mol = m["assigned_molecule"]
-                out.append({"root_id": m["genbank_accession"], "select": i,
-                            "role": entry["roles"].index(m["role"]),
-                            "assembly_unit": m["assembly_unit"],
-                            "molecule": molecules.index(mol) if mol in molecules else len(molecules),
-                            "assembly": entry["assembly"], "member": m})
+                out.append({"root_id": acc, "assembly": entry["assembly"], "member": m})
     ids = [s["root_id"] for s in out]
     if len(ids) != len(set(ids)):
         sys.exit(f"{recipe['flavor']}: a root is selected twice")
@@ -173,40 +144,16 @@ NAMESPACES = {"ucsc": "ucsc_name", "sequence": "sequence_name",
               "genbank": "genbank_accession", "refseq": "refseq_accession"}
 
 
-def sort_key(s: dict, order) -> tuple:
-    if isinstance(order, dict):
-        role = s["member"] and s["member"]["role"]
-        order = order["by_role"].get(role, order["default"])
-    key = []
-    for k in order:
-        if isinstance(k, str):
-            key.append(s[k])
-        elif "literal" in k:
-            key.append(k["literal"])
-        elif "template" in k:
-            key.append(k["template"].format(stem=s["name"].split("_")[0]))
-        elif "explicit" in k:
-            ids = k["explicit"]
-            key.append(ids.index(s["root_id"]) if s["root_id"] in ids else len(ids))
-        else:
-            v = max(k.get("min", s[k["key"]]), s[k["key"]])
-            key.append(-v if k.get("reverse") else v)
-    return tuple(key)
-
-
-def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
-        masks: dict, iupac: dict, first_release: dict, parent_start: dict,
-        external: list[dict], parent_types: dict) -> list[dict]:
-    sel = select(recipe, members, roots, external, parent_types)
+def run(recipe: dict, build: Path, t: dict) -> list[dict]:
+    """A recipe's sequences, in canonical order (by name, code point)."""
+    sel = select(recipe, t["members"], t["roots"], t["external"], t["parent_types"])
+    roots, masks, iupac = t["roots"], t["masks"], t["iupac"]
     for s in sel:
-        acc = s["root_id"]
-        s["object_rank"] = s["external"]["rank"] if s.get("external") else rank.get(acc, 0)
-        s["first_release"] = first_release.get(acc, 0)
-        s["parent_start"] = parent_start.get(acc, 0)
-        s["length"] = roots[acc]["length"]
-        s["sequence_name"] = (s["member"] or {}).get("sequence_name") or acc
         s["name"] = name_of(s, recipe["rename"])
-    sel.sort(key=lambda s: sort_key(s, recipe["order"]))
+    names = [s["name"] for s in sel]
+    if len(names) != len(set(names)):
+        sys.exit(f"{recipe['flavor']}: a name is used twice")
+    sel.sort(key=lambda s: s["name"].encode())
     spans = defaultdict(list)
     for m in recipe.get("mask", []):
         if m["with"] != "N":
@@ -217,7 +164,7 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
     if alphabet not in ({}, {"iupac": "N"}):
         sys.exit(f"{recipe['flavor']}: only the alphabet change iupac -> N is implemented")
     out = []
-    for pos, s in enumerate(sel):
+    for s in sel:
         acc = s["root_id"]
         r = roots[acc]
         md5, sq = r["md5"], r["sha512t24u"]
@@ -226,52 +173,53 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
             sys.exit(f"{acc}: external root (bases not hosted) would need materializing")
         if spans.get(acc) or to_n:
             md5, sq = derivative_digests(build, acc, tuple(spans.get(acc, [])), tuple(to_n))
-        out.append({"flavor": recipe["flavor"], "position": pos,
-                    "name": s["name"], "root_id": acc,
+        out.append({"flavor": recipe["flavor"], "name": s["name"], "root_id": acc,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
     return out
 
 
-def compare(recipe: dict, got: list[dict], observed: list[dict], lower: dict,
-            assembly_of: dict) -> list[str]:
+def compare(got: list[dict], observed: list[dict]) -> list[str]:
+    """Order-free reproduction: the same names, each with the same length and
+    digests (where the observation has them; a .dict lacks SQ.), and the same
+    root as a GRC defline's AC: tag."""
     errs = []
-    if len(got) != len(observed):
-        errs.append(f"{len(got)} sequences, published has {len(observed)}")
-    for g, o in zip(got, observed):
-        for k in ("name", "length", "md5", "sha512t24u"):
-            if o[k] is not None and g[k] != o[k]:  # a .dict observation lacks SQ.
-                errs.append(f"position {g['position']} {k}: {g[k]} != published {o[k]}")
+    want = {o["name"]: o for o in observed}
+    if len(want) != len(observed):
+        errs.append("the target uses a name twice")
+    have = {g["name"]: g for g in got}
+    if set(have) != set(want):
+        errs.append(f"names only in the recipe: {sorted(set(have) - set(want))[:5]}; "
+                    f"only in the target: {sorted(set(want) - set(have))[:5]}")
+    for name in sorted(set(have) & set(want)):
+        g, o = have[name], want[name]
+        for k in ("length", "md5", "sha512t24u"):
+            if o[k] is not None and g[k] != o[k]:
+                errs.append(f"{name} {k}: {g[k]} != target {o[k]}")
         if o["defline_ac"] and o["defline_ac"] != g["root_id"]:
-            errs.append(f"position {g['position']}: root {g['root_id']} != AC:{o['defline_ac']}")
-    fmt = recipe.get("format", {})
-    if any(o["n_lower"] is None for o in observed):
-        return errs  # observed from a .dict: no case or line width to check
-    keep = set(fmt.get("keep_case", []))
-    if fmt.get("case") == "upper" and keep:
-        for g, o in zip(got, observed):
-            want = lower.get(g["root_id"], 0) if assembly_of.get(g["root_id"], set()) & keep else 0
-            if o["n_lower"] != want:
-                errs.append(f"position {g['position']}: {o['n_lower']} lowercase, expected {want}")
-    elif fmt.get("case") == "upper" and any(o["n_lower"] for o in observed):
-        errs.append("published file has lowercase; recipe says upper")
-    if fmt.get("case") == "soft" and not any(o["n_lower"] for o in observed):
-        errs.append("published file has no lowercase; recipe says soft")
-    widths = {o["line_width"] for o in observed if o["length"] > o["line_width"]}
-    if "line_width" in fmt and widths != {fmt["line_width"]}:
-        errs.append(f"published line widths {widths}; recipe says {fmt['line_width']}")
+            errs.append(f"{name}: root {g['root_id']} != AC:{o['defline_ac']}")
     return errs
 
 
+def in_observed_order(got: list[dict], observed: list[dict]) -> list[dict]:
+    """A reproduced target's sequences in the target's own order."""
+    by_name = {g["name"]: g for g in got}
+    out = []
+    for o in sorted(observed, key=lambda o: o["position"]):
+        g = by_name[o["name"]]
+        out.append({"flavor": g["flavor"], "position": o["position"], "name": g["name"],
+                    "root_id": g["root_id"], "length": g["length"], "md5": g["md5"],
+                    "sha512t24u": g["sha512t24u"]})
+    return out
+
+
 def load_tables(build: Path, recipes: list[dict]) -> dict:
-    """The catalog tables that run() and compare() need, by name."""
+    """The catalog tables run() needs, by name."""
     members = pq.read_table(build / "assembly_members.parquet").to_pylist()
     cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
     roots = {r["root_id"]: r for r in pq.read_table(build / "roots.parquet", columns=cols).to_pylist()}
     ext_path = build / "roots_external.parquet"
     external = pq.read_table(ext_path).to_pylist() if ext_path.exists() else []
     roots.update({e["root_id"]: {k: e[k] for k in cols} for e in external})
-    agp = pq.read_table(build / "layer_agp.parquet", columns=["root_id", "object_rank"])
-    rank = dict(zip(agp["root_id"].to_pylist(), agp["object_rank"].to_pylist()))
     masks = {}
     for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
         t = pq.read_table(build / f"layer_{name}.parquet", columns=["root_id", "start", "end"])
@@ -282,31 +230,12 @@ def load_tables(build: Path, recipes: list[dict]) -> dict:
     for acc, p in zip(t["root_id"].to_pylist(), t["pos"].to_pylist()):
         iupac[acc].append(p)
 
-    first_release = {}
-    for m in members:
-        if m["assembly_accession"].startswith("GCA_000001405."):
-            acc = m["genbank_accession"]
-            first_release[acc] = min(first_release.get(acc, m["release"]), m["release"])
     parent_types = defaultdict(set)
     for p in pq.read_table(build / "layer_placements.parquet",
                            columns=["root_id", "parent_type"]).to_pylist():
         parent_types[p["root_id"]].add(p["parent_type"])
-    parent_start = {}
-    for p in sorted(pq.read_table(build / "layer_placements.parquet",
-                                  columns=["root_id", "parent_start", "first_release"]).to_pylist(),
-                    key=lambda p: p["first_release"]):
-        parent_start.setdefault(p["root_id"], p["parent_start"])
-
-    lower = {r["root_id"]: r["n_lower"] for r in pq.read_table(
-        build / "roots.parquet", columns=["root_id", "n_lower"]).to_pylist()}
-    assembly_of = defaultdict(set)
-    for m in members:
-        assembly_of[m["genbank_accession"]].add(m["assembly_accession"])
-
-    return {"members": members, "roots": roots, "rank": rank, "masks": masks, "iupac": iupac,
-            "first_release": first_release, "parent_start": parent_start,
-            "external": external, "parent_types": parent_types,
-            "lower": lower, "assembly_of": assembly_of}
+    return {"members": members, "roots": roots, "masks": masks, "iupac": iupac,
+            "external": external, "parent_types": parent_types}
 
 
 def main() -> None:
@@ -324,17 +253,17 @@ def main() -> None:
 
     rows, failed = [], []
     for recipe in recipes:
-        got = run(recipe, build, t["members"], t["roots"], t["rank"], t["masks"], t["iupac"],
-                  t["first_release"], t["parent_start"], t["external"], t["parent_types"])
+        got = run(recipe, build, t)
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
-        errs = compare(recipe, got, observed, t["lower"], t["assembly_of"])
+        errs = compare(got, observed)
         print(f"{recipe['flavor']}: {len(got)} sequences, "
               f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES'}", file=sys.stderr)
         for e in errs[:20]:
             print(f"  {e}", file=sys.stderr)
         if errs:
             failed.append(recipe["flavor"])
-        rows += got
+        else:
+            rows += in_observed_order(got, observed)
 
     if failed:  # a flavor is cataloged only once it reproduces: write nothing
         sys.exit(f"not reproduced: {failed}")

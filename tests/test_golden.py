@@ -51,29 +51,30 @@ def engine():
     import run_recipes
     rs = recipes()
     tables = run_recipes.load_tables(BUILD, rs)
-    outputs = {r["flavor"]: run_recipes.run(
-        r, BUILD, tables["members"], tables["roots"], tables["rank"], tables["masks"],
-        tables["iupac"], tables["first_release"], tables["parent_start"],
-        tables["external"], tables["parent_types"]) for r in rs}
+    outputs = {r["flavor"]: run_recipes.run(r, BUILD, tables) for r in rs}
     return run_recipes, rs, tables, outputs
 
 
+def observed(target: str) -> list[dict]:
+    return pq.read_table(BUILD / "observed" / f"{target}.parquet").to_pylist()
+
+
 def test_recipes_give_the_release_flavor_sequences(engine):
-    _, rs, _, outputs = engine
+    """The recipes, in each target's observed order, give the release's rows."""
+    run_recipes, rs, _, outputs = engine
     want = {}
     for row in golden("flavor_sequences.parquet"):
         want.setdefault(row["flavor"], []).append(row)
     assert set(outputs) == set(want)
     for flavor, rows in outputs.items():
-        assert rows == sorted(want[flavor], key=lambda r: r["position"]), flavor
+        assert run_recipes.in_observed_order(rows, observed(flavor)) == sorted(
+            want[flavor], key=lambda r: r["position"]), flavor
 
 
 def test_every_recipe_reproduces_its_observation(engine):
     run_recipes, rs, tables, outputs = engine
     for r in rs:
-        observed = pq.read_table(BUILD / "observed" / f"{r['flavor']}.parquet").to_pylist()
-        assert run_recipes.compare(r, outputs[r["flavor"]], observed, tables["lower"],
-                                   tables["assembly_of"]) == [], r["flavor"]
+        assert run_recipes.compare(outputs[r["flavor"]], observed(r["flavor"])) == [], r["flavor"]
 
 
 def test_seqcol_digests_match_the_release():

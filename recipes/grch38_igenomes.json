@@ -31,17 +31,6 @@
           "AJ507799.2": "chrEBV"
         }
       },
-      "order": [
-        "select",
-        "role",
-        "assembly_unit",
-        "molecule",
-        "object_rank"
-      ],
-      "format": {
-        "case": "upper",
-        "line_width": 70
-      },
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38/Sequence/WholeGenomeFasta/genome.dict"
     },
     {
@@ -83,17 +72,6 @@
           "GCA_000786075.2": "{accession}"
         }
       },
-      "order": [
-        "select",
-        "role",
-        "assembly_unit",
-        "molecule",
-        "object_rank"
-      ],
-      "format": {
-        "case": "upper",
-        "line_width": 70
-      },
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38Decoy/Sequence/WholeGenomeFasta/genome.dict"
     },
     {
@@ -128,17 +106,6 @@
         "map": {
           "AJ507799.2": "chrEBV"
         }
-      },
-      "order": [
-        "select",
-        "role",
-        "assembly_unit",
-        "molecule",
-        "object_rank"
-      ],
-      "format": {
-        "case": "soft",
-        "line_width": 50
       },
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.dict"
     },
@@ -194,17 +161,6 @@
           "GCA_000786075.2": "chrUn_{accession_v}_decoy",
           "IMGT/HLA 3.18.0": "HLA-{name}"
         }
-      },
-      "order": [
-        "select",
-        "role",
-        "assembly_unit",
-        "molecule",
-        "object_rank"
-      ],
-      "format": {
-        "case": "upper",
-        "line_width": 100
       }
     }
   ]

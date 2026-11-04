@@ -20,37 +20,6 @@
       },
       "rename": {
         "namespace": "ucsc"
-      },
-      "order": {
-        "default": [
-          "name"
-        ],
-        "by_role": {
-          "alt-scaffold": [
-            {
-              "literal": "chrAlt"
-            },
-            "assembly_unit",
-            "molecule",
-            "object_rank"
-          ],
-          "unlocalized-scaffold": [
-            {
-              "template": "{stem}_random"
-            },
-            "object_rank"
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "chrUn"
-            },
-            "object_rank"
-          ]
-        }
-      },
-      "format": {
-        "case": "soft",
-        "line_width": 50
       }
     },
     {
@@ -84,59 +53,6 @@
       },
       "rename": {
         "namespace": "ucsc"
-      },
-      "order": {
-        "default": [
-          "name"
-        ],
-        "by_role": {
-          "alt-scaffold": [
-            {
-              "literal": "chrAlt"
-            },
-            "assembly_unit",
-            "molecule",
-            "object_rank"
-          ],
-          "fix-patch": [
-            {
-              "literal": "~"
-            },
-            {
-              "key": "first_release",
-              "min": 11
-            },
-            "molecule",
-            "parent_start"
-          ],
-          "novel-patch": [
-            {
-              "literal": "~"
-            },
-            {
-              "key": "first_release",
-              "min": 11
-            },
-            "molecule",
-            "parent_start"
-          ],
-          "unlocalized-scaffold": [
-            {
-              "template": "{stem}_random"
-            },
-            "object_rank"
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "chrUn"
-            },
-            "object_rank"
-          ]
-        }
-      },
-      "format": {
-        "case": "soft",
-        "line_width": 50
       }
     },
     {
@@ -171,17 +87,6 @@
         "map": {
           "AJ507799.2": "chrEBV"
         }
-      },
-      "order": [
-        "select",
-        "role",
-        "assembly_unit",
-        "molecule",
-        "object_rank"
-      ],
-      "format": {
-        "case": "soft",
-        "line_width": 50
       }
     }
   ]

@@ -22,51 +22,6 @@
         "by_role": {
           "assembled-molecule": "sequence"
         }
-      },
-      "order": {
-        "default": [
-          "name"
-        ],
-        "by_role": {
-          "unlocalized-scaffold": [
-            {
-              "literal": "~2"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            {
-              "explicit": [
-                "KI270340.1",
-                "KI270338.1",
-                "KI270335.1",
-                "KI270378.1"
-              ]
-            }
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "~2"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            {
-              "explicit": [
-                "KI270340.1",
-                "KI270338.1",
-                "KI270335.1",
-                "KI270378.1"
-              ]
-            }
-          ]
-        }
-      },
-      "format": {
-        "case": "upper",
-        "line_width": 60
       }
     },
     {
@@ -99,84 +54,6 @@
           "fix-patch": "sequence",
           "novel-patch": "sequence"
         }
-      },
-      "order": {
-        "default": [
-          {
-            "literal": "~0"
-          },
-          "molecule"
-        ],
-        "by_role": {
-          "alt-scaffold": [
-            {
-              "literal": "~1"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            "name"
-          ],
-          "fix-patch": [
-            {
-              "literal": "~1"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            "name"
-          ],
-          "novel-patch": [
-            {
-              "literal": "~1"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            "name"
-          ],
-          "unlocalized-scaffold": [
-            {
-              "literal": "~2"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            {
-              "explicit": [
-                "KI270340.1",
-                "KI270338.1",
-                "KI270335.1",
-                "KI270378.1"
-              ]
-            }
-          ],
-          "unplaced-scaffold": [
-            {
-              "literal": "~2"
-            },
-            {
-              "key": "length",
-              "reverse": true
-            },
-            {
-              "explicit": [
-                "KI270340.1",
-                "KI270338.1",
-                "KI270335.1",
-                "KI270378.1"
-              ]
-            }
-          ]
-        }
-      },
-      "format": {
-        "case": "upper",
-        "line_width": 60
       }
     }
   ]

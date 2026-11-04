@@ -129,7 +129,8 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
   and checked against ENA's refget server.
 - **Layers** annotate roots in their own coordinates.
 - **Recipes** turn roots into a published file: select, mask, change the
-  alphabet (IUPAC→N), rename and order. They are data, in `recipes/*.json`.
+  alphabet (IUPAC→N) and rename. They are data, in `recipes/*.json`. Order
+  isn't part of a recipe: each published file's order is recorded as observed.
 - **Reconstruction is the verification.** A file counts as cataloged only when
   its recipe reproduces it, sequence by sequence: names, lengths, MD5 and `SQ.`
   digests. The rebuild also turned up details that no publisher documents: the

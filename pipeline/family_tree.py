@@ -94,6 +94,17 @@ def cost(d: dict) -> tuple:
     return (n_kinds, n_roots, n_seqs)
 
 
+def observed_format(path: Path) -> dict:
+    """How a target's FASTA was formatted: case and line width, from its
+    observation; empty for a .dict observation, which has neither."""
+    obs = pq.read_table(path, columns=["length", "n_lower", "line_width"]).to_pylist()
+    if any(o["n_lower"] is None for o in obs):
+        return {}
+    widths = sorted({o["line_width"] for o in obs if o["length"] > o["line_width"]})
+    return {"case": "soft" if any(o["n_lower"] for o in obs) else "upper",
+            "line_width": widths[0] if len(widths) == 1 else widths}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
@@ -107,7 +118,7 @@ def main() -> None:
             recipes[r["flavor"]] = {
                 "mask_layers": [m["layer"] for m in r.get("mask", [])],
                 "alphabet": r.get("alphabet") or None,
-                "format": r.get("format", {}),
+                "format": observed_format(build / "observed" / f"{r['flavor']}.parquet"),
                 "published": r["published"],
                 "checked_against": r.get("observed_from", r["published"]),
                 "file": path.name,

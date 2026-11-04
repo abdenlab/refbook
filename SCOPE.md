@@ -249,8 +249,9 @@ A **flavor** is a recipe applied to roots. The operations:
 3. **mask** with a hard-mask (`N`) or soft-mask (lowercase) layer;
 4. **change the alphabet**: IUPAC→`N`, or a change of case;
 5. **rename** into a namespace, or with an explicit map;
-6. **order** the sequences;
-7. **format** the output: line width, and the FASTA, 2bit or Arrow encoding.
+6. ~~**order** the sequences~~ and 7. ~~**format** the output~~: removed
+   2026-11-04. A flavor is a named sequence set (GLOSSARY.md), so order and
+   formatting are recorded from each published file, not reproduced.
 
 A root after the sequence-level operations (mask, alphabet) is a
 **derivative**: one distinct sequence, with its own MD5 and `SQ.` digest. Most

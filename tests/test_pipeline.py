@@ -180,6 +180,18 @@ def test_source_url():
 
 # run_recipes
 
+def test_compare_is_order_free():
+    got = [{"flavor": "t", "name": "a", "root_id": "A.1", "length": 3, "md5": "m1", "sha512t24u": "s1"},
+           {"flavor": "t", "name": "b", "root_id": "B.1", "length": 4, "md5": "m2", "sha512t24u": "s2"}]
+    obs = [{"name": "b", "position": 0, "length": 4, "md5": "m2", "sha512t24u": None, "defline_ac": None},
+           {"name": "a", "position": 1, "length": 3, "md5": "m1", "sha512t24u": "s1", "defline_ac": "A.1"}]
+    assert run_recipes.compare(got, obs) == []
+    assert [r["name"] for r in run_recipes.in_observed_order(got, obs)] == ["b", "a"]
+    assert run_recipes.compare(got, [obs[0]]) != []                               # a name missing
+    assert run_recipes.compare(got, [obs[0], {**obs[1], "md5": "x"}]) != []       # a digest differs
+    assert run_recipes.compare(got, [obs[0], {**obs[1], "defline_ac": "Z.1"}]) != []  # the wrong root
+
+
 def test_apply_operations():
     bases = b"ACGTRACGTY"
     assert run_recipes.apply_operations(bases, [], []) == bases
@@ -249,17 +261,6 @@ def test_name_of_precedence():
     with pytest.raises(SystemExit):
         run_recipes.name_of({"root_id": "C1.1", "assembly": "GCA_1.1", "member": {**MEMBERS[0], "refseq_accession": None}},
                             {"namespace": "refseq"})
-
-
-def test_sort_key():
-    s = {"root_id": "X.1", "name": "chr1_X1v1_random", "molecule": 0, "length": 50,
-         "first_release": 3, "member": {"role": "unlocalized-scaffold"}}
-    assert run_recipes.sort_key(s, ["molecule", {"literal": "z"}]) == (0, "z")
-    assert run_recipes.sort_key(s, [{"template": "{stem}_random"}]) == ("chr1_random",)
-    assert run_recipes.sort_key(s, [{"key": "length", "reverse": True}, {"key": "first_release", "min": 11}]) == (-50, 11)
-    assert run_recipes.sort_key(s, [{"explicit": ["A.1", "X.1"]}, {"explicit": ["A.1"]}]) == (1, 1)
-    by_role = {"default": ["name"], "by_role": {"unlocalized-scaffold": [{"literal": "u"}]}}
-    assert run_recipes.sort_key(s, by_role) == ("u",)
 
 
 # build_flavors
