@@ -23,8 +23,6 @@ Usage: uv run python -I pipeline/build_external_roots.py REGISTRY_DIR
 """
 
 import argparse
-import base64
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -32,9 +30,10 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from refbook import refget
+
 IMGT = "raw.githubusercontent.com/ANHIG/IMGTHLA"
 RELEASES = {"3180": "3.18.0"}
-NOT_AZ = re.compile(rb"[^A-Z]")
 IUPAC = re.compile(rb"[^ACGTN]")
 
 
@@ -76,18 +75,19 @@ def main() -> None:
                 if root_id in seen:
                     root_id += f":{group}"
                 seen.add(root_id)
+                seq = refget.remove_whitespace(seq)
                 if int(n_bp) != len(seq):
                     sys.exit(f"{acc}: header says {n_bp} bp, sequence has {len(seq)}")
-                up = seq.upper()
-                if NOT_AZ.search(up):
-                    sys.exit(f"{acc}: characters outside A-Z")
+                try:
+                    up = refget.canonical_bases(seq)
+                except refget.NonCanonicalBase as e:
+                    sys.exit(f"{acc}: {e}")
+                md5, sq = refget.digests(up)
                 for k, v in (
                     ("root_id", root_id),
                     ("collection", f"IMGT/HLA {release}"), ("group", group),
                     ("name", allele), ("accession", acc), ("rank", rank),
-                    ("length", len(up)), ("md5", hashlib.md5(up).hexdigest()),
-                    ("sha512t24u", "SQ." + base64.urlsafe_b64encode(
-                        hashlib.sha512(up).digest()[:24]).decode()),
+                    ("length", len(up)), ("md5", md5), ("sha512t24u", sq),
                     ("n_N", up.count(b"N")), ("n_iupac", len(IUPAC.findall(up))),
                     ("n_lower", sum(1 for a, b in zip(seq, up) if a != b)),
                     ("source", f"https://{IMGT}/{branch}/fasta/{path.name}"),

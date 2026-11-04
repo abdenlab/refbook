@@ -20,9 +20,7 @@ Usage: uv run python -I pipeline/build_roots.py REGISTRY_DIR [--block-size N]
 """
 
 import argparse
-import base64
 import gzip
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -31,6 +29,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from refbook import blocks as root_blocks  # the root_blocks storage layout
+from refbook import refget
 
 NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
 P14 = "GCA_000001405.29_GRCh38.p14"
@@ -44,7 +43,6 @@ EFETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 LOWER = re.compile(rb"[a-z]+")
 N_RUN = re.compile(rb"N+")
 IUPAC = re.compile(rb"[^ACGTN]")
-NOT_AZ = re.compile(rb"[^A-Z]")
 
 
 def releases(raw: Path) -> list[Path]:
@@ -79,14 +77,6 @@ def read_fasta(path: Path):
                 chunks.append(line.rstrip())
     if name is not None:
         yield name, b"".join(chunks)
-
-
-def digests(seq_upper: bytes) -> tuple[str, str]:
-    """refget MD5 and ga4gh (SQ.) digests: drop non A-Z, of already uppercased bytes."""
-    norm = NOT_AZ.sub(b"", seq_upper)
-    md5 = hashlib.md5(norm).hexdigest()
-    sq = "SQ." + base64.urlsafe_b64encode(hashlib.sha512(norm).digest()[:24]).decode()
-    return md5, sq
 
 
 def parse_report(path: Path) -> tuple[dict, list[dict]]:
@@ -171,10 +161,11 @@ def main() -> None:
     for path, url in sources:
         for acc, seq in read_fasta(path):
             if acc not in expected:
-                continue  # not a GRCh38 sequence (shouldn't happen)
+                sys.exit(f"{acc} in {path.name}: in no assembly report and not a listed root")
             if acc in seen:
                 sys.exit(f"{acc}: seen twice")
             seen.add(acc)
+            seq = refget.remove_whitespace(seq)
             if len(seq) != expected[acc]:
                 sys.exit(f"{acc}: length {len(seq)} != report {expected[acc]}")
             n_lower = 0
@@ -183,9 +174,10 @@ def main() -> None:
                 layers["softmask_ncbi"]["start"].append(m.start())
                 layers["softmask_ncbi"]["end"].append(m.end())
                 n_lower += m.end() - m.start()
-            up = seq.upper()
-            if NOT_AZ.search(up):
-                sys.exit(f"{acc}: contains characters outside A-Z")
+            try:
+                up = refget.canonical_bases(seq)
+            except refget.NonCanonicalBase as e:
+                sys.exit(f"{acc}: {e}")
             n_N = 0
             for m in N_RUN.finditer(up):
                 layers["n_runs"]["root_id"].append(acc)
@@ -197,7 +189,7 @@ def main() -> None:
                 layers["iupac"]["root_id"].append(acc)
                 layers["iupac"]["pos"].append(m.start())
                 layers["iupac"]["code"].append(m.group().decode())
-            md5, sq = digests(up)
+            md5, sq = refget.digests(up)
             for k, v in (("root_id", acc), ("length", len(up)), ("md5", md5),
                          ("sha512t24u", sq), ("n_N", n_N), ("n_iupac", len(iupac)),
                          ("n_lower", n_lower), ("source", url)):

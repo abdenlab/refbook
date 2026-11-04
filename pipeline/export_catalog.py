@@ -1,12 +1,15 @@
 """Export a catalog release: the published tables plus a manifest.
 
-Copies (hard-links where possible) the published files from
-REGISTRY/build/grch38 into OUT_DIR and writes OUT_DIR/catalog.json: the
+Copies the published files from REGISTRY/build/grch38 into OUT_DIR (copies,
+not links, so a later rebuild can't change a release) and writes
+OUT_DIR/catalog.json: the
 version, the date, and for every file its size, sha256 and role. Also writes
 OUT_DIR/README.md, the dataset card, from pipeline/catalog_card.md with the
 release's version and counts filled in. Pipeline
 intermediates stay behind. OUT_DIR is what gets hosted; a client opens it by
-URL (`Catalog("https://.../catalog/")`) or by path.
+URL (`Catalog("https://.../catalog/")`) or by path. A release is never
+overwritten: OUT_DIR must not exist. It is assembled in OUT_DIR.partial and
+renamed into place when complete.
 
 Usage: uv run python -I pipeline/export_catalog.py REGISTRY_DIR OUT_DIR VERSION
 """
@@ -14,7 +17,6 @@ Usage: uv run python -I pipeline/export_catalog.py REGISTRY_DIR OUT_DIR VERSION
 import datetime
 import hashlib
 import json
-import os
 import shutil
 from collections import defaultdict
 import sys
@@ -46,12 +48,7 @@ def sha256(path: Path) -> str:
 
 def place(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        dst.unlink()
-    try:
-        os.link(src, dst)
-    except OSError:
-        shutil.copy2(src, dst)
+    shutil.copy2(src, dst)
 
 
 def publisher_and_label(flavor: str) -> tuple[str, str]:
@@ -93,6 +90,11 @@ def card(build: Path, version: str) -> str:
 
 def main() -> None:
     build, out, version = Path(sys.argv[1]) / "build" / "grch38", Path(sys.argv[2]), sys.argv[3]
+    if out.exists():
+        sys.exit(f"{out} exists: a release is never overwritten")
+    staging = out.with_name(out.name + ".partial")
+    if staging.exists():
+        shutil.rmtree(staging)  # left by an interrupted export
     entries = []
     for name, role in FILES.items():
         entries += [(p, p.relative_to(build).as_posix(), role)
@@ -103,17 +105,19 @@ def main() -> None:
                     for p in ([src] if src.is_file() else sorted(src.glob("*")))]
     files = {}
     for src, rel, role in entries:
-        place(src, out / rel)
-        files[rel] = {"bytes": src.stat().st_size, "sha256": sha256(src), "role": role}
-        print(f"{rel}\t{src.stat().st_size}", file=sys.stderr)
+        dst = staging / rel
+        place(src, dst)
+        files[rel] = {"bytes": dst.stat().st_size, "sha256": sha256(dst), "role": role}
+        print(f"{rel}\t{dst.stat().st_size}", file=sys.stderr)
     manifest = {
         "name": "refbook", "version": version,
         "created": datetime.date.today().isoformat(),
         "description": "GRCh38 roots, layers and reproduced flavor recipes",
         "files": files,
     }
-    (out / "catalog.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    (out / "README.md").write_text(card(build, version))
+    (staging / "catalog.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (staging / "README.md").write_text(card(build, version))
+    staging.rename(out)
     print(f"{len(files)} files, {sum(f['bytes'] for f in files.values()) / 1e6:.0f} MB -> {out}",
           file=sys.stderr)
 

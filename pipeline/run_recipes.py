@@ -52,12 +52,12 @@ position, with REGISTRY/build/grch38/observed/<flavor>.parquet (from
 observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
 Exits nonzero, writing nothing, if any flavor does not reproduce.
 
-Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR RECIPES.json
+The output holds exactly the recipes given, so pass every recipe file.
+
+Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR recipes/*.json
 """
 
 import argparse
-import base64
-import hashlib
 import json
 import sys
 from collections import defaultdict
@@ -66,12 +66,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-
-def digests(seq: bytes) -> tuple[str, str]:
-    """refget MD5 and SQ. digests of uppercase A-Z bytes."""
-    md5 = hashlib.md5(seq).hexdigest()
-    sq = "SQ." + base64.urlsafe_b64encode(hashlib.sha512(seq).digest()[:24]).decode()
-    return md5, sq
+from refbook import refget
 
 
 def root_bases(build: Path, acc: str) -> bytearray:
@@ -208,7 +203,7 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
                 bases[start:end] = b"N" * (end - start)
             for p in to_n:
                 bases[p] = ord("N")
-            md5, sq = digests(bytes(bases))
+            md5, sq = refget.digests(bytes(bases))
         out.append({"flavor": recipe["flavor"], "position": pos,
                     "name": s["name"], "root_id": acc,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
@@ -248,7 +243,7 @@ def compare(recipe: dict, got: list[dict], observed: list[dict], lower: dict,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
-    ap.add_argument("recipes", type=Path)
+    ap.add_argument("recipes", type=Path, nargs="+")
     args = ap.parse_args()
     build = args.registry / "build" / "grch38"
 
@@ -260,7 +255,10 @@ def main() -> None:
     roots.update({e["root_id"]: {k: e[k] for k in cols} for e in external})
     agp = pq.read_table(build / "layer_agp.parquet", columns=["root_id", "object_rank"])
     rank = dict(zip(agp["root_id"].to_pylist(), agp["object_rank"].to_pylist()))
-    recipes = json.loads(args.recipes.read_text())["recipes"]
+    recipes = [r for path in args.recipes for r in json.loads(path.read_text())["recipes"]]
+    flavors = [r["flavor"] for r in recipes]
+    if len(flavors) != len(set(flavors)):
+        sys.exit("a flavor is defined in more than one recipe")
     masks = {}
     for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
         t = pq.read_table(build / f"layer_{name}.parquet", columns=["root_id", "start", "end"])
@@ -309,10 +307,9 @@ def main() -> None:
     if failed:  # a flavor is cataloged only once it reproduces: write nothing
         sys.exit(f"not reproduced: {failed}")
     out = build / "flavor_sequences.parquet"
-    existing = pq.read_table(out).to_pylist() if out.exists() else []
-    done = {r["flavor"] for r in recipes}
-    rows = [r for r in existing if r["flavor"] not in done] + rows
-    pq.write_table(pa.Table.from_pylist(rows), out, compression="zstd")
+    tmp = out.with_suffix(".tmp")
+    pq.write_table(pa.Table.from_pylist(rows), tmp, compression="zstd")
+    tmp.replace(out)  # a new file: never rewrites one a release links to
 
 
 if __name__ == "__main__":

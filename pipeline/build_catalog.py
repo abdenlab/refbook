@@ -23,8 +23,6 @@ Usage: uv run python -I pipeline/build_catalog.py REGISTRY_DIR recipes/*.json
 """
 
 import argparse
-import base64
-import hashlib
 import json
 import sys
 from collections import defaultdict
@@ -33,31 +31,16 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-INHERENT = ("names", "sequences")
+from refbook import seqcol
+
 CHROMALIAS = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.chromAlias.txt"
-
-
-def canonical(item) -> bytes:
-    """RFC-8785 for our data: ASCII keys, no floats, integers within 64 bits."""
-    return json.dumps(item, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
-                      sort_keys=True).encode("utf8")
-
-
-def sha512t24u(data: bytes) -> str:
-    return base64.urlsafe_b64encode(hashlib.sha512(data).digest()[:24]).decode("ascii")
-
-
-def seqcol_digests(obj: dict) -> tuple[str, dict]:
-    level1 = {k: sha512t24u(canonical(v)) for k, v in obj.items()}
-    top = sha512t24u(canonical({k: level1[k] for k in INHERENT}))
-    return top, level1
 
 
 def check_spec_example() -> None:
     obj = {"lengths": [248956422, 242193529, 198295559], "names": ["chr1", "chr2", "chr3"],
            "sequences": ["SQ.2YnepKM7OkBoOrKmvHbGqguVfF9amCST", "SQ.lwDyBi432Py-7xnAISyQlnlhWDEaBPv2",
                          "SQ.Eqk6_SvMMDCc6C-uEfickOUWTatLMDQZ"]}
-    top, level1 = seqcol_digests(obj)
+    top, level1 = seqcol.digests(obj["names"], obj["lengths"], obj["sequences"])
     want = {"lengths": "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2", "names": "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
             "sequences": "rD29ZKmEqwwHRXjiQ36p6UMZQ5hemmsb"}
     if level1 != want or top != "sjNNwm4zov3Dl0FRWbRTcZwzqrTQKIqL":
@@ -86,7 +69,7 @@ def main() -> None:
                 sys.exit(f"{f}: not in flavor_sequences.parquet (run run_recipes.py)")
             obj = {"lengths": [s["length"] for s in seqs], "names": [s["name"] for s in seqs],
                    "sequences": [s["sha512t24u"] for s in seqs]}
-            top, level1 = seqcol_digests(obj)
+            top, level1 = seqcol.digests(obj["names"], obj["lengths"], obj["sequences"])
             (build / "seqcol" / f"{f}.json").write_text(json.dumps(obj) + "\n")
             checked = r.get("observed_from", r["published"])
             rows.append({

@@ -4,11 +4,13 @@
    must exist and report the same length.
 2. GRC analysis-set FASTA deflines, which carry `AC:<accession.version>` and
    `M5:<md5>` per sequence. For sequences the GRC did not mask, M5 must equal
-   our MD5; for the ones it documents as masked (chr5, 14, 19, 21, 22, Y) it
-   must differ. Pass a *_plus_hs38d1_analysis_set to also cover the decoys
-   and EBV.
+   our MD5; for the ones it masks (the roots in layer_hardmask_grc: chr5, 14,
+   19, 21, 22, Y) it must differ. Pass a *_plus_hs38d1_analysis_set to also
+   cover the decoys and EBV.
 
-Writes REGISTRY/build/grch38/verify_roots.tsv and prints a summary.
+Writes REGISTRY/build/grch38/verify_roots.tsv and prints a summary. Exits
+nonzero if any root is absent from ENA or has another length there, or if
+any GRC M5 is unexpected.
 
 Usage: uv run python -I pipeline/verify_roots.py REGISTRY_DIR ANALYSIS_SET_FNA_GZ
 """
@@ -24,13 +26,13 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from refbook.remote import USER_AGENT
+
 ENA = "https://www.ebi.ac.uk/ena/cram/sequence/{}/metadata"
-GRC_MASKED = {"CM000667.2", "CM000676.2", "CM000681.2", "CM000683.2",
-              "CM000684.2", "CM000686.2"}  # chr5, 14, 19, 21, 22, Y
 
 
 def ena_length(md5: str) -> int | None:
-    req = urllib.request.Request(ENA.format(md5), headers={"User-Agent": "composeq-assembly-registry"})
+    req = urllib.request.Request(ENA.format(md5), headers={"User-Agent": USER_AGENT})
     for _ in range(3):
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
@@ -65,9 +67,13 @@ def main() -> None:
         ena = dict(zip((r["root_id"] for r in roots),
                        pool.map(ena_length, (r["md5"] for r in roots))))
     grc = grc_m5(analysis)
+    masked = set(pq.read_table(build / "layer_hardmask_grc.parquet", columns=["root_id"])
+                 ["root_id"].to_pylist())
 
-    counts = {}
-    with open(build / "verify_roots.tsv", "w") as out:
+    counts, failed = {}, []
+    tsv = build / "verify_roots.tsv"
+    tmp = tsv.with_suffix(".tmp")
+    with open(tmp, "w") as out:
         out.write("root_id\tlength\tmd5\tena\tgrc_analysis_set\n")
         for r in roots:
             acc = r["root_id"]
@@ -76,14 +82,19 @@ def main() -> None:
             if acc not in grc:
                 grc_s = "not in set"
             elif grc[acc] == r["md5"]:
-                grc_s = "match" + (" (UNEXPECTED: documented as masked)" if acc in GRC_MASKED else "")
+                grc_s = "match" + (" (UNEXPECTED: masked by the GRC)" if acc in masked else "")
             else:
-                grc_s = "differs" + ("" if acc in GRC_MASKED else " (UNEXPECTED)")
+                grc_s = "differs" + ("" if acc in masked else " (UNEXPECTED)")
             for k in (f"ena:{ena_s}", f"grc:{grc_s}"):
                 counts[k] = counts.get(k, 0) + 1
             out.write(f"{acc}\t{r['length']}\t{r['md5']}\t{ena_s}\t{grc_s}\n")
+            if ena_s != "ok" or "UNEXPECTED" in grc_s:
+                failed.append(acc)
+    tmp.replace(tsv)  # a new file: never rewrites one a release links to
     for k, v in sorted(counts.items()):
         print(f"{v:5d}  {k}")
+    if failed:
+        sys.exit(f"{len(failed)} roots failed verification, e.g. {failed[:5]}")
 
 
 if __name__ == "__main__":

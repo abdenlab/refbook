@@ -3,14 +3,13 @@
 These observations are the targets a flavor's recipe must reproduce. Per
 sequence: position, name, length, refget digests (MD5, SQ.) of the uppercased
 bases, counts of N and lowercase, the line width, and the defline's `AC:` and
-`M5:` tags where present (GRC analysis sets).
+`M5:` tags where present (GRC analysis sets). Fails on a character outside
+A-Z, a-z and whitespace (refbook.refget's canonicalization policy).
 
 Usage: uv run python -I pipeline/observe_fasta.py FASTA[.gz] OUT.parquet
 """
 
-import base64
 import gzip
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -18,7 +17,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-NOT_AZ = re.compile(rb"[^A-Z]")
+from refbook import refget
+
 LOWER = bytes(range(ord("a"), ord("z") + 1))
 
 
@@ -44,14 +44,16 @@ def main() -> None:
                             "n_lower", "line_width", "defline_ac", "defline_m5",
                             "defline")}
     for i, (defline, lines) in enumerate(records(src)):
-        seq = b"".join(lines)
-        up = NOT_AZ.sub(b"", seq.upper())
+        seq = refget.remove_whitespace(b"".join(lines))
+        try:
+            up = refget.canonical_bases(seq)
+        except refget.NonCanonicalBase as e:
+            sys.exit(f"{defline.split()[0]}: {e}")
+        md5, sq = refget.digests(up)
         tags = dict(re.findall(r"\b(\w\w):(\S+)", defline))
         for k, v in (
             ("position", i), ("name", defline.split()[0]), ("length", len(seq)),
-            ("md5", hashlib.md5(up).hexdigest()),
-            ("sha512t24u", "SQ." + base64.urlsafe_b64encode(
-                hashlib.sha512(up).digest()[:24]).decode()),
+            ("md5", md5), ("sha512t24u", sq),
             ("n_N", up.count(b"N")), ("n_lower", len(seq) - len(seq.translate(None, LOWER))),
             ("line_width", len(lines[0]) if lines else 0),
             ("defline_ac", tags.get("AC")), ("defline_m5", tags.get("M5")),
