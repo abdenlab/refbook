@@ -52,6 +52,15 @@ def read_fasta(path: Path):
         yield header, b"".join(chunks)
 
 
+def parse_header(header: str) -> tuple[str, str, int]:
+    """(IMGT accession, allele name, stated length) of an IMGT/HLA FASTA header,
+    e.g. "HLA:HLA00001 A*01:01:01:01 3503 bp"."""
+    acc_field, allele, n_bp, unit = header.split()
+    if unit != "bp" or not acc_field.startswith("HLA:"):
+        raise ValueError(f"unexpected IMGT/HLA header: {header!r}")
+    return acc_field.split(":")[1], allele, int(n_bp)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
@@ -68,15 +77,13 @@ def main() -> None:
         for path in files:
             group = path.name.removesuffix("_gen.fasta")
             for header, seq in read_fasta(path):
-                # >HLA:HLA00001 A*01:01:01:01 3503 bp
-                acc_field, allele, n_bp, _ = header.split()
-                acc = acc_field.split(":")[1]
+                acc, allele, n_bp = parse_header(header)
                 root_id = f"IMGTHLA:{release}:{acc}"
                 if root_id in seen:
                     root_id += f":{group}"
                 seen.add(root_id)
                 seq = refget.remove_whitespace(seq)
-                if int(n_bp) != len(seq):
+                if n_bp != len(seq):
                     sys.exit(f"{acc}: header says {n_bp} bp, sequence has {len(seq)}")
                 try:
                     up = refget.canonical_bases(seq)

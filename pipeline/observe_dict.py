@@ -16,10 +16,10 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 
-def main() -> None:
-    src, out = Path(sys.argv[1]), Path(sys.argv[2])
+def parse_dict(text: str) -> list[dict]:
+    """One observation row per @SQ line of a SAM sequence dictionary."""
     rows = []
-    for line in src.read_text().splitlines():
+    for line in text.splitlines():
         if not line.startswith("@SQ"):
             continue
         tags = dict(f.split(":", 1) for f in line.split("\t")[1:])
@@ -29,6 +29,12 @@ def main() -> None:
             "line_width": None, "defline_ac": None, "defline_m5": tags.get("M5"),
             "defline": line,
         })
+    return rows
+
+
+def main() -> None:
+    src, out = Path(sys.argv[1]), Path(sys.argv[2])
+    rows = parse_dict(src.read_text())
     schema = pa.schema([("position", pa.int64()), ("name", pa.string()),
                         ("length", pa.int64()), ("md5", pa.string()),
                         ("sha512t24u", pa.string()), ("n_N", pa.int64()),

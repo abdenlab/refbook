@@ -58,6 +58,7 @@ Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR recipes/*.json
 """
 
 import argparse
+import functools
 import json
 import sys
 from collections import defaultdict
@@ -67,12 +68,38 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from refbook import refget
+from refbook.blocks import row_groups_by_root
 
 
-def root_bases(build: Path, acc: str) -> bytearray:
-    blocks = pq.read_table(build / "root_blocks.parquet", filters=[("root_id", "=", acc)])
-    order = sorted(zip(blocks["start"].to_pylist(), blocks["bases"].to_pylist()))
-    return bytearray(b"".join(b.encode() for _, b in order))
+@functools.cache
+def _blocks(build: Path) -> tuple[pq.ParquetFile, dict[str, list[int]]]:
+    f = pq.ParquetFile(build / "root_blocks.parquet")
+    return f, row_groups_by_root(f)
+
+
+def root_bases(build: Path, acc: str) -> bytes:
+    """A root's bases, read from its own row groups only."""
+    f, groups = _blocks(build)
+    t = f.read_row_groups(groups[acc], columns=["start", "bases"])
+    order = sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist()))
+    return b"".join(b.encode() for _, b in order)
+
+
+def apply_operations(bases: bytes, spans: list[tuple[int, int]], positions: list[int]) -> bytes:
+    """A root's bases with the masked spans (0-based half-open) and the given
+    positions (IUPAC -> N) set to N."""
+    out = bytearray(bases)
+    for start, end in spans:
+        out[start:end] = b"N" * (end - start)
+    for p in positions:
+        out[p] = ord("N")
+    return bytes(out)
+
+
+@functools.cache
+def derivative_digests(build: Path, acc: str, spans: tuple, positions: tuple) -> tuple[str, str]:
+    """Digests of a root after operations; cached, since targets share derivatives."""
+    return refget.digests(apply_operations(root_bases(build, acc), spans, positions))
 
 
 def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
@@ -198,12 +225,7 @@ def run(recipe: dict, build: Path, members: list[dict], roots: dict, rank: dict,
         if s.get("external") and (spans.get(acc) or r["n_iupac"] and alphabet):
             sys.exit(f"{acc}: external root (bases not hosted) would need materializing")
         if spans.get(acc) or to_n:
-            bases = root_bases(build, acc)
-            for start, end in spans.get(acc, []):
-                bases[start:end] = b"N" * (end - start)
-            for p in to_n:
-                bases[p] = ord("N")
-            md5, sq = refget.digests(bytes(bases))
+            md5, sq = derivative_digests(build, acc, tuple(spans.get(acc, [])), tuple(to_n))
         out.append({"flavor": recipe["flavor"], "position": pos,
                     "name": s["name"], "root_id": acc,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
@@ -240,13 +262,8 @@ def compare(recipe: dict, got: list[dict], observed: list[dict], lower: dict,
     return errs
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("recipes", type=Path, nargs="+")
-    args = ap.parse_args()
-    build = args.registry / "build" / "grch38"
-
+def load_tables(build: Path, recipes: list[dict]) -> dict:
+    """The catalog tables that run() and compare() need, by name."""
     members = pq.read_table(build / "assembly_members.parquet").to_pylist()
     cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
     roots = {r["root_id"]: r for r in pq.read_table(build / "roots.parquet", columns=cols).to_pylist()}
@@ -255,10 +272,6 @@ def main() -> None:
     roots.update({e["root_id"]: {k: e[k] for k in cols} for e in external})
     agp = pq.read_table(build / "layer_agp.parquet", columns=["root_id", "object_rank"])
     rank = dict(zip(agp["root_id"].to_pylist(), agp["object_rank"].to_pylist()))
-    recipes = [r for path in args.recipes for r in json.loads(path.read_text())["recipes"]]
-    flavors = [r["flavor"] for r in recipes]
-    if len(flavors) != len(set(flavors)):
-        sys.exit("a flavor is defined in more than one recipe")
     masks = {}
     for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
         t = pq.read_table(build / f"layer_{name}.parquet", columns=["root_id", "start", "end"])
@@ -290,12 +303,31 @@ def main() -> None:
     for m in members:
         assembly_of[m["genbank_accession"]].add(m["assembly_accession"])
 
+    return {"members": members, "roots": roots, "rank": rank, "masks": masks, "iupac": iupac,
+            "first_release": first_release, "parent_start": parent_start,
+            "external": external, "parent_types": parent_types,
+            "lower": lower, "assembly_of": assembly_of}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("registry", type=Path)
+    ap.add_argument("recipes", type=Path, nargs="+")
+    args = ap.parse_args()
+    build = args.registry / "build" / "grch38"
+
+    recipes = [r for path in args.recipes for r in json.loads(path.read_text())["recipes"]]
+    flavors = [r["flavor"] for r in recipes]
+    if len(flavors) != len(set(flavors)):
+        sys.exit("a flavor is defined in more than one recipe")
+    t = load_tables(build, recipes)
+
     rows, failed = [], []
     for recipe in recipes:
-        got = run(recipe, build, members, roots, rank, masks, iupac, first_release,
-                  parent_start, external, parent_types)
+        got = run(recipe, build, t["members"], t["roots"], t["rank"], t["masks"], t["iupac"],
+                  t["first_release"], t["parent_start"], t["external"], t["parent_types"])
         observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
-        errs = compare(recipe, got, observed, lower, assembly_of)
+        errs = compare(recipe, got, observed, t["lower"], t["assembly_of"])
         print(f"{recipe['flavor']}: {len(got)} sequences, "
               f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES'}", file=sys.stderr)
         for e in errs[:20]:

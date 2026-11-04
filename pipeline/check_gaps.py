@@ -83,6 +83,34 @@ def check_tiling(obj: str, rows: list[tuple], length: int) -> list[str]:
     return errs
 
 
+def classify_runs(runs: list[tuple[int, int]], gaps: list[tuple[int, int, str]]):
+    """Compare one root's N-runs (sorted, disjoint, 0-based half-open) with its AGP
+    gaps. Returns the gaps that are not entirely N, and each run with its kind:
+    "exact" (one gap), "adjacent_gaps" (several gaps filling it), "no_gap" (Ns
+    inside a component) or "gap_plus_component_N", plus the types of its gaps."""
+    starts = [s for s, _ in runs]
+    in_run, not_all_n = defaultdict(list), []
+    for gs, ge, gt in gaps:
+        i = bisect.bisect_right(starts, gs) - 1
+        if i < 0 or runs[i][1] < ge:
+            not_all_n.append((gs, ge, gt))
+        else:
+            in_run[i].append((gs, ge, gt))
+    classified = []
+    for i, (rs, re_) in enumerate(runs):
+        g = in_run.get(i, [])
+        if len(g) == 1 and g[0][:2] == (rs, re_):
+            kind = "exact"
+        elif not g:
+            kind = "no_gap"
+        elif sum(ge - gs for gs, ge, _ in g) == re_ - rs:
+            kind = "adjacent_gaps"
+        else:
+            kind = "gap_plus_component_N"
+        classified.append((rs, re_, kind, [t for *_, t in g]))
+    return not_all_n, classified
+
+
 def read_genomic_gaps(path: Path) -> dict[str, set[tuple[int, int]]]:
     gaps = defaultdict(set)
     with gzip.open(path, "rt") as f:
@@ -144,32 +172,18 @@ def main() -> None:
     component_n = defaultdict(set)  # acc -> N-runs that touch no AGP gap
     for acc in sorted(length):
         gaps = gaps_of(agp.get(acc, []))
-        acc_runs = runs.get(acc, [])
-        run_starts = [s for s, _ in acc_runs]
-        in_run = defaultdict(list)
-        for gs, ge, gt in gaps:
+        for *_, gt in gaps:
             gap_types[gt] += 1
-            i = bisect.bisect_right(run_starts, gs) - 1
-            if i < 0 or acc_runs[i][1] < ge:
-                stats["gap_not_all_N"] += 1
-                report.append((acc, gs, ge, "gap_not_all_N", gt))
-            else:
-                in_run[i].append((gs, ge, gt))
-        for i, (rs, re_) in enumerate(acc_runs):
-            g = in_run.get(i, [])
-            if len(g) == 1 and g[0][:2] == (rs, re_):
-                kind = "exact"
-            elif not g:
-                kind = "no_gap"
-            elif sum(ge - gs for gs, ge, _ in g) == re_ - rs:
-                kind = "adjacent_gaps"
-            else:
-                kind = "gap_plus_component_N"
+        not_all_n, classified = classify_runs(runs.get(acc, []), gaps)
+        for gs, ge, gt in not_all_n:
+            stats["gap_not_all_N"] += 1
+            report.append((acc, gs, ge, "gap_not_all_N", gt))
+        for rs, re_, kind, types in classified:
             stats[kind] += 1
             if kind == "no_gap":
                 component_n[acc].add((rs, re_))
             if kind != "exact":
-                report.append((acc, rs, re_, kind, ",".join(t for *_, t in g)))
+                report.append((acc, rs, re_, kind, ",".join(types)))
 
     # genomic_gaps.txt lists the AGP gaps (adjacent ones separately) plus the
     # N-runs inside components of at least MIN_COMPONENT_N.

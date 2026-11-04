@@ -79,6 +79,20 @@ def read_fasta(path: Path):
         yield name, b"".join(chunks)
 
 
+def scan(seq: bytes) -> dict:
+    """Everything build_roots records about one sequence (whitespace already removed):
+    canonical bases, digests, lowercase runs, N-runs and IUPAC positions (0-based,
+    half-open runs), and their counts. Raises refget.NonCanonicalBase."""
+    lower = [(m.start(), m.end()) for m in LOWER.finditer(seq)]
+    up = refget.canonical_bases(seq)
+    n_runs = [(m.start(), m.end()) for m in N_RUN.finditer(up)]
+    md5, sq = refget.digests(up)
+    return {"bases": up, "md5": md5, "sha512t24u": sq,
+            "lower": lower, "n_lower": sum(e - s for s, e in lower),
+            "n_runs": n_runs, "n_N": sum(e - s for s, e in n_runs),
+            "iupac": [(m.start(), m.group().decode()) for m in IUPAC.finditer(up)]}
+
+
 def parse_report(path: Path) -> tuple[dict, list[dict]]:
     meta, rows, header = {}, [], None
     for line in path.read_text().splitlines():
@@ -168,31 +182,25 @@ def main() -> None:
             seq = refget.remove_whitespace(seq)
             if len(seq) != expected[acc]:
                 sys.exit(f"{acc}: length {len(seq)} != report {expected[acc]}")
-            n_lower = 0
-            for m in LOWER.finditer(seq):
-                layers["softmask_ncbi"]["root_id"].append(acc)
-                layers["softmask_ncbi"]["start"].append(m.start())
-                layers["softmask_ncbi"]["end"].append(m.end())
-                n_lower += m.end() - m.start()
             try:
-                up = refget.canonical_bases(seq)
+                sc = scan(seq)
             except refget.NonCanonicalBase as e:
                 sys.exit(f"{acc}: {e}")
-            n_N = 0
-            for m in N_RUN.finditer(up):
-                layers["n_runs"]["root_id"].append(acc)
-                layers["n_runs"]["start"].append(m.start())
-                layers["n_runs"]["end"].append(m.end())
-                n_N += m.end() - m.start()
-            iupac = list(IUPAC.finditer(up))
-            for m in iupac:
+            up = sc["bases"]
+            for name, key in (("softmask_ncbi", "lower"), ("n_runs", "n_runs")):
+                for start, end in sc[key]:
+                    layers[name]["root_id"].append(acc)
+                    layers[name]["start"].append(start)
+                    layers[name]["end"].append(end)
+            for pos, code in sc["iupac"]:
                 layers["iupac"]["root_id"].append(acc)
-                layers["iupac"]["pos"].append(m.start())
-                layers["iupac"]["code"].append(m.group().decode())
-            md5, sq = refget.digests(up)
+                layers["iupac"]["pos"].append(pos)
+                layers["iupac"]["code"].append(code)
+            md5 = sc["md5"]
             for k, v in (("root_id", acc), ("length", len(up)), ("md5", md5),
-                         ("sha512t24u", sq), ("n_N", n_N), ("n_iupac", len(iupac)),
-                         ("n_lower", n_lower), ("source", url)):
+                         ("sha512t24u", sc["sha512t24u"]), ("n_N", sc["n_N"]),
+                         ("n_iupac", len(sc["iupac"])), ("n_lower", sc["n_lower"]),
+                         ("source", url)):
                 roots[k].append(v)
             starts = range(0, len(up), args.block_size)
             root_blocks.write_root(blocks, pa.table({

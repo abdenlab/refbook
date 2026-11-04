@@ -58,6 +58,21 @@ def grc_m5(path: Path) -> dict[str, str]:
     return out
 
 
+def status(length: int, md5: str, ena_length: int | None, grc_md5: str | None,
+           masked: bool) -> tuple[str, str, bool]:
+    """(ENA result, GRC result, passed) for one root. ENA must hold our MD5 at
+    our length; the GRC's M5 must equal ours unless the GRC masks the root, and
+    then it must differ. A root not in the analysis set passes on ENA alone."""
+    ena = "absent" if ena_length is None else ("ok" if ena_length == length else f"length {ena_length}")
+    if grc_md5 is None:
+        grc = "not in set"
+    elif grc_md5 == md5:
+        grc = "match" + (" (UNEXPECTED: masked by the GRC)" if masked else "")
+    else:
+        grc = "differs" + ("" if masked else " (UNEXPECTED)")
+    return ena, grc, ena == "ok" and "UNEXPECTED" not in grc
+
+
 def main() -> None:
     registry, analysis = Path(sys.argv[1]), Path(sys.argv[2])
     build = registry / "build" / "grch38"
@@ -77,18 +92,11 @@ def main() -> None:
         out.write("root_id\tlength\tmd5\tena\tgrc_analysis_set\n")
         for r in roots:
             acc = r["root_id"]
-            e = ena[acc]
-            ena_s = "absent" if e is None else ("ok" if e == r["length"] else f"length {e}")
-            if acc not in grc:
-                grc_s = "not in set"
-            elif grc[acc] == r["md5"]:
-                grc_s = "match" + (" (UNEXPECTED: masked by the GRC)" if acc in masked else "")
-            else:
-                grc_s = "differs" + ("" if acc in masked else " (UNEXPECTED)")
+            ena_s, grc_s, ok = status(r["length"], r["md5"], ena[acc], grc.get(acc), acc in masked)
             for k in (f"ena:{ena_s}", f"grc:{grc_s}"):
                 counts[k] = counts.get(k, 0) + 1
             out.write(f"{acc}\t{r['length']}\t{r['md5']}\t{ena_s}\t{grc_s}\n")
-            if ena_s != "ok" or "UNEXPECTED" in grc_s:
+            if not ok:
                 failed.append(acc)
     tmp.replace(tsv)  # a new file: never rewrites one a release links to
     for k, v in sorted(counts.items()):

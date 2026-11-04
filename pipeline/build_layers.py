@@ -77,6 +77,25 @@ def read_agp(path: Path) -> dict[str, list[tuple]]:
     return objs
 
 
+def agp_record(r: tuple) -> dict:
+    """One AGP row (the columns after `object`) as a layer_agp record, 0-based
+    half-open on both the object and the component; gap rows have null
+    component columns and vice versa."""
+    gap = r[3] in ("N", "U")
+    return {
+        "part_number": int(r[2]), "start": int(r[0]) - 1, "end": int(r[1]),
+        "component_type": r[3],
+        "component_id": None if gap else r[4],
+        "component_start": None if gap else int(r[5]) - 1,
+        "component_end": None if gap else int(r[6]),
+        "orientation": None if gap else r[7],
+        "gap_length": int(r[4]) if gap else None,
+        "gap_type": r[5] if gap else None,
+        "linkage": (r[6] == "yes") if gap else None,
+        "linkage_evidence": (None if r[7] == "na" else r[7]) if gap else None,
+    }
+
+
 def build_agp(raw: Path, roots: set[str]) -> pa.Table:
     """AGP of every root in `roots` (the assembly members; EBV has none)."""
     agp, source, rank = {}, {}, {}
@@ -102,23 +121,10 @@ def build_agp(raw: Path, roots: set[str]) -> pa.Table:
     for obj in sorted(agp):
         url = "https://" + str(source[obj])[raw_prefix:]
         for r in agp[obj]:
-            gap = r[3] in ("N", "U")
-            cols["object_rank"].append(rank[obj])
-            cols["root_id"].append(obj)
-            cols["part_number"].append(int(r[2]))
-            cols["start"].append(int(r[0]) - 1)
-            cols["end"].append(int(r[1]))
-            cols["component_type"].append(r[3])
-            cols["component_id"].append(None if gap else r[4])
-            cols["component_start"].append(None if gap else int(r[5]) - 1)
-            cols["component_end"].append(None if gap else int(r[6]))
-            cols["orientation"].append(None if gap else r[7])
-            cols["gap_length"].append(int(r[4]) if gap else None)
-            cols["gap_type"].append(r[5] if gap else None)
-            cols["linkage"].append((r[6] == "yes") if gap else None)
-            cols["linkage_evidence"].append(
-                (None if r[7] == "na" else r[7]) if gap else None)
-            cols["source"].append(url)
+            rec = agp_record(r)
+            rec.update(root_id=obj, source=url, object_rank=rank[obj])
+            for k in cols:
+                cols[k].append(rec[k])
     return pa.table(cols)
 
 
