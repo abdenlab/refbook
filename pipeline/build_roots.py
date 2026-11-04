@@ -31,31 +31,19 @@ import pyarrow.parquet as pq
 from refbook import blocks as root_blocks  # the root_blocks storage layout
 from refbook import refget
 
-NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
-P14 = "GCA_000001405.29_GRCh38.p14"
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
+P14 = f"{layout.LATEST[1]}_{layout.LATEST[2]}"
 SUPERSEDED = ["KQ759759.1", "KQ759762.1"]
 # Roots outside GRCh38 that GRCh38 flavors add: the hs38d1 decoys (an
 # assembly of their own) and EBV (in no assembly).
-HS38D1 = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
 EBV = "AJ507799.2"
 EFETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
 LOWER = re.compile(rb"[a-z]+")
 N_RUN = re.compile(rb"N+")
 IUPAC = re.compile(rb"[^ACGTN]")
-
-
-def releases(raw: Path) -> list[Path]:
-    dirs = sorted(
-        (raw / NCBI).glob("GCA_000001405.*_GRCh38*"),
-        key=lambda p: int(p.name.split("_")[1].split(".")[1]),
-    )
-    return [d for d in dirs if 15 <= int(d.name.split("_")[1].split(".")[1]) <= 29]
-
-
-def assemblies(raw: Path) -> list[Path]:
-    """Every assembly directory with a report: GRCh38 p0-p14, then hs38d1."""
-    return releases(raw) + [raw / HS38D1]
 
 
 def genbank_length(path: Path) -> int:
@@ -112,7 +100,7 @@ def build_members(raw: Path) -> pa.Table:
         "role", "assigned_molecule", "location_type", "genbank_accession",
         "relationship", "refseq_accession", "assembly_unit", "length", "ucsc_name",
     )}
-    for d in assemblies(raw):
+    for d in layout.assembly_dirs(raw):
         meta, rows = parse_report(d / f"{d.name}_assembly_report.txt")
         name = meta["Assembly name"]
         release = int(name.split(".p")[1]) if ".p" in name else 0
@@ -139,8 +127,8 @@ def main() -> None:
     ap.add_argument("registry", type=Path)
     ap.add_argument("--block-size", type=int, default=root_blocks.BLOCK_SIZE)
     args = ap.parse_args()
-    raw = args.registry / "raw"
-    out = args.registry / "build" / "grch38"
+    raw = layout.raw_dir(args.registry)
+    out = layout.build_dir(args.registry)
     out.mkdir(parents=True, exist_ok=True)
 
     members = build_members(raw)
@@ -150,18 +138,18 @@ def main() -> None:
                            members["length"].to_pylist()):
         if expected.setdefault(acc, length) != length:
             sys.exit(f"{acc}: reports disagree on length")
-    print(f"{len(expected)} distinct sequences across {len(assemblies(raw))} reports",
+    print(f"{len(expected)} distinct sequences across {len(layout.assembly_dirs(raw))} reports",
           file=sys.stderr)
     efetch = raw / "eutils.ncbi.nlm.nih.gov" / "efetch"
     expected[EBV] = genbank_length(efetch / f"nuccore_{EBV}.gb")
 
-    sources = [(raw / NCBI / P14 / f"{P14}_genomic.fna.gz",
-                f"https://{NCBI}/{P14}/{P14}_genomic.fna.gz")]
+    sources = [(raw / layout.NCBI / P14 / f"{P14}_genomic.fna.gz",
+                f"https://{layout.NCBI}/{P14}/{P14}_genomic.fna.gz")]
     for acc in SUPERSEDED + [EBV]:
         sources.append((efetch / f"nuccore_{acc}.fasta",
                         f"{EFETCH}?db=nuccore&id={acc}&rettype=fasta&retmode=text"))
-    hs38d1 = f"{Path(HS38D1).name}_genomic.fna.gz"
-    sources.append((raw / HS38D1 / hs38d1, f"https://{HS38D1}/{hs38d1}"))
+    hs38d1 = f"{Path(layout.HS38D1).name}_genomic.fna.gz"
+    sources.append((raw / layout.HS38D1 / hs38d1, f"https://{layout.HS38D1}/{hs38d1}"))
 
     roots = {k: [] for k in ("root_id", "length", "md5", "sha512t24u", "n_N",
                              "n_iupac", "n_lower", "source")}

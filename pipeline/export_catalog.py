@@ -22,6 +22,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 # Published files and their roles; directories export every file they contain.
 FILES = {
     "roots.parquet": "roots", "roots_external.parquet": "roots",
@@ -75,7 +78,7 @@ def card(build: Path, version: str) -> str:
 
 
 def main() -> None:
-    build, out, version = Path(sys.argv[1]) / "build" / "grch38", Path(sys.argv[2]), sys.argv[3]
+    build, out, version = layout.build_dir(Path(sys.argv[1])), Path(sys.argv[2]), sys.argv[3]
     if out.exists():
         sys.exit(f"{out} exists: a release is never overwritten")
     staging = out.with_name(out.name + ".partial")

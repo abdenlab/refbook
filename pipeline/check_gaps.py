@@ -27,24 +27,12 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
-HS38D1 = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 # Shortest component N-run that genomic_gaps.txt lists. Observed, not documented:
 # GRCh38 has listed runs of >= 10 and unlisted runs of <= 7, nothing in between.
 MIN_COMPONENT_N = 10
-
-
-def releases(raw: Path) -> list[Path]:
-    dirs = sorted(
-        (raw / NCBI).glob("GCA_000001405.*_GRCh38*"),
-        key=lambda p: int(p.name.split("_")[1].split(".")[1]),
-    )
-    return [d for d in dirs if 15 <= int(d.name.split("_")[1].split(".")[1]) <= 29]
-
-
-def assemblies(raw: Path) -> list[Path]:
-    """Every assembly directory with a report: GRCh38 p0-p14, then hs38d1."""
-    return releases(raw) + [raw / HS38D1]
 
 
 def agp_files(release: Path) -> list[Path]:
@@ -126,8 +114,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     args = ap.parse_args()
-    raw = args.registry / "raw"
-    out = args.registry / "build" / "grch38"
+    raw = layout.raw_dir(args.registry)
+    out = layout.build_dir(args.registry)
 
     roots = pq.read_table(out / "roots.parquet", columns=["root_id", "length"])
     length = dict(zip(roots["root_id"].to_pylist(), roots["length"].to_pylist()))
@@ -143,7 +131,7 @@ def main() -> None:
     agp, first_seen = {}, {}
     rel_objs = {}  # release name -> roots with an AGP in that release
     rel_gg = {}    # release name -> its genomic_gaps.txt, where published
-    for d in assemblies(raw):
+    for d in layout.assembly_dirs(raw):
         rel_objs[d.name] = set()
         for path in agp_files(d):
             for obj, rows in read_agp(path).items():

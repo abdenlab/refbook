@@ -53,10 +53,11 @@ import pyarrow.parquet as pq
 
 from refbook import seqcol
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves it out
-import run_recipes
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import engine
+import layout
 
-GRCH38 = "GCA_000001405."  # GenBank assembly accession prefix of GRCh38 p0-p14
+GRCH38 = layout.GRCH38
 OPERATION_OF_ALPHABET = "iupac_to_n"
 
 
@@ -112,7 +113,7 @@ def main() -> None:
     ap.add_argument("labels", type=Path)
     ap.add_argument("recipes", type=Path, nargs="+")
     args = ap.parse_args()
-    build = args.registry / "build" / "grch38"
+    build = layout.build_dir(args.registry)
 
     recipes = {r["flavor"]: r for p in args.recipes for r in json.loads(p.read_text())["recipes"]}
     curated = json.loads(args.labels.read_text())["flavors"]
@@ -148,7 +149,7 @@ def main() -> None:
     latest_release = max(m["release"] for m in members if m["assembly_accession"].startswith(GRCH38))
     latest = {m["genbank_accession"] for m in members
               if m["assembly_accession"].startswith(GRCH38) and m["release"] == latest_release}
-    tables = run_recipes.load_tables(build, list(recipes.values()))
+    tables = engine.load_tables(build, list(recipes.values()))
     masks = {name: {acc for acc, _, _ in spans} for name, spans in tables["masks"].items()}
     spans_of = defaultdict(lambda: defaultdict(list))
     for name, spans in tables["masks"].items():
@@ -176,7 +177,7 @@ def main() -> None:
             if ops:  # rebuilding from root and operations must give the digests
                 spans = tuple(s for m in mask_layers for s in spans_of[m].get(acc, []))
                 positions = tuple(tables["iupac"].get(acc, [])) if alphabet else ()
-                if run_recipes.derivative_digests(build, acc, spans, positions) != (r["md5"], r["sha512t24u"]):
+                if engine.derivative_digests(build, acc, spans, positions) != (r["md5"], r["sha512t24u"]):
                     sys.exit(f"{label} {r['name']}: operations {ops} don't give its digests")
             elif (r["md5"], r["sha512t24u"]) != (tables["roots"][acc]["md5"], tables["roots"][acc]["sha512t24u"]):
                 sys.exit(f"{label} {r['name']}: differs from root {acc} with no operations")

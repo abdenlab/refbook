@@ -32,6 +32,9 @@ from refbook import Catalog, collection, materialize
 from refbook.materialize import SCHEMA, Bases, apply_operations
 from refbook.seqcol import digests, sha512t24u
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 
 def check_derivations(cat: Catalog, bases: Bases) -> list[str]:
     errors = []
@@ -85,7 +88,7 @@ def main() -> None:
     ap.add_argument("--stream", default="grch38-no-alt")
     ap.add_argument("--stream-all", action="store_true")
     args = ap.parse_args()
-    cat = Catalog(args.registry / "build" / "grch38")
+    cat = Catalog(layout.build_dir(args.registry))
     bases = Bases(cat)
     want = {**{f: r["seqcol_digest"] for f, r in cat.flavors.items()},
             **{t: r["seqcol_digest"] for t, r in cat.targets.items()}}

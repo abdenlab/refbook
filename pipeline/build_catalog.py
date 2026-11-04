@@ -19,6 +19,9 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 CHROMALIAS = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.chromAlias.txt"
 
 
@@ -26,7 +29,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     args = ap.parse_args()
-    build = args.registry / "build" / "grch38"
+    build = layout.build_dir(args.registry)
 
     flavors = defaultdict(list)
     for s in pq.read_table(build / "flavor_sequences.parquet").to_pylist():
@@ -44,7 +47,7 @@ def main() -> None:
         if m["assembly_name"].startswith("GRCh38"):
             aliases.add((acc, "grc", m["sequence_name"], src))
     ensembl = {}
-    lines = (args.registry / "raw" / CHROMALIAS).read_text().splitlines()
+    lines = (layout.raw_dir(args.registry) / CHROMALIAS).read_text().splitlines()
     header = lines[0].lstrip("# ").split("\t")
     for line in lines[1:]:
         rec = dict(zip(header, line.split("\t")))

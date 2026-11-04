@@ -30,9 +30,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-NCBI = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405"
-HS38D1 = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
-
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
 
 # Known disagreements between genomic_regions_definitions.txt (authoritative
 # here) and assembly_regions.txt, as (release, region_name, root_id).
@@ -40,24 +39,6 @@ REGION_QUIRKS = {
     (2, "REGION1A", "KI270905.1"),  # defined, missing from p2's assembly_regions
     (13, "AFCT06", "KI270752.1"),   # only in p13's assembly_regions; no scaffold
 }
-
-
-def release_number(release: Path) -> int:
-    """0 for GRCh38 (GCA_000001405.15), 14 for GRCh38.p14 (.29)."""
-    return int(release.name.split("_")[1].split(".")[1]) - 15
-
-
-def releases(raw: Path) -> list[Path]:
-    dirs = sorted(
-        (raw / NCBI).glob("GCA_000001405.*_GRCh38*"),
-        key=lambda p: int(p.name.split("_")[1].split(".")[1]),
-    )
-    return [d for d in dirs if 15 <= int(d.name.split("_")[1].split(".")[1]) <= 29]
-
-
-def assemblies(raw: Path) -> list[Path]:
-    """Every assembly directory with a report: GRCh38 p0-p14, then hs38d1."""
-    return releases(raw) + [raw / HS38D1]
 
 
 def agp_files(release: Path) -> list[Path]:
@@ -99,7 +80,7 @@ def agp_record(r: tuple) -> dict:
 def build_agp(raw: Path, roots: set[str]) -> pa.Table:
     """AGP of every root in `roots` (the assembly members; EBV has none)."""
     agp, source, rank = {}, {}, {}
-    for d in assemblies(raw):
+    for d in layout.assembly_dirs(raw):
         for path in agp_files(d):
             for i, (obj, rows) in enumerate(read_agp(path).items()):
                 if obj not in roots:
@@ -168,9 +149,9 @@ def build_regions(raw: Path, members: list[dict]) -> pa.Table:
     releases it holds for. Also returns {(name, chromosome, release): span}.
     """
     by_release, rtype = {}, {}
-    for d in releases(raw):
+    for d in layout.release_dirs(raw):
         rel = d.name.split("_", 2)[2]
-        n = release_number(d)
+        n = layout.release_number(d)
         # The report's "Chromosome" is a chromosome name, or the sequence name
         # of an alt scaffold when the region is on one (patches to alts).
         chrom = {m["sequence_name"]: m["genbank_accession"] for m in members
@@ -224,7 +205,7 @@ def build_placements(raw: Path, members: list[dict], length: dict,
     releases, so there is one row per distinct placement with its release range.
     """
     place, ptype = {}, {}
-    for d in releases(raw):
+    for d in layout.release_dirs(raw):
         rel = d.name.split("_", 2)[2]
         s = d / f"{d.name}_assembly_structure"
         rows = read_tsv(s / "all_alt_scaffold_placement.txt", "#alt_asm_name")
@@ -240,12 +221,12 @@ def build_placements(raw: Path, members: list[dict], length: dict,
                 # bacterial tail): its placement rows end at the release before.
                 print(f"{r['alt_scaf_acc']}: no placement in {d.name}", file=sys.stderr)
                 continue
-            rs = region_spans.get((r["region_name"], r["parent_acc"], release_number(d)))
+            rs = region_spans.get((r["region_name"], r["parent_acc"], layout.release_number(d)))
             if (rs is None or int(r["parent_start"]) - 1 < rs[0]
                     or int(r["parent_stop"]) > rs[1]):
                 sys.exit(f"{r['alt_scaf_acc']}: placement outside region "
                          f"{r['region_name']} in {d.name}")
-            place[r["alt_scaf_acc"], release_number(d)] = (
+            place[r["alt_scaf_acc"], layout.release_number(d)] = (
                 r["alt_asm_name"], r["alt_scaf_name"], r["parent_type"].lower(),
                 r["parent_acc"], r["region_name"],
                 r["ori"], int(r["alt_scaf_start"]) - 1, int(r["alt_scaf_stop"]),
@@ -280,7 +261,7 @@ def build_hardmask_grc(raw: Path, length: dict, regions: pa.Table) -> pa.Table:
     Each masked span is an exact duplicate of its unmasked cognate, so the two
     must have the same length; the chrY spans must be its PAR regions.
     """
-    path = (raw / NCBI / "GCA_000001405.15_GRCh38" / "seqs_for_alignment_pipelines.ucsc_ids"
+    path = (layout.release_dir(raw, 0) / "seqs_for_alignment_pipelines.ucsc_ids"
             / "unmasked_cognates_of_masked_CEN_PAR.txt")
     cols = {k: [] for k in ("root_id", "start", "end", "name", "cognate_root_id",
                             "cognate_start", "cognate_end", "cognate_name")}
@@ -310,8 +291,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     args = ap.parse_args()
-    raw = args.registry / "raw"
-    out = args.registry / "build" / "grch38"
+    raw = layout.raw_dir(args.registry)
+    out = layout.build_dir(args.registry)
     roots = pq.read_table(out / "roots.parquet", columns=["root_id", "length"])
     length = dict(zip(roots["root_id"].to_pylist(), roots["length"].to_pylist()))
     members = pq.read_table(out / "assembly_members.parquet").to_pylist()

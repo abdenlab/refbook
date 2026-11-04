@@ -32,7 +32,10 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-BASELINES = {"INSDC_GRCh38": "GCA_000001405.15", "INSDC_GRCh38.p14": "GCA_000001405.29"}
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
+BASELINES = {"INSDC_GRCh38": layout.RELEASES[0][1], "INSDC_GRCh38.p14": layout.LATEST[1]}
 KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocalized scaffolds",
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
          "fix-patch": "fix patches", "novel-patch": "novel patches"}
@@ -110,7 +113,7 @@ def main() -> None:
     ap.add_argument("registry", type=Path)
     ap.add_argument("recipes", type=Path, nargs="+")
     args = ap.parse_args()
-    build = args.registry / "build" / "grch38"
+    build = layout.build_dir(args.registry)
 
     recipes = {}
     for path in args.recipes:

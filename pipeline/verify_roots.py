@@ -28,6 +28,9 @@ import pyarrow.parquet as pq
 
 from refbook.remote import USER_AGENT
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 ENA = "https://www.ebi.ac.uk/ena/cram/sequence/{}/metadata"
 
 
@@ -75,7 +78,7 @@ def status(length: int, md5: str, ena_length: int | None, grc_md5: str | None,
 
 def main() -> None:
     registry, analysis = Path(sys.argv[1]), Path(sys.argv[2])
-    build = registry / "build" / "grch38"
+    build = layout.build_dir(registry)
     roots = pq.read_table(build / "roots.parquet").to_pylist()
 
     with ThreadPoolExecutor(8) as pool:

@@ -12,6 +12,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -34,7 +37,7 @@ def source_url(rel: Path) -> str:
 
 
 def main() -> None:
-    raw = Path(sys.argv[1]) / "raw"
+    raw = layout.raw_dir(Path(sys.argv[1]))
     print("url\tpath\tsize\tsha256\tmtime")
     for root, _, files in sorted(os.walk(raw)):
         for name in sorted(files):

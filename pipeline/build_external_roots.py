@@ -32,6 +32,9 @@ import pyarrow.parquet as pq
 
 from refbook import refget
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
+
 IMGT = "raw.githubusercontent.com/ANHIG/IMGTHLA"
 RELEASES = {"3180": "3.18.0"}
 IUPAC = re.compile(rb"[^ACGTN]")
@@ -65,7 +68,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     args = ap.parse_args()
-    raw = args.registry / "raw"
+    raw = layout.raw_dir(args.registry)
     cols = {k: [] for k in ("root_id", "collection", "group", "name", "accession", "rank",
                             "length", "md5", "sha512t24u", "n_N", "n_iupac", "n_lower",
                             "source")}
@@ -101,7 +104,7 @@ def main() -> None:
                 ):
                     cols[k].append(v)
                 rank += 1
-    out = args.registry / "build" / "grch38" / "roots_external.parquet"
+    out = layout.build_dir(args.registry) / "roots_external.parquet"
     pq.write_table(pa.table(cols), out, compression="zstd")
     if len(set(cols["md5"])) != len(cols["md5"]):
         print("note: some external roots share an MD5", file=sys.stderr)
