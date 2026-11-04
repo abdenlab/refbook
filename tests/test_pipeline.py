@@ -3,8 +3,6 @@
 import gzip
 from pathlib import Path
 
-import pytest
-
 import build_external_roots
 import build_layers
 import build_roots
@@ -12,8 +10,10 @@ import check_gaps
 import manifest
 import observe_dict
 import observe_fasta
+import pytest
 import run_recipes
 import verify_roots
+
 from refbook import refget
 
 
@@ -265,7 +265,7 @@ def test_name_of_precedence():
 
 # build_flavors
 
-import build_flavors  # noqa: E402
+import build_flavors
 
 
 def test_flavor_facets():

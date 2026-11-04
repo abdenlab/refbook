@@ -17,7 +17,7 @@ from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CATALOG = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/build/grch38"))
-needs_catalog = pytest.mark.skipif(not (CATALOG / "recipes.parquet").exists(), reason="no catalog")
+needs_catalog = pytest.mark.skipif(not (CATALOG / "flavors.parquet").exists(), reason="no catalog")
 
 
 def test_seqcol_spec_example():
@@ -73,6 +73,13 @@ def run(path, cat):
     return identify(read_header(path), cat)
 
 
+def rows(cat, x):
+    """(name, length, md5) of a collection, in its order."""
+    from refbook import collection
+    c = collection(cat, x)
+    return [(n, n_bp, cat.sequence[sq]["md5"]) for n, n_bp, sq in zip(c.names, c.lengths, c.sequences)]
+
+
 def write_dict(path, seqs):
     path.write_text("@HD\tVN:1.6\n" + "".join(f"@SQ\tSN:{n}\tLN:{l}\tM5:{m}\n" for n, l, m in seqs))
     return path
@@ -80,20 +87,20 @@ def write_dict(path, seqs):
 
 @needs_catalog
 def test_exact_dict_and_seqcol(cat, tmp_path):
-    seqs = [(s.name, s.length, s.md5) for s in cat.flavors["Broad_Homo_sapiens_assembly38"]]
-    res = run(write_dict(tmp_path / "broad.dict", seqs), cat)
+    res = run(write_dict(tmp_path / "broad.dict", rows(cat, "Broad_Homo_sapiens_assembly38")), cat)
     assert res.best[0].verdict == "exact"
-    assert {c.flavor for c in res.best} == {"Broad_Homo_sapiens_assembly38", "iGenomes_GATK_GRCh38",
-                                           "1000G_GRCh38_full_analysis_set_plus_decoy_hla"}
-    assert res.seqcol_digest == cat.recipes["Broad_Homo_sapiens_assembly38"]["seqcol_digest"]
+    assert [c.flavor for c in res.best] == ["hs38dh"]
+    assert "Broad_Homo_sapiens_assembly38" in res.best[0].in_order_of
+    assert res.seqcol_digest == cat.targets["Broad_Homo_sapiens_assembly38"]["seqcol_digest"]
+    assert "Broad_Homo_sapiens_assembly38" in res.seqcol_matches
+    assert not res.unknown and len(res.sequences) == 3366
 
 
 @needs_catalog
 def test_consistent_without_md5_explains_ambiguity(cat):
     res = run(FIXTURES / "giab_HG002_GRCh38_v4.2.1.vcf", cat)
     assert res.best[0].verdict == "consistent"
-    assert "GRCh38_no_alt_analysis_set" in {c.flavor for c in res.best}
-    assert "UCSC_hg38.analysisSet" in {c.flavor for c in res.best}
+    assert {"grch38-no-alt", "hg38-analysis-set"} <= {c.flavor for c in res.best}
     assert any("IUPAC" in a for a in res.ambiguity)
 
 
@@ -101,30 +108,46 @@ def test_consistent_without_md5_explains_ambiguity(cat):
 def test_subset_and_contains(cat):
     gnomad = run(FIXTURES / "gnomad_v4.1_genomes_chr21.vcf", cat)
     assert gnomad.best[0].verdict == "subset"
-    assert "GRCh38_no_alt_analysis_set" in {c.flavor for c in gnomad.best}
+    assert "grch38-no-alt" in {c.flavor for c in gnomad.best}
     encode = run(FIXTURES / "encode_ENCFF462XCI.sam", cat)
     assert encode.best[0].verdict == "contains"
-    assert "GRCh38_no_alt_analysis_set" in {c.flavor for c in encode.best}
+    assert "grch38-no-alt" in {c.flavor for c in encode.best}
     assert len(encode.best[0].extra) == 1871
 
 
 @needs_catalog
-def test_renamed_by_md5_and_variant_swap(cat, tmp_path):
+def test_order_is_reported_not_judged(cat, tmp_path):
+    # Ensembl's names and bases in GENCODE's order: the same flavor as Ensembl's
+    # primary assembly, in an order no Ensembl target uses.
     def ensembl_style(name):  # chr1 -> 1, chrM -> MT; scaffolds keep their accession
         return "MT" if name == "chrM" else name.removeprefix("chr")
-    renamed = [(ensembl_style(s.name), s.length, s.md5) for s in cat.flavors["GENCODE50_primary_assembly"]]
-    res = run(write_dict(tmp_path / "renamed.dict", renamed), cat)
-    assert res.best[0].flavor == "Ensembl116_primary_assembly"
-    assert res.best[0].matched == 194 and res.best[0].order_differs
+    reordered = [(ensembl_style(n), n_bp, m) for n, n_bp, m in rows(cat, "GENCODE50_primary_assembly")]
+    res = run(write_dict(tmp_path / "reordered.dict", reordered), cat)
+    assert res.best[0].flavor == "ensembl-grch38-primary" and res.best[0].verdict == "exact"
+    assert res.best[0].in_order_of == []
+    in_order = run(write_dict(tmp_path / "ensembl.dict", rows(cat, "Ensembl116_primary_assembly")), cat)
+    assert in_order.best[0].in_order_of == ["Ensembl116_primary_assembly"]
 
+
+@needs_catalog
+def test_renamed_by_md5_and_derivative_swap(cat, tmp_path):
     from refbook.identify import describe
-    ucsc_chr21 = next(s.md5 for s in cat.flavors["UCSC_hg38.analysisSet"] if s.name == "chr21")
-    broad = [(s.name, s.length, ucsc_chr21 if s.name == "chr21" else s.md5)
-             for s in cat.flavors["Broad_Homo_sapiens_assembly38"]]
-    res = run(write_dict(tmp_path / "swap.dict", broad), cat)
-    c = res.best[0]
+    renamed = [(f"seq{i}", n_bp, m) for i, (n, n_bp, m) in enumerate(rows(cat, "grch38-no-alt"))]
+    res = run(write_dict(tmp_path / "renamed.dict", renamed), cat)
+    assert res.best[0].flavor == "grch38-no-alt" and len(res.best[0].renamed) == 195
+
+    ucsc_chr21 = next(m for n, _, m in rows(cat, "hg38-analysis-set") if n == "chr21")
+    broad = [(n, n_bp, ucsc_chr21 if n == "chr21" else m) for n, n_bp, m in rows(cat, "hs38dh")]
+    c = run(write_dict(tmp_path / "swap.dict", broad), cat).best[0]
     assert c.verdict == "partial" and len(c.different_bases) == 1
     assert any("IUPAC" in d and "chr21" in d for d in describe(c, cat))
+
+
+@needs_catalog
+def test_unknown_sequences_are_listed(cat, tmp_path):
+    seqs = rows(cat, "grch38-no-alt")[:3] + [("spikein", 5386, "a" * 32)]
+    res = run(write_dict(tmp_path / "spike.dict", seqs), cat)
+    assert res.unknown == ["spikein"] and res.seqcol_digest is None and len(res.sequences) == 3
 
 
 @needs_catalog
@@ -140,8 +163,8 @@ def test_other_assembly_is_no_good_match(cat, tmp_path):
 def test_materialize_subset_variants_and_batches(cat):
     from refbook.materialize import SCHEMA, materialize
     md5s = {}
-    for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "UCSC_hg38", "Ensembl116_primary_assembly"):
-        name = "21" if flavor.startswith("Ensembl") else "chr21"
+    for flavor in ("grch38-no-alt", "hg38-analysis-set", "hg38", "ensembl-grch38-primary"):
+        name = "21" if flavor.startswith("ensembl") else "chr21"
         t = materialize(cat, flavor, names=[name]).read_all()
         assert t.schema.equals(SCHEMA, check_metadata=False)
         assert "refbook:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
@@ -149,20 +172,44 @@ def test_materialize_subset_variants_and_batches(cat):
         assert len(seq) == 46709983 and seq == seq.upper()
         md5s[flavor] = hashlib.md5(seq.encode()).hexdigest()
     # chr21 in four published versions: masked or not, IUPAC -> N or not.
-    assert md5s["GRCh38_no_alt_analysis_set"] == "974dc7aec0b755b19f031418fdedf293"
+    assert md5s["grch38-no-alt"] == "974dc7aec0b755b19f031418fdedf293"
     assert len(set(md5s.values())) == 3  # Ensembl and UCSC hg38 share the IUPAC -> N version
-    assert md5s["UCSC_hg38"] == md5s["Ensembl116_primary_assembly"]
+    assert md5s["hg38"] == md5s["ensembl-grch38-primary"]
 
-    batches = list(materialize(cat, "GRCh38_no_alt_analysis_set", names=["chrM", "chrEBV", "chr22"],
-                               max_batch_bytes=200_000))
-    # Flavor order (chr22, chrM, chrEBV), not request order; chr22 alone exceeds the limit.
-    assert [b.column("name").to_pylist() for b in batches] == [["chr22"], ["chrM", "chrEBV"]]
+    want = ["chrM", "chrEBV", "chr22"]
+    # A target lists its sequences in its own order (chr22, chrM, chrEBV), a flavor
+    # in canonical order (chr22, chrEBV, chrM); never in request order. chr22
+    # alone exceeds the batch limit.
+    target = list(materialize(cat, "GRCh38_no_alt_analysis_set", names=want, max_batch_bytes=200_000))
+    assert [b.column("name").to_pylist() for b in target] == [["chr22"], ["chrM", "chrEBV"]]
+    flavor = list(materialize(cat, "grch38-no-alt", names=want, max_batch_bytes=200_000))
+    assert [b.column("name").to_pylist() for b in flavor] == [["chr22"], ["chrEBV", "chrM"]]
+
+
+@needs_catalog
+def test_resolve_levels_and_uncataloged_collections(cat):
+    from refbook import resolve
+    from refbook.resolve import UnknownSequences
+    target = "Broad_Homo_sapiens_assembly38"
+    digest = cat.targets[target]["seqcol_digest"]
+    assert resolve(cat, target, 0) == digest
+    level2 = resolve(cat, digest, 2)            # by digest, through the collection store
+    assert resolve(cat, level2, 0) == digest
+    assert resolve(cat, resolve(cat, target, 1), 0) == digest
+    assert resolve(cat, target, 1)["sorted_named_sequences"] == cat.flavors["hs38dh"]["id"]
+    # Any named sequence set the store can resolve, cataloged or not.
+    pairs = [("mito", "c68f52674c9fb33aef52dcf399755519"), ("chr21_masked", "974dc7aec0b755b19f031418fdedf293")]
+    t = resolve(cat, pairs, 3).read_all()
+    assert t["name"].to_pylist() == ["chr21_masked", "mito"]       # canonical order
+    assert hashlib.md5(t["sequence"][1].as_py().encode()).hexdigest() == pairs[0][1]
+    with pytest.raises(UnknownSequences):
+        resolve(cat, [("x", "0" * 32)], 2)
 
 
 @needs_catalog
 def test_materialize_external_hla(cat):
     from refbook.materialize import materialize
-    t = materialize(cat, "Broad_Homo_sapiens_assembly38", names=["HLA-A*01:01:01:01"]).read_all()
+    t = materialize(cat, "hs38dh", names=["HLA-A*01:01:01:01"]).read_all()
     seq = t["sequence"][0].as_py()
     assert len(seq) == 3503 and hashlib.md5(seq.encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
 
@@ -174,12 +221,14 @@ def _revcomp(s: str) -> str:
 @needs_catalog
 def test_fetch_matches_materialize(cat):
     import random
+
     import pyarrow as pa
+
     from refbook import fetch
     from refbook.materialize import materialize
     rng = random.Random(7)
-    for flavor in ("GRCh38_no_alt_analysis_set", "UCSC_hg38.analysisSet", "Ensembl116_primary_assembly"):
-        names = ["21", "Y", "1"] if flavor.startswith("Ensembl") else ["chr21", "chrY", "chr1"]
+    for flavor in ("grch38-no-alt", "hg38-analysis-set", "ensembl-grch38-primary"):
+        names = ["21", "Y", "1"] if flavor.startswith("ensembl") else ["chr21", "chrY", "chr1"]
         full = {n: s for n, s in zip(*materialize(cat, flavor, names=names).read_all()
                                      .select(["name", "sequence"]).to_pydict().values())}
         rows = []
@@ -206,20 +255,21 @@ def test_fetch_matches_materialize(cat):
 @needs_catalog
 def test_fetch_coordinates_bounds_and_names(cat):
     import pyarrow as pa
+
     from refbook import fetch
-    zero = fetch(cat, "GRCh38_no_alt_analysis_set", pa.table({"chrom": ["chr1"], "start": [99], "end": [110]}))
+    zero = fetch(cat, "grch38-no-alt", pa.table({"chrom": ["chr1"], "start": [99], "end": [110]}))
     one = pa.table({"chrom": ["chr1"], "start": [100], "end": [110]}).replace_schema_metadata(
         {b"bio.coordinate_system_zero_based": b"false"})           # polars-bio's 1-based closed
-    assert fetch(cat, "GRCh38_no_alt_analysis_set", one)["sequence"][0] == zero["sequence"][0]
+    assert fetch(cat, "grch38-no-alt", one)["sequence"][0] == zero["sequence"][0]
     with pytest.raises(ValueError, match="contradicts|say"):
-        fetch(cat, "GRCh38_no_alt_analysis_set", one, zero_based=True)
+        fetch(cat, "grch38-no-alt", one, zero_based=True)
     past = pa.table({"chrom": ["chrM"], "start": [16560], "end": [16600]})
     with pytest.raises(ValueError, match="outside"):
-        fetch(cat, "GRCh38_no_alt_analysis_set", past)
-    assert len(fetch(cat, "GRCh38_no_alt_analysis_set", past, clip=True)["sequence"][0].as_py()) == 9
+        fetch(cat, "grch38-no-alt", past)
+    assert len(fetch(cat, "grch38-no-alt", past, clip=True)["sequence"][0].as_py()) == 9
     with pytest.raises(KeyError, match="no sequence named"):
-        fetch(cat, "GRCh38_no_alt_analysis_set", pa.table({"chrom": ["1"], "start": [0], "end": [1]}))
-    hla = fetch(cat, "Broad_Homo_sapiens_assembly38",
+        fetch(cat, "grch38-no-alt", pa.table({"chrom": ["1"], "start": [0], "end": [1]}))
+    hla = fetch(cat, "hs38dh",
                 pa.table({"chrom": ["HLA-A*01:01:01:01"], "start": [0], "end": [3503]}))
     assert hashlib.md5(hla["sequence"][0].as_py().encode()).hexdigest() == "01cd0df602495b044b2c214d69a60aa2"
 
@@ -241,6 +291,7 @@ def test_sequence_by_md5_and_unknown(cat, tmp_path):
 def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     """Write a CRAM against chrM, delete the reference, decode it through a filled REF_CACHE."""
     import subprocess
+
     from refbook import populate_ref_cache, sequence_by_md5
     chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519").decode()
     (tmp_path / "ref.fa").write_text(">chrM\n" + chrM + "\n")      # samtools needs a FASTA to write CRAM
@@ -260,30 +311,58 @@ def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     assert out.split("\t")[9] == read
 
 
-RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
+def release_from_build(out: Path) -> Path:
+    """A format-2 release of the build, by symlink: export_catalog's file list and
+    a catalog.json with real hashes, without copying the bases."""
+    import json
+
+    import export_catalog
+    files = {}
+    for name, role in export_catalog.FILES.items():
+        src = CATALOG / name
+        for f in ([src] if src.is_file() else sorted(src.glob("*"))):
+            rel = f.relative_to(CATALOG).as_posix()
+            (out / rel).parent.mkdir(parents=True, exist_ok=True)
+            (out / rel).symlink_to(f)
+            files[rel] = {"bytes": f.stat().st_size, "sha256": export_catalog.sha256(f), "role": role}
+    (out / "catalog.json").write_text(json.dumps({"name": "refbook", "format": export_catalog.FORMAT,
+                                                  "version": "test", "files": files}))
+    return out
 
 
-@pytest.mark.skipif(not (RELEASE / "catalog.json").exists(), reason="no exported catalog release")
+@needs_catalog
 def test_remote_catalog_over_http(tmp_path):
-    """Open an exported release by URL from a local Range-honoring server; compare with local."""
+    """Open a release by URL from a local Range-honoring server; compare with local."""
     import threading
+
     import pyarrow as pa
+
     from refbook import Catalog, fetch, identify
     from refbook._serve import serve
-    server = serve(str(RELEASE), port=0)
+    release = release_from_build(tmp_path / "release")
+    server = serve(str(release), port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         url = f"http://127.0.0.1:{server.server_address[1]}/"
-        remote, local = Catalog(url, cache=tmp_path), Catalog(RELEASE)
-        assert remote.manifest["version"] == local.manifest["version"]
-        assert not (tmp_path / "catalog" / remote.manifest["version"] / "root_blocks.parquet").exists()
+        remote, local = Catalog(url, cache=tmp_path / "cache"), Catalog(release)
+        assert remote.manifest["version"] == local.manifest["version"] == "test"
+        assert not (tmp_path / "cache" / "catalog" / "test" / "root_blocks.parquet").exists()
         res = identify(read_header(FIXTURES / "giab_HG002_GRCh38_v4.2.1.vcf"), remote)
         assert res.best[0].verdict == "consistent"
         iv = pa.table({"chrom": ["chr1", "chrY", "chrM"], "start": [1_000_000, 10_000, 0],
                        "end": [1_000_100, 10_050, 16569]})
-        got = fetch(remote, "GRCh38_no_alt_analysis_set", iv)  # auto -> pyarrow over plain http
-        want = fetch(local, "GRCh38_no_alt_analysis_set", iv, engine="pyarrow")
+        got = fetch(remote, "grch38-no-alt", iv)  # auto -> pyarrow over plain http
+        want = fetch(local, "grch38-no-alt", iv, engine="pyarrow")
         assert got["sequence"].to_pylist() == want["sequence"].to_pylist()
         assert 0 < remote.blocks_http.requests < 20
     finally:
         server.shutdown()
+
+
+def test_catalog_refuses_another_format(tmp_path):
+    import json
+
+    from refbook import Catalog
+    (tmp_path / "catalog.json").write_text(json.dumps({"version": "0.1.0", "files": {}}))
+    with pytest.raises(ValueError, match="format 1"):
+        Catalog(tmp_path)

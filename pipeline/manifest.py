@@ -9,7 +9,7 @@ Usage: python3 manifest.py REGISTRY_DIR > manifest.tsv
 import hashlib
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -41,7 +41,7 @@ def main() -> None:
             path = Path(root) / name
             rel = path.relative_to(raw)
             st = path.stat()
-            mtime = datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat()
+            mtime = datetime.fromtimestamp(st.st_mtime, UTC).isoformat()
             print(f"{source_url(rel)}\t{rel}\t{st.st_size}\t{sha256(path)}\t{mtime}")
 
 

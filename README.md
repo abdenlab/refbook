@@ -22,8 +22,8 @@ answers practical questions:
   including masked or IUPAC-rewritten versions that no public MD5 server
   holds.
 
-> Status: early. Catalog release 0.1.0 covers GRCh38. The library is not yet
-> on PyPI, and its API may change.
+> Status: early. The catalog covers GRCh38; this library reads catalog format 2
+> (release 0.2.0 on). It is not yet on PyPI, and its API may change.
 
 ## Install
 
@@ -46,13 +46,15 @@ with HTTP range requests as needed.
 $ uv run refbook identify sample.cram
 sample.cram
   cram, 3366 sequences, with MD5s
-  EXACT: 1000G_GRCh38_full_analysis_set_plus_decoy_hla, Broad_Homo_sapiens_assembly38, iGenomes_GATK_GRCh38
+  EXACT: hs38dh
+    hs38dh: in the order of Broad Institute Homo_sapiens_assembly38; 1000 Genomes GRCh38_full_analysis_set_plus_decoy_hla; ...
 
 # A VCF without MD5s can only be narrowed down, and the output says how the candidates differ.
 $ uv run refbook identify HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
   vcf, 195 sequences, without MD5s
-  CONSISTENT (names, lengths and order; no MD5s to check bases): GRCh38_no_alt_analysis_set, UCSC_hg38.analysisSet, ...
-    UCSC_hg38.analysisSet vs GRCh38_no_alt_analysis_set: 14 sequences differ in bases (12: as submitted (INSDC) vs IUPAC -> N; ...)
+  CONSISTENT (names and lengths; no MD5s to check bases): grch38-no-alt, hg38-analysis-set
+    hg38-analysis-set vs grch38-no-alt: 14 sequences differ in bases (12: as submitted (INSDC) vs IUPAC -> N; ...)
+    grch38-no-alt: in the order of GRC GCA_000001405.15_GRCh38_no_alt_analysis_set; Illumina iGenomes NCBI/GRCh38
 
 # Fill htslib's reference cache so a CRAM decodes without its FASTA.
 $ uv run refbook populate-ref-cache sample.cram --root ~/refcache
@@ -60,45 +62,58 @@ $ REF_CACHE=~/refcache/%2s/%2s/%s samtools view sample.cram
 ```
 
 `identify` accepts `.fai`, `chrom.sizes`, `.dict`, SAM header text, BAM, CRAM
-(2.x/3.x), VCF and FASTA. Its verdicts are **exact**, **consistent**,
-**contains** (the whole reference plus extra sequences, such as spike-ins),
-**subset**, or the **closest** match with an itemized difference.
+(2.x/3.x), VCF and FASTA. It compares the header with each cataloged
+**flavor**, a set of named sequences whatever their order. Its verdicts are
+**exact**, **consistent**, **contains** (the whole flavor plus extra sequences,
+such as spike-ins), **subset**, or the **closest** match with an itemized
+difference. Order is reported separately: which published files list the
+sequences in the header's order, which is what BAM reference IDs and sorted
+files depend on.
 
 ## Python
 
 ```python
 import pyarrow as pa
-from refbook import Catalog, identify, read_header, materialize, fetch, sequence_by_md5
+from refbook import Catalog, identify, read_header, resolve, materialize, fetch, sequence_by_md5
 
-cat = Catalog("https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.1.0/")
+cat = Catalog("https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/")
 
 # Identify a header.
 result = identify(read_header("sample.bam"), cat)
-print(result.best[0].verdict, [c.flavor for c in result.best])
+print(result.best[0].verdict, [c.flavor for c in result.best], result.best[0].in_order_of)
 
-# Materialize a flavor (or some of its sequences) as an Arrow stream: one row per
-# sequence, with name, description and sequence, following the CompoSeq Sequence schema.
-chr21 = materialize(cat, "UCSC_hg38.analysisSet", names=["chr21"]).read_all()
+# A collection can be a flavor ("hg38-analysis-set"), a published file
+# ("UCSC_hg38.analysisSet", in its own order), a seqcol digest, a seqcol object,
+# or any list of (name, digest) pairs whose sequences the catalog holds.
+resolve(cat, "hg38-analysis-set", 0)     # its seqcol digest
+resolve(cat, "hg38-analysis-set", 2)     # names, lengths, sequence digests, ancillary attributes
+
+# Materialize (seqcol level 3): an Arrow stream, one row per sequence, with name,
+# description and sequence, following the CompoSeq Sequence schema.
+chr21 = materialize(cat, "hg38-analysis-set", names=["chr21"]).read_all()
+mine = materialize(cat, [("mito", "c68f52674c9fb33aef52dcf399755519"),
+                         ("chr21", "974dc7aec0b755b19f031418fdedf293")]).read_all()
 
 # Fetch bases at intervals: 0-based half-open by default, polars-bio column names,
 # "-" strands reverse-complemented. Also takes Polars or pandas frames.
 intervals = pa.table({"chrom": ["chr1", "chrY"], "start": [1_000_000, 10_000],
                       "end": [1_000_100, 10_050], "strand": ["+", "-"]})
-seqs = fetch(cat, "GRCh38_no_alt_analysis_set", intervals, strand="strand")
+seqs = fetch(cat, "grch38-no-alt", intervals, strand="strand")
 
 # Any cataloged sequence by its MD5.
 chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519")
 ```
 
-Every sequence `materialize` builds is checked against the recipe's MD5 and
-`SQ.` digests. `fetch` honors polars-bio's coordinate-system metadata, so its
+Every sequence is built from the catalog's sequence store (a root and the
+nucleotide operations applied to it) and checked against its MD5 and `SQ.`
+digests. `fetch` honors polars-bio's coordinate-system metadata, so its
 1-based frames are converted correctly; an interval outside its sequence is an
 error unless `clip=True`.
 
 ## The catalog
 
-Release 0.1.0 (CC-BY-4.0) reproduces 17 published GRCh38 files, which reduce to
-13 distinct sequence sets:
+The catalog (CC-BY-4.0) reproduces 17 published GRCh38 files, which reduce to
+13 flavors:
 
 | Publisher | Files |
 | --- | --- |
@@ -113,7 +128,8 @@ It holds 3,097 roots: GRCh38 p0–p14, the hs38d1 decoys and EBV. Their bases ar
 uppercase with IUPAC codes kept, in Parquet laid out for range reads. It also
 holds annotation layers in root coordinates (AGP components and gaps, alt and
 patch placements, named regions, the GRC hard-masks, soft-masking), aliases
-across naming conventions, each file's recipe, GA4GH seqcol digests, and the
+across naming conventions, the sequence store (every distinct sequence and how
+it is made), each flavor's recipe and facets, GA4GH seqcol documents, and the
 evidence of each reproduction. The tables are plain Parquet: read them with
 DuckDB, Polars or pyarrow without this library. See the
 [dataset card](https://huggingface.co/datasets/abdenlab/refbook) for the file
@@ -156,7 +172,7 @@ uv run python -I pipeline/verify_roots.py $R <GRC full_plus_hs38d1 analysis set 
 uv run python -I pipeline/observe_fasta.py <published FASTA> $R/build/grch38/observed/<flavor>.parquet  # per file
 uv run python -I pipeline/run_recipes.py $R recipes/*.json
 uv run python -I pipeline/build_flavors.py $R flavors.json recipes/*.json
-uv run python -I pipeline/build_catalog.py $R recipes/*.json
+uv run python -I pipeline/build_catalog.py $R
 uv run python -I pipeline/family_tree.py $R recipes/*.json
 uv run python -I pipeline/check_materialize.py $R
 uv run python -I pipeline/export_catalog.py $R $R/catalog/<version> <version>

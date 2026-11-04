@@ -61,7 +61,7 @@ def observed(target: str) -> list[dict]:
 
 def test_recipes_give_the_release_flavor_sequences(engine):
     """The recipes, in each target's observed order, give the release's rows."""
-    run_recipes, rs, _, outputs = engine
+    run_recipes, _, _, outputs = engine
     want = {}
     for row in golden("flavor_sequences.parquet"):
         want.setdefault(row["flavor"], []).append(row)
@@ -72,7 +72,7 @@ def test_recipes_give_the_release_flavor_sequences(engine):
 
 
 def test_every_recipe_reproduces_its_observation(engine):
-    run_recipes, rs, tables, outputs = engine
+    run_recipes, rs, _, outputs = engine
     for r in rs:
         assert run_recipes.compare(outputs[r["flavor"]], observed(r["flavor"])) == [], r["flavor"]
 
@@ -93,11 +93,15 @@ def test_seqcol_digests_match_the_release():
 
 @pytest.mark.parametrize("root", ["J01415.2", "AJ507799.2", "KN707606.1", "KI270706.1"])
 def test_root_bases_match_their_digests(root):
-    from refbook import Catalog, refget
-    from refbook.materialize import Bases
-    bases = Bases(Catalog(RELEASE)).get(root)
+    """The release's bases, read straight from its root_blocks (release 0.1.0 is
+    catalog format 1, which the library no longer opens)."""
+    from refbook import refget
+    from refbook.blocks import row_groups_by_root
+    f = pq.ParquetFile(RELEASE / "root_blocks.parquet")
+    t = f.read_row_groups(row_groups_by_root(f)[root], columns=["start", "bases"])
+    bases = "".join(b for _, b in sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist()))).encode()
     want = next(r for r in golden("roots.parquet") if r["root_id"] == root)
-    assert refget.digests(bytes(bases)) == (want["md5"], want["sha512t24u"])
+    assert refget.digests(bases) == (want["md5"], want["sha512t24u"])
 
 
 # The flavor model (build_flavors.py) against the release's targets.

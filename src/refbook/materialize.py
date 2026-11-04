@@ -1,10 +1,13 @@
-"""Materialize a flavor: its sequences as an Arrow stream (CompoSeq Sequence 0.1).
+"""Materialize a collection: its sequences as an Arrow stream (CompoSeq Sequence 0.1).
 
-One row per sequence, in the flavor's order: `name`, `description` (null) and
-`sequence` (LargeUtf8). The bases are built from the roots by the recipe's
-identity operations, hard masks and alphabet; selection, names and order come
-from the reproduced flavor. Soft-masking is a layer, not part of the bases, so
-sequences are uppercase. Formatting (line width, deflines) is out of band.
+Seqcol level 3: one row per sequence, in the collection's order: `name`,
+`description` (null) and `sequence` (LargeUtf8). The collection can be any that
+refbook.resolve accepts: a flavor, a target, a stored digest, a seqcol
+representation or a named sequence set. Each sequence's bases are built from
+its canonical derivation in the sequence store (a root and nucleotide
+operations) and checked against its digests. Soft-masking is a layer, not part
+of the bases, so sequences are uppercase. Formatting (line width, deflines) is
+out of band.
 
 Hosted roots come from root_blocks.parquet (their row groups; see blocks.py). External
 roots (IMGT/HLA) are never hosted: their bases are read from the source release,
@@ -13,19 +16,17 @@ against the catalog's digests.
 """
 
 import hashlib
-import json
 import os
 import struct
 import urllib.request
-from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 from refbook.blocks import BLOCK_SIZE, row_groups_by_root
 from refbook.catalog import Catalog
+from refbook.resolve import collection
 from refbook.seqcol import sha512t24u
 
 SCHEMA = pa.schema([
@@ -157,47 +158,61 @@ def _read_imgt_fasta(path: Path) -> dict[tuple[str, str], bytes]:
     return out
 
 
-def sequences(cat: Catalog, flavor: str, names: list[str] | None = None,
-              bases: Bases | None = None, verify: bool = True) -> Iterator[tuple[str, bytes]]:
-    """(name, bases) for each sequence of a flavor, in order; checked against its digests."""
-    if flavor not in cat.flavors:
-        raise KeyError(f"{flavor}: not a reproduced flavor")
-    recipe = json.loads(cat.recipes[flavor]["recipe"])
-    bases = bases or Bases(cat)
-    spans = defaultdict(list)
-    for m in recipe.get("mask", []):
-        layer = pq.read_table(cat.file(f"layer_{m['layer']}.parquet"), columns=["root_id", "start", "end"])
-        for r, s, e in zip(*(layer[c].to_pylist() for c in ("root_id", "start", "end"))):
-            spans[r].append((s, e))
-    to_n = recipe.get("alphabet", {}).get("iupac") == "N"
-    wanted = set(names) if names is not None else None
-    for s in cat.flavors[flavor]:
-        if wanted is not None and s.name not in wanted:
-            continue
-        b = bases.get(s.root_id)
-        for start, end in spans.get(s.root_id, ()):
-            b[start:end] = b"N" * (end - start)
-        if to_n:
+def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytearray,
+                     start: int = 0) -> bytes:
+    """Bases b of a root, starting at `start`, with nucleotide operations applied:
+    a mask layer's spans set to N, or iupac_to_n."""
+    end = start + len(b)
+    for op in operations:
+        if op == "iupac_to_n":
             b = bytearray(bytes(b).translate(IUPAC_TO_N))
-        b = bytes(b)
-        if verify and (hashlib.md5(b).hexdigest() != s.md5 or "SQ." + sha512t24u(b) != s.sha512t24u):
-            raise ValueError(f"{flavor} {s.name}: materialized bases do not match the recipe's digests")
-        yield s.name, b
+        else:
+            for s, e in cat.spans(op).get(root, ()):
+                if s < end and e > start:
+                    a, z = max(s, start) - start, min(e, end) - start
+                    b[a:z] = b"N" * (z - a)
+    return bytes(b)
 
 
-def materialize(cat: Catalog, flavor: str, names: list[str] | None = None, *,
+def sequence_bases(cat: Catalog, sq: str, bases: "Bases", verify: bool = True) -> bytes:
+    """A known sequence's bases, from its canonical derivation."""
+    rec = cat.sequence[sq]
+    b = apply_operations(cat, rec["root_id"], rec["operations"], bases.get(rec["root_id"]))
+    if verify and (hashlib.md5(b).hexdigest() != rec["md5"] or "SQ." + sha512t24u(b) != sq):
+        raise ValueError(f"{sq}: bases built from {rec['root_id']} {rec['operations']} "
+                         "do not match the digest")
+    return b
+
+
+def sequences(cat: Catalog, x, names: list[str] | None = None,
+              bases: Bases | None = None, verify: bool = True) -> Iterator[tuple[str, bytes]]:
+    """(name, bases) for each sequence of a collection, in its order."""
+    c = collection(cat, x)
+    bases = bases or Bases(cat)
+    wanted = set(names) if names is not None else None
+    if wanted is not None and wanted - set(c.names):
+        raise KeyError(f"no sequence named {', '.join(sorted(wanted - set(c.names))[:5])}")
+    for name, sq in zip(c.names, c.sequences):
+        if wanted is None or name in wanted:
+            yield name, sequence_bases(cat, sq, bases, verify)
+
+
+def materialize(cat: Catalog, x, names: list[str] | None = None, *,
                 max_batch_bytes: int = 1 << 30, verify: bool = True,
                 bases: Bases | None = None) -> pa.RecordBatchReader:
-    """A flavor as a Sequence 0.1 stream. Batches end early at max_batch_bytes of sequence."""
-    meta = {"refbook:flavor": flavor,
-            "refbook:seqcol_digest": cat.recipes[flavor]["seqcol_digest"]}
-    schema = SCHEMA.with_metadata(meta) if names is None else SCHEMA.with_metadata(
-        {"refbook:flavor": flavor})
+    """A collection as a Sequence 0.1 stream. Batches end early at max_batch_bytes
+    of sequence. The schema metadata names the collection; the whole collection
+    also carries its seqcol digest."""
+    c = collection(cat, x)
+    meta = {"refbook:collection": c.label or c.digest}
+    if names is None:
+        meta["refbook:seqcol_digest"] = c.digest
+    schema = SCHEMA.with_metadata(meta)
 
     def batches() -> Iterator[pa.RecordBatch]:
         rows: list[tuple[str, bytes]] = []
         size = 0
-        for name, b in sequences(cat, flavor, names, bases, verify):
+        for name, b in sequences(cat, c, names, bases, verify):
             if rows and size + len(b) > max_batch_bytes:
                 yield _batch(rows, schema)
                 rows, size = [], 0

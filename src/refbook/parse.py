@@ -127,7 +127,7 @@ def cram_header_text(path: Path) -> str:
         major = head[4]
         if major not in (2, 3):
             raise ValueError(f"{path}: CRAM {major}.x is not supported")
-        (length,) = struct.unpack("<i", f.read(4))
+        f.read(4)                               # the container length, unused
         buf = f.read(4096)                      # the container header, then the block
         i = 0
         for _ in range(4):                      # ref_seq_id, start, span, n_records

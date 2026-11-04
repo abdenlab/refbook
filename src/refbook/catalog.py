@@ -1,11 +1,18 @@
-"""Load the catalog: reproduced flavors, roots, aliases and sequence derivatives.
+"""Load a catalog: the sequence store, the collection store, flavors and targets.
 
-A catalog is a directory of the pipeline's Parquet outputs: a release made by
+The sequence store says, for every sequence refbook knows (keyed by its `SQ.`
+digest, findable by MD5), how to make its bases: a root and the nucleotide
+operations applied to it. The collection store holds named collections by
+seqcol digest. Flavors (cataloged named sequence sets, with labels, recipes and
+facets) and targets (the files that reproduce them) are curated entries on top;
+see GLOSSARY.md.
+
+A catalog is a directory of the pipeline's outputs: a release made by
 pipeline/export_catalog.py (with a catalog.json manifest), or the build
 directory itself (REGISTRY/build/grch38). Open it by path or by URL. Remotely,
 each table is downloaded once into a cache keyed by the release version and
 checked against the manifest's sha256; root_blocks is never downloaded, only
-read by HTTP range requests.
+read by HTTP range requests. This version reads catalog format 2.
 """
 
 import json
@@ -18,15 +25,16 @@ import pyarrow.parquet as pq
 
 from refbook.remote import HttpFile, _open, download
 
+FORMAT = 2
 KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocalized scaffolds",
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
          "fix-patch": "fix patches", "novel-patch": "novel patches"}
+OPERATIONS = {"hardmask_grc": "GRC hard-mask", "iupac_to_n": "IUPAC -> N"}
 
 
-@dataclass
+@dataclass(frozen=True)
 class Seq:
-    flavor: str
-    position: int
+    """One named sequence of a collection."""
     name: str
     root_id: str
     length: int
@@ -49,56 +57,60 @@ class Catalog:
             self.path = Path(source)
             m = self.path / "catalog.json"
             self.manifest = json.loads(m.read_text()) if m.exists() else None
-        self.flavors: dict[str, list[Seq]] = defaultdict(list)
-        for r in pq.read_table(self.file("flavor_sequences.parquet")).to_pylist():
-            self.flavors[r["flavor"]].append(Seq(**r))
-        for seqs in self.flavors.values():
-            seqs.sort(key=lambda s: s.position)
-        self.recipes = {r["flavor"]: r for r in pq.read_table(self.file("recipes.parquet")).to_pylist()}
+        if self.manifest is not None and self.manifest.get("format", 1) != FORMAT:
+            raise ValueError(f"catalog {self.manifest['version']} is format "
+                             f"{self.manifest.get('format', 1)}; this refbook reads format {FORMAT}")
 
-        # Roots, hosted and external: md5 -> root, and what kind of root each is.
-        self.root_length, self.root_md5, self.root_by_md5 = {}, {}, {}
-        for r in pq.read_table(self.file("roots.parquet"), columns=["root_id", "length", "md5"]).to_pylist():
-            self.root_length[r["root_id"]], self.root_md5[r["root_id"]] = r["length"], r["md5"]
-            self.root_by_md5[r["md5"]] = r["root_id"]
-        self.external = {}
+        # The sequence store.
+        self.sequence = {r["sha512t24u"]: r for r in pq.read_table(self.file("sequences.parquet")).to_pylist()}
+        self.sq_by_md5 = {r["md5"]: sq for sq, r in self.sequence.items()}
+        self.derivations = defaultdict(list)
+        for r in pq.read_table(self.file("derivations.parquet")).to_pylist():
+            self.derivations[r["sha512t24u"]].append(r)
+
+        # Flavors, their manifests, and the targets that reproduce them.
+        self.flavors = {r["flavor"]: r for r in pq.read_table(self.file("flavors.parquet")).to_pylist()}
+        self.manifests: dict[str, list[Seq]] = defaultdict(list)
+        for r in pq.read_table(self.file("manifests.parquet")).to_pylist():
+            self.manifests[r["flavor"]].append(Seq(r["name"], r["root_id"], r["length"], r["md5"],
+                                                   r["sha512t24u"]))
+        self.targets = {r["target"]: r for r in pq.read_table(self.file("targets.parquet")).to_pylist()}
+        order = defaultdict(list)
+        for r in pq.read_table(self.file("target_sequences.parquet")).to_pylist():
+            order[r["target"]].append(r)
+        self.target_order = {t: [r["name"] for r in sorted(v, key=lambda r: r["position"])]
+                             for t, v in order.items()}
+        # Collection digests of the curated entries: seqcol digest -> flavor label or target.
+        self.named = {r["seqcol_digest"]: f for f, r in self.flavors.items()}
+        for t, r in self.targets.items():
+            self.named.setdefault(r["seqcol_digest"], t)
+        self.flavor_by_id = {r["id"]: f for f, r in self.flavors.items()}
+
+        # Roots, hosted and external, and what kind each is.
+        self.root_length, self.external = {}, {}
+        for r in pq.read_table(self.file("roots.parquet"), columns=["root_id", "length"]).to_pylist():
+            self.root_length[r["root_id"]] = r["length"]
         if self.exists("roots_external.parquet"):
             for r in pq.read_table(self.file("roots_external.parquet")).to_pylist():
                 self.external[r["root_id"]] = r
-                self.root_length[r["root_id"]], self.root_md5[r["root_id"]] = r["length"], r["md5"]
-                self.root_by_md5.setdefault(r["md5"], r["root_id"])
+                self.root_length[r["root_id"]] = r["length"]
         self.role = {}
         for m in pq.read_table(self.file("assembly_members.parquet")).to_pylist():
             self.role.setdefault(m["genbank_accession"], (m["assembly_name"], m["role"]))
-
-        # Every published derivative of each root: md5 -> (root, how it was made).
-        # Release 0.1.0 calls them "variants".
-        self.derivative = {md5: (root, f"as released ({self.external[root]['collection']})"
-                                 if root in self.external else "as submitted (INSDC)")
-                           for md5, root in self.root_by_md5.items()}
-        if self.exists("family_tree.json"):
-            tree = json.loads(self.file("family_tree.json").read_text())
-            key = "derivatives" if "derivatives" in tree else "variants"
-            for d in tree[key]:
-                for x in d[key]:
-                    self.derivative.setdefault(x["md5"], (d["root_id"], " or ".join(x["why"])))
-        self.flavors_with_md5 = defaultdict(set)
-        for f, seqs in self.flavors.items():
-            for s in seqs:
-                self.flavors_with_md5[s.md5].add(f)
 
         # Names: alias -> roots (an alias such as "1" or "chr1" names one root here).
         self.by_alias = defaultdict(set)
         aliases = pq.read_table(self.file("aliases.parquet")).to_pylist()
         for r in aliases:
             self.by_alias[r["alias"]].add(r["root_id"])
-        for seqs in self.flavors.values():
+        for seqs in self.manifests.values():
             for s in seqs:
                 self.by_alias[s.name].add(s.root_id)
         self.display = {}
         for r in aliases:
             if r["namespace"] in ("ucsc", "imgt"):
                 self.display.setdefault(r["root_id"], r["alias"])
+        self._spans = {}
 
     def exists(self, name: str) -> bool:
         if self.remote:
@@ -116,6 +128,21 @@ class Catalog:
                 download(self.url + name, local, entry["sha256"], entry["bytes"])
         return local
 
+    def stored_collection(self, digest: str) -> dict | None:
+        """The level-2 representation of a collection in the collection store."""
+        name = f"collections/{digest}.json"
+        return json.loads(self.file(name).read_text()) if self.exists(name) else None
+
+    def spans(self, layer: str) -> dict[str, list[tuple[int, int]]]:
+        """root_id -> the spans of a mask layer (layer_<name>.parquet)."""
+        if layer not in self._spans:
+            t = pq.read_table(self.file(f"layer_{layer}.parquet"), columns=["root_id", "start", "end"])
+            spans = defaultdict(list)
+            for r, s, e in zip(*(t[c].to_pylist() for c in ("root_id", "start", "end"))):
+                spans[r].append((s, e))
+            self._spans[layer] = spans
+        return self._spans[layer]
+
     def blocks_location(self) -> str:
         """root_blocks.parquet as a path or URL (for engines that open it themselves)."""
         return self.url + "root_blocks.parquet" if self.remote else str(self.path / "root_blocks.parquet")
@@ -127,6 +154,22 @@ class Catalog:
             self.blocks_http = HttpFile(self.blocks_location(), size)
             return pq.ParquetFile(self.blocks_http)
         return pq.ParquetFile(self.path / "root_blocks.parquet")
+
+    def how(self, sq: str) -> str:
+        """How a known sequence is made from its root, in words."""
+        ways = []
+        for d in self.derivations.get(sq, []):
+            if d["operations"]:
+                ways.append(" + ".join(OPERATIONS.get(o, o) for o in d["operations"]))
+            elif d["root_id"] in self.external:
+                ways.append(f"as released ({self.external[d['root_id']]['collection']})")
+            else:
+                ways.append("as submitted (INSDC)")
+        return " or ".join(ways) or "unknown"
+
+    def flavors_with(self, sq: str) -> list[str]:
+        """The cataloged flavors containing a sequence."""
+        return sorted({f for d in self.derivations.get(sq, []) for f in d["flavors"]})
 
     def kind(self, root_id: str) -> str:
         if root_id in self.external:

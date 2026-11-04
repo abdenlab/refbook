@@ -22,6 +22,14 @@ writes to REGISTRY/build/grch38:
                       content or .dict), and the seqcol digests of the target's
                       own collection (its order)
 - target_sequences.parquet   each target's order: target, position, name
+- sequences.parquet   the sequence store: one row per distinct sequence (every
+                      root, and every derivative a manifest uses), keyed by
+                      sha512t24u, with md5, length and the canonical
+                      derivation (root_id, operations) used to build it:
+                      fewest operations, then sorted operation names, then root
+- derivations.parquet every known way to make each sequence: sha512t24u,
+                      root_id, operations, and the flavors whose recipes give it
+                      (none for a root as submitted)
 - collections/<digest>.json  the level-2 seqcol representation of every
                       manifest and target collection, with the ancillary
                       attributes, named by top-level digest
@@ -46,7 +54,7 @@ import pyarrow.parquet as pq
 from refbook import seqcol
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves it out
-import run_recipes  # noqa: E402
+import run_recipes
 
 GRCH38 = "GCA_000001405."  # GenBank assembly accession prefix of GRCh38 p0-p14
 OPERATION_OF_ALPHABET = "iupac_to_n"
@@ -176,7 +184,7 @@ def main() -> None:
                              "length": r["length"], "md5": r["md5"], "sha512t24u": r["sha512t24u"]})
         manifests += manifest
         names = [r["name"] for r in manifest]
-        top, level1 = collection_files(names, [r["length"] for r in manifest],
+        top, _ = collection_files(names, [r["length"] for r in manifest],
                                        [r["sha512t24u"] for r in manifest], out_dir)
 
         kinds = Counter("EBV" if r["root_id"] == "AJ507799.2" else
@@ -214,8 +222,10 @@ def main() -> None:
             })
             orders += [{"target": t, "position": x["position"], "name": x["name"]} for x in v]
 
+    sequences, derivations = sequence_store(manifests, tables["roots"])
     for name, table in (("flavors", flavors), ("manifests", manifests), ("targets", targets),
-                        ("target_sequences", orders)):
+                        ("target_sequences", orders), ("sequences", sequences),
+                        ("derivations", derivations)):
         path = build / f"{name}.parquet"
         tmp = path.with_suffix(".tmp")
         pq.write_table(pa.Table.from_pylist(table), tmp, compression="zstd")
@@ -227,6 +237,30 @@ def main() -> None:
           file=sys.stderr)
     for f in flavors:
         print(f"  {f['flavor']:<30} {f['id']}  {f['n_targets']} target(s)", file=sys.stderr)
+
+
+def sequence_store(manifests: list[dict], roots: dict) -> tuple[list[dict], list[dict]]:
+    """The sequences and derivations tables: every root as submitted, and every
+    derivative the manifests use, with each way it is made."""
+    ways = defaultdict(lambda: defaultdict(set))  # sq -> (root, operations) -> flavors
+    info = {}
+    for acc, r in roots.items():
+        ways[r["sha512t24u"]][acc, ()]
+        info[r["sha512t24u"]] = (r["md5"], r["length"])
+    for r in manifests:
+        ways[r["sha512t24u"]][r["root_id"], tuple(r["operations"])].add(r["flavor"])
+        info[r["sha512t24u"]] = (r["md5"], r["length"])
+    sequences, derivations = [], []
+    for sq in sorted(ways):
+        root, ops = min(ways[sq], key=lambda w: (len(w[1]), sorted(w[1]), w[0]))
+        md5, length = info[sq]
+        sequences.append({"sha512t24u": sq, "md5": md5, "length": length,
+                          "root_id": root, "operations": list(ops),
+                          "n_derivations": len(ways[sq])})
+        for (acc, o), fl in sorted(ways[sq].items()):
+            derivations.append({"sha512t24u": sq, "root_id": acc, "operations": list(o),
+                                "flavors": sorted(fl)})
+    return sequences, derivations
 
 
 def curated_targets(curated: list[dict], label: str) -> list[str]:

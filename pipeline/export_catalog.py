@@ -18,8 +18,8 @@ import datetime
 import hashlib
 import json
 import shutil
-from collections import defaultdict
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 # Published files and their roles; directories export every file they contain.
@@ -31,9 +31,12 @@ FILES = {
     "layer_placements.parquet": "layer", "layer_hardmask_grc.parquet": "layer",
     "layer_iupac.parquet": "layer", "layer_n_runs.parquet": "layer",
     "layer_softmask_ncbi.parquet": "layer",
-    "recipes.parquet": "flavors", "flavor_sequences.parquet": "flavors",
-    "family_tree.json": "flavors", "seqcol": "seqcol",
+    "sequences.parquet": "sequences", "derivations.parquet": "sequences",
+    "flavors.parquet": "flavors", "manifests.parquet": "flavors",
+    "targets.parquet": "targets", "target_sequences.parquet": "targets",
+    "collections": "collections",
 }
+FORMAT = 2  # catalog format; refbook.catalog.FORMAT reads it
 EVIDENCE = {"observed": "observed", "verify_roots.tsv": "verify_roots.tsv",
             "check_gaps.tsv": "check_gaps.tsv"}   # build path -> path under evidence/
 
@@ -51,38 +54,21 @@ def place(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
-def publisher_and_label(flavor: str) -> tuple[str, str]:
-    """For the dataset card: who published a flavor, and a short name for its file."""
-    import re
-    if flavor.startswith("GRCh38_"):
-        return "GRC (NCBI analysis sets)", flavor[7:].replace("_analysis_set", "").replace("_plus_", " + ")
-    if flavor.startswith("UCSC_"):
-        return "UCSC", flavor[5:]
-    if m := re.fullmatch(r"(Ensembl|GENCODE)(\d+)_(.+)", flavor):
-        return f"{m[1]} {m[2]}", m[3]
-    if flavor.startswith(("Broad_", "1000G_")):
-        return "Broad / 1000 Genomes", flavor.split("_", 1)[1]
-    if flavor.startswith("iGenomes_"):
-        return "Illumina iGenomes", flavor[9:].replace("_", "/", 1)
-    return "Other", flavor
-
-
 def card(build: Path, version: str) -> str:
     import pyarrow.parquet as pq
-    recipes = pq.read_table(build / "recipes.parquet", columns=["flavor", "published", "seqcol_digest"]).to_pylist()
-    by_pub = defaultdict(list)
-    for r in recipes:
-        pub, label = publisher_and_label(r["flavor"])
-        by_pub[pub].append(label)
-    rows = ["| Publisher | Files reproduced |", "| --- | --- |"]
-    rows += [f"| {pub} | {', '.join(sorted(labels))} |" for pub, labels in sorted(by_pub.items())]
+    flavors = pq.read_table(build / "flavors.parquet", columns=["flavor"]).to_pylist()
+    targets = pq.read_table(build / "targets.parquet", columns=["flavor", "publisher", "alias"]).to_pylist()
+    by_flavor = defaultdict(list)
+    for t in targets:
+        by_flavor[t["flavor"]].append(f"{t['publisher']} `{t['alias']}`")
+    rows = ["| Flavor | Published as |", "| --- | --- |"]
+    rows += [f"| `{f}` | {'; '.join(sorted(ts))} |" for f, ts in sorted(by_flavor.items())]
     members = pq.read_table(build / "assembly_members.parquet",
                             columns=["assembly_name", "genbank_accession"]).to_pylist()
     grch38 = {m["genbank_accession"] for m in members if m["assembly_name"].startswith("GRCh38")}
     decoys = {m["genbank_accession"] for m in members if m["assembly_name"] == "hs38d1"}
     template = (Path(__file__).parent / "catalog_card.md").read_text()
-    return template.format(version=version, n_flavors=len(recipes),
-                           n_sets=len({r["seqcol_digest"] for r in recipes}),
+    return template.format(version=version, n_flavors=len(targets), n_sets=len(flavors),
                            flavor_table="\n".join(rows),
                            n_roots=pq.read_metadata(build / "roots.parquet").num_rows,
                            n_grch38=len(grch38), n_decoys=len(decoys))
@@ -110,7 +96,7 @@ def main() -> None:
         files[rel] = {"bytes": dst.stat().st_size, "sha256": sha256(dst), "role": role}
         print(f"{rel}\t{dst.stat().st_size}", file=sys.stderr)
     manifest = {
-        "name": "refbook", "version": version,
+        "name": "refbook", "format": FORMAT, "version": version,
         "created": datetime.date.today().isoformat(),
         "description": "GRCh38 roots, layers and reproduced flavor recipes",
         "files": files,

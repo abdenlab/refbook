@@ -11,7 +11,7 @@ from refbook.parse import read_header
 from refbook.refcache import populate_ref_cache
 
 # The published release; set REFBOOK_CATALOG (or --catalog) to a local copy or another release.
-DEFAULT_CATALOG = "https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.1.0/"
+DEFAULT_CATALOG = "https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/"
 
 
 def report(path: str, cat: Catalog, as_json: bool) -> dict:
@@ -21,9 +21,12 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
         "file": path, "format": header.format, "sequences": len(header.entries),
         "has_md5": header.has_md5,
         "matches": [{"flavor": c.flavor, "verdict": c.verdict, "score": round(c.score, 4),
-                     "published": cat.recipes[c.flavor]["published"],
+                     "in_order_of": [{"target": t, "publisher": cat.targets[t]["publisher"],
+                                      "alias": cat.targets[t]["alias"],
+                                      "published": cat.targets[t]["published"]} for t in c.in_order_of],
                      "differences": describe(c, cat)} for c in res.best],
-        "seqcol_digest": res.seqcol_digest, "seqcol_flavors": res.seqcol_flavors,
+        "unknown_sequences": res.unknown,
+        "seqcol_digest": res.seqcol_digest, "seqcol_matches": res.seqcol_matches,
         "ambiguity": res.ambiguity,
         "runners_up": [{"flavor": c.flavor, "score": round(c.score, 4)}
                        for c in res.ranked[len(res.best):len(res.best) + 3]],
@@ -35,11 +38,13 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
     verdict = res.best[0].verdict if res.best else "none"
     if verdict == "exact":
         print(f"  EXACT: {', '.join(c.flavor for c in res.best)}")
+        _orders(res, cat)
     elif verdict == "consistent":
-        print(f"  CONSISTENT (names, lengths and order; no MD5s to check bases): "
+        print(f"  CONSISTENT (names and lengths; no MD5s to check bases): "
               f"{', '.join(c.flavor for c in res.best)}")
         for a in res.ambiguity:
             print(f"    {a}")
+        _orders(res, cat)
     elif verdict == "contains":
         c = res.best[0]
         print(f"  CONTAINS {', '.join(x.flavor for x in res.best)} (all {c.matched} sequences, unchanged), "
@@ -49,7 +54,7 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
     elif verdict == "subset":
         names = [x.flavor for x in res.best]
         shown = ", ".join(names[:6]) + (f", and {len(names) - 6} more" if len(names) > 6 else "")
-        print(f"  SUBSET of {len(names)} flavors (every sequence unchanged, in order): {shown}")
+        print(f"  SUBSET of {len(names)} flavors (every sequence unchanged): {shown}")
         print(f"    smallest: {names[0]}, which also has: "
               + "; ".join(d for d in describe(res.best[0], cat) if d.startswith("not in header"))[15:])
         if not header.has_md5:
@@ -63,10 +68,22 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
             print("    (no MD5s: sequences are matched by name and length only)")
         for d in describe(c, cat):
             print(f"    - {d}")
+    if res.unknown:
+        print(f"  {len(res.unknown)} sequences unknown to the catalog, e.g. {', '.join(res.unknown[:3])}")
     if res.seqcol_digest:
-        also = f" = {', '.join(res.seqcol_flavors)}" if res.seqcol_flavors else ""
+        also = f" = {', '.join(res.seqcol_matches)}" if res.seqcol_matches else ""
         print(f"  seqcol digest: {res.seqcol_digest}{also}")
     return out
+
+
+def _orders(res, cat: Catalog) -> None:
+    """Which targets' order the header follows, per matching flavor."""
+    for c in res.best:
+        if c.in_order_of:
+            ts = "; ".join(f"{cat.targets[t]['publisher']} {cat.targets[t]['alias']}" for t in c.in_order_of)
+            print(f"    {c.flavor}: in the order of {ts}")
+        else:
+            print(f"    {c.flavor}: in an order none of its targets uses")
 
 
 def main() -> None:

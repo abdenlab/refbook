@@ -28,7 +28,7 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
             return super().send_head()
         size = os.path.getsize(path)
         m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
-        f = open(path, "rb")
+        f = open(path, "rb")  # noqa: SIM115 - send_head returns it; the server closes it
         if not m:
             self.send_response(200)
             self.send_header("Content-Length", str(size))

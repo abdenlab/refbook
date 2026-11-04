@@ -1,13 +1,15 @@
-"""Fetch the bases of a flavor at a table of intervals.
+"""Fetch the bases of a collection at a table of intervals.
 
-`fetch(cat, flavor, intervals)` takes an interval table and returns it as an
-Arrow table with one more column, `sequence`: the flavor's bases at each
-interval, with the recipe's hard masks and IUPAC -> N applied, as
-`materialize` would give them. Bases are uppercase; soft-masking is a layer.
+`fetch(cat, collection, intervals)` takes an interval table and returns it as
+an Arrow table with one more column, `sequence`: the bases at each interval,
+as `materialize` would give them (each sequence's nucleotide operations
+applied). The collection is anything refbook.resolve accepts: a flavor, a
+target, a stored digest, a seqcol representation or a named sequence set; only
+its names matter, not its order. Bases are uppercase; soft-masking is a layer.
 
 Conventions:
 - Columns: `chrom`, `start`, `end` by default (polars-bio's names), renamable;
-  an optional strand column. `chrom` is a name in the flavor; an unknown name
+  an optional strand column. `chrom` is a name in the collection; an unknown name
   is an error.
 - Coordinates: 0-based half-open by default. An explicit `zero_based` wins;
   otherwise polars-bio's coordinate-system metadata is honored when present
@@ -20,7 +22,7 @@ Conventions:
 - Strand: `-` gives the reverse complement (IUPAC codes complemented too);
   `+`, `.` and null give the forward strand; anything else is an error.
 
-Output schema metadata records the flavor and its seqcol digest, so a slice
+Output schema metadata records the collection and its seqcol digest, so a slice
 identifies its reference by content.
 
 Engines (`engine=`): "datafusion" reads only the needed blocks with
@@ -35,15 +37,14 @@ query string, so on hosts like Hugging Face it pays a redirect per request and
 gets rate-limited (HTTP 429) on dense queries; plain http:// is refused.
 """
 
-import json
 from collections import defaultdict
 
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 from refbook.blocks import BLOCK_SIZE
 from refbook.catalog import Catalog
-from refbook.materialize import IUPAC_TO_N, Bases
+from refbook.materialize import Bases, apply_operations
+from refbook.resolve import collection as resolve_collection
 
 COMPLEMENT = bytes.maketrans(b"ACGTRYKMBDHVSWN", b"TGCAYRMKVHDBSWN")
 ARROW_KEY = b"bio.coordinate_system_zero_based"
@@ -72,26 +73,25 @@ def _to_arrow(intervals) -> tuple[pa.Table, bool | None]:
     return intervals, flag
 
 
-def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: str = "start",
+def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: str = "start",
           end: str = "end", strand: str | None = None, zero_based: bool | None = None,
           clip: bool = False, engine: str = "auto", bases: Bases | None = None,
           reader: "DataFusionBlocks | None" = None) -> pa.Table:
-    if flavor not in cat.flavors:
-        raise KeyError(f"{flavor}: not a reproduced flavor")
+    c = resolve_collection(cat, collection)
     table, flag = _to_arrow(intervals)
     if zero_based is not None and flag is not None and zero_based != flag:
         raise ValueError(f"zero_based={zero_based}, but the intervals say "
                          f"coordinate_system_zero_based={flag}")
     zb = zero_based if zero_based is not None else (flag if flag is not None else True)
 
-    seqs = {s.name: s for s in cat.flavors[flavor]}
+    seqs = {n: cat.sequence[sq] for n, sq in zip(c.names, c.sequences)}
     names = table.column(chrom).to_pylist()
     starts = table.column(start).to_pylist()
     ends = table.column(end).to_pylist()
     strands = table.column(strand).to_pylist() if strand else [None] * table.num_rows
     unknown = sorted({n for n in names if n not in seqs})
     if unknown:
-        raise KeyError(f"{flavor} has no sequence named {', '.join(unknown[:5])}"
+        raise KeyError(f"{c.label or c.digest} has no sequence named {', '.join(unknown[:5])}"
                        f"{' ...' if len(unknown) > 5 else ''}")
 
     # 0-based half-open bounds, checked or clipped.
@@ -99,7 +99,7 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
     hi = list(ends)
     bad = []
     for i, n in enumerate(names):
-        length = seqs[n].length
+        length = seqs[n]["length"]
         if clip:
             lo[i], hi[i] = max(0, min(lo[i], length)), max(0, min(hi[i], length))
             hi[i] = max(hi[i], lo[i])
@@ -112,15 +112,8 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
         if x not in (None, "+", "-", "."):
             raise ValueError(f"strand must be +, -, . or null, not {x!r}")
 
-    recipe = json.loads(cat.recipes[flavor]["recipe"])
-    spans = defaultdict(list)
-    for m in recipe.get("mask", []):
-        layer = pq.read_table(cat.file(f"layer_{m['layer']}.parquet"), columns=["root_id", "start", "end"])
-        for r, s, e in zip(*(layer[c].to_pylist() for c in ("root_id", "start", "end"))):
-            spans[r].append((s, e))
-    to_n = recipe.get("alphabet", {}).get("iupac") == "N"
     bases = bases or Bases(cat)
-    roots = [seqs[n].root_id for n in names]
+    roots = [seqs[n]["root_id"] for n in names]
     if engine == "auto":
         engine = "datafusion" if reader is not None or (_have_datafusion() and not cat.remote) else "pyarrow"
     blocks = None
@@ -155,20 +148,14 @@ def fetch(cat: Catalog, flavor: str, intervals, *, chrom: str = "chrom", start: 
             b = bytearray(_from_blocks(blocks, root, lo[i], hi[i]))
         else:
             b = bytearray(bases.slice(root, lo[i], hi[i]))
-        for s, e in spans.get(root, ()):
-            if s < hi[i] and e > lo[i]:
-                a, z = max(s, lo[i]) - lo[i], min(e, hi[i]) - lo[i]
-                b[a:z] = b"N" * (z - a)
-        b = bytes(b)
-        if to_n:
-            b = b.translate(IUPAC_TO_N)
+        b = apply_operations(cat, root, seqs[names[i]]["operations"], b, lo[i])
         if strands[i] == "-":
             b = b.translate(COMPLEMENT)[::-1]
         out[i] = b.decode("ascii")
 
     meta = dict(table.schema.metadata or {})
-    meta.update({b"refbook:flavor": flavor.encode(),
-                 b"refbook:seqcol_digest": cat.recipes[flavor]["seqcol_digest"].encode(),
+    meta.update({b"refbook:collection": (c.label or c.digest).encode(),
+                 b"refbook:seqcol_digest": c.digest.encode(),
                  ARROW_KEY: b"true" if zb else b"false"})
     result = table.append_column(pa.field("sequence", pa.large_string(), nullable=False),
                                  pa.array(out, pa.large_string()))
@@ -214,6 +201,7 @@ class DataFusionBlocks:
                              "does not expose object_store's allow_http); use engine='pyarrow'")
         if cat.remote:
             from urllib.parse import urlparse
+
             from datafusion.object_store import Http
             u = urlparse(location)
             self.ctx.register_object_store(f"{u.scheme}://", Http(f"{u.scheme}://{u.netloc}"), u.netloc)
@@ -246,5 +234,5 @@ class DataFusionBlocks:
             out.update(zip(zip(t["root_id"].to_pylist(), t["start"].to_pylist()), t["bases"].to_pylist()))
         missing = set(need) - set(out)
         if missing:
-            raise KeyError(f"root_blocks has no block {sorted(missing)[0]}")
+            raise KeyError(f"root_blocks has no block {min(missing)}")
         return out

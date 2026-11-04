@@ -123,8 +123,8 @@ def build_agp(raw: Path, roots: set[str]) -> pa.Table:
         for r in agp[obj]:
             rec = agp_record(r)
             rec.update(root_id=obj, source=url, object_rank=rank[obj])
-            for k in cols:
-                cols[k].append(rec[k])
+            for k, v in cols.items():
+                v.append(rec[k])
     return pa.table(cols)
 
 

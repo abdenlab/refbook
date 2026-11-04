@@ -8,10 +8,14 @@ tags:
   - refget
   - seqcol
 configs:
-  - config_name: flavor_sequences
-    data_files: flavor_sequences.parquet
-  - config_name: recipes
-    data_files: recipes.parquet
+  - config_name: flavors
+    data_files: flavors.parquet
+  - config_name: manifests
+    data_files: manifests.parquet
+  - config_name: targets
+    data_files: targets.parquet
+  - config_name: sequences
+    data_files: sequences.parquet
   - config_name: roots
     data_files: roots.parquet
   - config_name: aliases
@@ -30,7 +34,8 @@ rewritten. refbook describes every one of them as a **recipe** applied to the sa
 when its recipe reproduces the published file sequence by sequence.
 
 Release {version} covers {n_flavors} published GRCh38 files, which reduce to {n_sets}
-distinct sequence sets.
+**flavors**: distinct sets of named sequences, whatever their order. Each flavor
+has a refbook label; the publishers' names for its files are its aliases.
 
 {flavor_table}
 
@@ -47,10 +52,13 @@ All coordinates are 0-based, half-open. Sequence digests follow GA4GH refget
 | `assembly_members.parquet` | Every row of every GRCh38 and hs38d1 assembly report |
 | `aliases.parquet` | Names of each root in the GenBank, RefSeq, UCSC, GRC, Ensembl and IMGT namespaces |
 | `layer_*.parquet` | Annotations in root coordinates: AGP components and gaps, alt/patch placements, named regions (centromeres, PARs), the GRC hard-masks, IUPAC positions, N runs, NCBI soft-masking |
-| `recipes.parquet` | Each published file's recipe and seqcol digest |
-| `flavor_sequences.parquet` | Each published file's sequences in order: name, root, length, MD5, `SQ.` digest |
-| `family_tree.json` | How the files relate: each one's nearest relative and the exact difference |
-| `seqcol/*.json` | A seqcol (level 2) document per published file |
+| `sequences.parquet` | The sequence store: every distinct sequence (each root, and each masked or IUPAC→N derivative), by `SQ.` digest and MD5, with the root and nucleotide operations it is made from |
+| `derivations.parquet` | Every known way to make each sequence, and the flavors that use it |
+| `flavors.parquet` | Each flavor: label, identifier (an order-independent digest of its named sequences), seqcol digest, recipe, and facets (contents, operations, naming) |
+| `manifests.parquet` | Each flavor's sequences: name, root, operations, length, MD5, `SQ.` digest |
+| `targets.parquet` | Each published file: its flavor, publisher, name, URL and seqcol digest |
+| `target_sequences.parquet` | Each published file's order of sequences |
+| `collections/*.json` | Seqcol (level 2) documents for every flavor and published file, named by digest |
 | `evidence/` | What each published file was observed to contain, and the root verification reports |
 | `catalog.json` | The release manifest: every file's size, sha256 and role |
 
@@ -59,12 +67,13 @@ Read any table directly with DuckDB, Polars or pyarrow, for example:
 ```python
 import polars as pl
 base = "https://huggingface.co/datasets/abdenlab/refbook/resolve/v{version}/"
-fs = pl.read_parquet(base + "flavor_sequences.parquet")
-fs.filter(pl.col("name") == "chr21").select("flavor", "md5").unique("md5")
+m = pl.read_parquet(base + "manifests.parquet")
+m.filter(pl.col("name") == "chr21").select("flavor", "md5", "operations").unique("md5")
 ```
 
-A Python library that identifies a header against this catalog and fetches bases
-by region is in development.
+The `refbook` Python library (github.com/abdenlab/refbook) identifies a header
+against this catalog, and resolves, materializes and fetches any collection
+whose sequences it holds.
 
 ## Sources and licensing
 

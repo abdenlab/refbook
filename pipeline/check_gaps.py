@@ -197,8 +197,7 @@ def main() -> None:
 
     with open(out / "check_gaps.tsv", "w") as f:
         f.write("root_id\tstart\tend\tkind\tgap_types\n")
-        for row in report:
-            f.write("\t".join(map(str, row)) + "\n")
+        f.writelines("\t".join(map(str, row)) + "\n" for row in report)
 
     n_bp = Counter()
     for acc, s, e, kind, _ in report:
