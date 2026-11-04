@@ -260,3 +260,21 @@ def test_sort_key():
     assert run_recipes.sort_key(s, [{"explicit": ["A.1", "X.1"]}, {"explicit": ["A.1"]}]) == (1, 1)
     by_role = {"default": ["name"], "by_role": {"unlocalized-scaffold": [{"literal": "u"}]}}
     assert run_recipes.sort_key(s, by_role) == ("u",)
+
+
+# build_flavors
+
+import build_flavors  # noqa: E402
+
+
+def test_flavor_facets():
+    latest = {"F1.1"}
+    assert build_flavors.kind("IMGTHLA:1:H1", None, latest) == "HLA allele"
+    assert build_flavors.kind("C1.1", {**MEMBERS[0], "assembly_accession": "GCA_000001405.15"}, latest) == "assembled-molecule"
+    assert build_flavors.kind("F2.1", {**MEMBERS[5], "assembly_accession": "GCA_000001405.28"}, latest) == "superseded fix-patch"
+    assert build_flavors.kind("D1.1", {**MEMBERS[2], "assembly_accession": "GCA_000786075.2",
+                                       "assembly_name": "hs38d1"}, latest) == "hs38d1 decoy"
+    assert build_flavors.naming({"namespace": "genbank", "by_role": {"assembled-molecule": "ucsc"},
+                                 "map": {"E.1": "chrEBV"}}) == "genbank; assembled-molecule: ucsc; E.1: chrEBV"
+    recipe = {"select": [{"assembly": "GCA_1.1", "roles": ["fix-patch"], "placed_on": ["chromosome"]}]}
+    assert build_flavors.excluded(recipe, MEMBERS, {"F1.1"}) == ["1 fix-patch (not placed on chromosome)"]

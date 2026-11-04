@@ -154,6 +154,7 @@ uv run python -I pipeline/check_gaps.py $R
 uv run python -I pipeline/verify_roots.py $R <GRC full_plus_hs38d1 analysis set .fna.gz>
 uv run python -I pipeline/observe_fasta.py <published FASTA> $R/build/grch38/observed/<flavor>.parquet  # per file
 uv run python -I pipeline/run_recipes.py $R recipes/*.json
+uv run python -I pipeline/build_flavors.py $R flavors.json recipes/*.json
 uv run python -I pipeline/build_catalog.py $R recipes/*.json
 uv run python -I pipeline/family_tree.py $R recipes/*.json
 uv run python -I pipeline/check_materialize.py $R

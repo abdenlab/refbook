@@ -97,3 +97,52 @@ def test_root_bases_match_their_digests(root):
     bases = Bases(Catalog(RELEASE)).get(root)
     want = next(r for r in golden("roots.parquet") if r["root_id"] == root)
     assert refget.digests(bytes(bases)) == (want["md5"], want["sha512t24u"])
+
+
+# The flavor model (build_flavors.py) against the release's targets.
+
+def table(name: str) -> list[dict]:
+    return pq.read_table(BUILD / name).to_pylist()
+
+
+needs_flavors = pytest.mark.skipif(not (BUILD / "flavors.parquet").exists(), reason="no flavors.parquet")
+
+
+@needs_flavors
+def test_targets_are_their_flavors_in_some_order():
+    """Each release target, as a named sequence set, is its flavor's manifest."""
+    from refbook import seqcol
+    manifest = {}
+    for r in table("manifests.parquet"):
+        manifest.setdefault(r["flavor"], set()).add((r["name"], r["root_id"], r["length"], r["md5"], r["sha512t24u"]))
+    target_rows = {}
+    for r in golden("flavor_sequences.parquet"):
+        target_rows.setdefault(r["flavor"], []).append(r)
+    targets = {t["target"]: t for t in table("targets.parquet")}
+    assert set(targets) == set(target_rows)
+    for t, rows in target_rows.items():
+        as_set = {(r["name"], r["root_id"], r["length"], r["md5"], r["sha512t24u"]) for r in rows}
+        assert as_set == manifest[targets[t]["flavor"]], t
+    for f in table("flavors.parquet"):
+        rows = [r for r in table("manifests.parquet") if r["flavor"] == f["flavor"]]
+        assert f["id"] == seqcol.named_set_digest([r["name"] for r in rows], [r["sha512t24u"] for r in rows])
+        assert f["n_targets"] == sum(t["flavor"] == f["flavor"] for t in targets.values())
+
+
+@needs_flavors
+def test_target_orders_rebuild_the_release_collections():
+    """A target's collection is its flavor's manifest in the target's order, with
+    the release's seqcol digest."""
+    from refbook import seqcol
+    by_name = {(r["flavor"], r["name"]): r for r in table("manifests.parquet")}
+    flavor_of = {t["target"]: t["flavor"] for t in table("targets.parquet")}
+    order = {}
+    for r in table("target_sequences.parquet"):
+        order.setdefault(r["target"], []).append(r)
+    released = {r["flavor"]: r["seqcol_digest"] for r in golden("recipes.parquet")}
+    for t, rows in order.items():
+        rows.sort(key=lambda r: r["position"])
+        seqs = [by_name[flavor_of[t], r["name"]] for r in rows]
+        top, _ = seqcol.digests([s["name"] for s in seqs], [s["length"] for s in seqs],
+                                [s["sha512t24u"] for s in seqs])
+        assert top == released[t], t
