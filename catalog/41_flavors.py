@@ -35,7 +35,9 @@ writes to build/grch38/41_flavors/:
                       (none for a root as submitted)
 - collections/<digest>.json  the level-2 seqcol representation of every
                       manifest and target collection, with the ancillary
-                      attributes, named by top-level digest
+                      attributes but not the transient ones (as the seqcol
+                      /collection endpoint serves it), named by top-level
+                      digest
 
 Fails unless the targets that share a named-sequence-set digest are exactly
 the targets flavors.json lists under one label, and unless rebuilding each
@@ -105,8 +107,7 @@ def excluded(recipe: dict, members: list[dict], selected: set[str]) -> list[str]
 def collection_files(names, lengths, sequences, out: Path) -> tuple[str, dict]:
     """Write a collection's level-2 representation; return its seqcol digests."""
     top, level1 = seqcol.digests(names, lengths, sequences)
-    obj = {"names": names, "lengths": lengths, "sequences": sequences,
-           **seqcol.ancillary(names, lengths, sequences)}
+    obj = seqcol.level2(names, lengths, sequences)
     (out / f"{top}.json").write_text(json.dumps(obj) + "\n")
     return top, level1
 

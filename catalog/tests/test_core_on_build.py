@@ -35,8 +35,8 @@ def test_every_root_digest():
 
 @needs_build
 def test_every_stored_collection():
-    """Every collection the build stores: its name is its top-level digest, and its
-    ancillary attributes are those the core computes."""
+    """Every collection the build stores: its name is its top-level digest, and it
+    is the level-2 representation the core computes (no transient attributes)."""
     files = sorted(layout.path(BUILD, "collections").glob("*.json"))
     assert len(files) == 26
     for f in files:
@@ -44,8 +44,7 @@ def test_every_stored_collection():
         names, lengths, sqs = doc["names"], doc["lengths"], doc["sequences"]
         top, _ = _core.seqcol_digests(names, lengths, sqs)
         assert top == f.stem
-        anc = _core.seqcol_ancillary(names, lengths, sqs)
-        assert anc == {k: doc[k] for k in anc}, f.name
+        assert doc == _core.seqcol_level2(names, lengths, sqs), f.name
 
 
 @needs_build

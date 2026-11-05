@@ -7,9 +7,11 @@ pairs, where each digest is an `SQ.` digest or an MD5. Nothing requires it to
 be a cataloged flavor; every sequence just has to be in the sequence store.
 
     resolve(cat, collection, 0)   the top-level digest
-    resolve(cat, collection, 1)   one digest per attribute
+    resolve(cat, collection, 1)   one digest per attribute, transient ones
+                                  included
     resolve(cat, collection, 2)   the arrays (names, lengths, sequences) and
-                                  the ancillary attributes
+                                  the ancillary attributes, but not the
+                                  transient ones (seqcol.TRANSIENT)
     resolve(cat, collection, 3)   the named sequences with their bases, as an
                                   Arrow stream (materialize)
 
@@ -115,12 +117,10 @@ def resolve(cat: Catalog, x, level: int = 2, **materialize_options):
     if level == 3:
         from refbook.materialize import materialize
         return materialize(cat, c, **materialize_options)
-    top, level1 = seqcol.digests(names, lengths, sqs)
     if level == 0:
-        return top
-    ancillary = seqcol.ancillary(names, lengths, sqs)
+        return seqcol.digests(names, lengths, sqs)[0]
     if level == 1:
-        return {**level1, **{k: seqcol.level1(v) for k, v in ancillary.items()}}
+        return seqcol.level1_attributes(names, lengths, sqs)
     if level == 2:
-        return {"names": names, "lengths": lengths, "sequences": sqs, **ancillary}
+        return seqcol.level2(names, lengths, sqs)
     raise ValueError(f"level must be 0, 1, 2 or 3, not {level!r}")
