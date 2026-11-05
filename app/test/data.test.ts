@@ -12,6 +12,7 @@ import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, sequenceDictionary } from "../src/data/exports.ts";
 import { flavors, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/flavors.ts";
+import { identifyTables, level2, pairs, parseHeader } from "../src/data/identify.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
 
 const dir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../../catalog/output/build/grch38", import.meta.url));
@@ -80,4 +81,45 @@ test("a region is the same bases as the whole sequence there", { skip }, async (
   }
   const r = measured["region 65530"];
   assert.ok(r.requests <= 4 && r.bytes < 4e6, JSON.stringify(r));
+});
+
+test("pasted headers parse in every format", () => {
+  assert.deepEqual(parseHeader("chr1\t10\t6\t10\t11\nchr2\t5\t30\t5\t6\n"),
+    { format: "names and lengths", entries: [{ name: "chr1", length: 10 }, { name: "chr2", length: 5 }] });
+  assert.deepEqual(parseHeader("chr1 248956422\n# comment\n").entries, [{ name: "chr1", length: 248956422 }]);
+  assert.deepEqual(parseHeader("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:10\tM5:abc\tUR:x\n@SQ\tSN:chr2\tLN:5\n").entries,
+    [{ name: "chr1", length: 10, md5: "abc" }, { name: "chr2", length: 5, md5: null }]);
+  assert.deepEqual(parseHeader('##fileformat=VCFv4.2\n##contig=<ID=chr1,length=10,md5="abc">\n##contig=<ID=chrM>\n').entries,
+    [{ name: "chr1", length: 10, md5: "abc" }, { name: "chrM", length: null, md5: null }]);
+  const fa = parseHeader(">a desc\nACgt\nnN\n>b\nRY\n");
+  assert.equal(fa.format, "FASTA");
+  assert.deepEqual(fa.entries.map((e) => [e.name, e.length, e.md5, e.sq]),
+    [["a", 6, ...rb.digests(new TextEncoder().encode("ACGTNN"))], ["b", 2, ...rb.digests(new TextEncoder().encode("RY"))]]);
+  assert.equal(parseHeader("nothing here").format, "nothing recognized");
+});
+
+test("identify in the browser, like the catalog says", { skip }, async () => {
+  const t = await identifyTables(cat);
+  assert.ok(measured["identify tables"].bytes < 1e6, `${measured["identify tables"].bytes} bytes`);
+  const rows = await manifest(cat, "hg38-analysis-set");
+  const chr1 = rows.find((r) => r.name === "chr1")!;
+  const [byMd5, byName, wrong] = rb.identifySequences(
+    [{ name: "chr1", length: chr1.length, md5: chr1.md5 }, { name: "chr1", length: chr1.length }, { name: "chr1", length: 5 }], t);
+  assert.deepEqual([byMd5.evidence, byMd5.sequence, byMd5.root_id, byMd5.operations], ["digest", chr1.sha512t24u, "CM000663.2", chr1.operations]);
+  assert.ok(byMd5.flavors.some((u) => u.flavor === "hg38-analysis-set" && u.name === "chr1"));
+  assert.deepEqual([byName.evidence, byName.root_id], ["name_and_length", "CM000663.2"]);
+  assert.ok(byName.cognates.includes(chr1.sha512t24u));
+  assert.deepEqual(wrong.notes.map((x) => x.kind), ["length_differs", "no_root_of_this_length"]);
+});
+
+test("two flavors compared: seqcol's counts and refbook's pairs", { skip }, async () => {
+  const [a, b] = await Promise.all([manifest(cat, "grch38-no-alt"), manifest(cat, "hg38-analysis-set")]);
+  const c = rb.seqcolCompare(level2(a), level2(b));
+  assert.equal(c.array_elements.a_and_b_count.names, 195);
+  assert.equal(c.array_elements.a_and_b_count.sequences, 181);
+  const p = pairs(a, b);
+  const count = (k: string) => p.filter((x) => x.kind === k).length;
+  assert.deepEqual([count("same"), count("operations"), count("different"), count("a_only"), count("b_only")], [181, 14, 0, 0, 0]);
+  const renamed = pairs([{ ...a[0], name: "one" }], [a[0]]);
+  assert.deepEqual(renamed.map((x) => x.kind), ["renamed"]);
 });

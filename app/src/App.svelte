@@ -10,6 +10,8 @@
   import { route } from "./route.svelte.ts";
   import ErrorBox from "./components/ErrorBox.svelte";
   import CatalogView from "./views/CatalogView.svelte";
+  import CompareView from "./views/CompareView.svelte";
+  import IdentifyView from "./views/IdentifyView.svelte";
   import FlavorView from "./views/FlavorView.svelte";
   import SequenceView from "./views/SequenceView.svelte";
 
@@ -41,6 +43,11 @@
 <header class="top">
   <a class="brand" href="#/">refbook</a>
   <span class="tagline">every published GRCh38, how it was made, and its bases</span>
+  <nav>
+    <a href="#/" class:here={!parts.length || parts[0] === "flavor"}>Catalog</a>
+    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
+    <a href="#/compare" class:here={parts[0] === "compare"}>Compare</a>
+  </nav>
 </header>
 <main>
   {#await opened}
@@ -49,6 +56,10 @@
     {#key route.current}
       {#if parts[0] === "flavor" && parts[2] === "seq" && parts[3]}
         <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
+      {:else if parts[0] === "identify"}
+        <IdentifyView {cat} />
+      {:else if parts[0] === "compare"}
+        <CompareView {cat} query={route.current.query} />
       {:else if parts[0] === "flavor" && parts[1]}
         <FlavorView {cat} label={parts[1]} />
       {:else}

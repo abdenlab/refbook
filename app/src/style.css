@@ -44,6 +44,19 @@ code.small { font-size: 0.8em; color: var(--muted); }
 }
 .brand { font-weight: 700; font-size: 1.15rem; color: var(--text); letter-spacing: -0.01em; }
 .tagline { color: var(--muted); font-size: 0.9rem; }
+.top nav { margin-left: auto; display: flex; gap: 1rem; font-size: 0.95rem; }
+.top nav a { color: var(--muted); }
+.top nav a.here { color: var(--text); font-weight: 600; }
+textarea.paste {
+  width: 100%; box-sizing: border-box; font: 0.85rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.6rem 0.7rem; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; resize: vertical;
+}
+pre.json { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.8rem; }
+table.identify tr.ev-nothing td:first-child { color: var(--bad); }
+details > summary { cursor: pointer; }
+.exports label { display: inline-flex; gap: 0.4rem; align-items: center; max-width: 100%; }
+.exports label select { min-width: 0; flex: 1; }
 
 main { max-width: 1120px; margin: 0 auto; padding: 1.25rem 16px 7rem; }
 h1 { font-size: 1.7rem; margin: 0.4rem 0 0.5rem; letter-spacing: -0.015em; }
