@@ -1,9 +1,10 @@
-"""Command line: `refbook identify FILE... [--catalog DIR] [--json]`."""
+"""Command line: `refbook identify FILE...`, `refbook populate-ref-cache FILE... --root DIR`, `refbook serve`."""
 
 import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from refbook.catalog import Catalog
 from refbook.identify import describe, identify
@@ -98,8 +99,21 @@ def main() -> None:
     q.add_argument("files", nargs="+", help="CRAM, BAM, SAM header or .dict files, or bare MD5s")
     q.add_argument("--root", required=True, help="cache root; then use REF_CACHE=ROOT/%%2s/%%2s/%%s")
     q.add_argument("--catalog", default=os.environ.get("REFBOOK_CATALOG", DEFAULT_CATALOG))
+    s = sub.add_parser("serve", help="serve the catalog over refget Sequences v2 and Sequence Collections v1")
+    s.add_argument("--catalog", default=os.environ.get("REFBOOK_CATALOG", DEFAULT_CATALOG))
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--collections", nargs="*", default=[], metavar="JSON",
+                   help="extra level-2 collections to serve (seqcol endpoints only), e.g. test data")
     args = ap.parse_args()
     cat = Catalog(args.catalog)
+    if args.cmd == "serve":
+        from refbook.service import Service, serve
+        extra = [json.loads(Path(f).read_text()) for f in args.collections]
+        server = serve(Service(cat, extra), args.host, args.port)
+        print(f"serving {args.catalog} on http://{args.host}:{server.server_port}/", file=sys.stderr)
+        server.serve_forever()
+        return
     if args.cmd == "populate-ref-cache":
         md5s = []
         for f in args.files:

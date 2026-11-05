@@ -63,6 +63,11 @@ $ uv run refbook identify HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
 # Fill htslib's reference cache so a CRAM decodes without its FASTA.
 $ uv run refbook populate-ref-cache sample.cram --root ~/refcache
 $ REF_CACHE=~/refcache/%2s/%2s/%s samtools view sample.cram
+
+# Serve the catalog over the GA4GH refget APIs (Sequences v2, Sequence Collections v1).
+$ uv run refbook serve --port 8000
+$ curl localhost:8000/sequence/insdc:CM000663.2?start=10000&end=10060
+$ curl localhost:8000/comparison/B-rB7OjNDYYfvB8O1yO2mVQjYziwvppI/Q_Qsamo09hQ5KdbaJWyVX90qzu94147N
 ```
 
 `identify` accepts `.fai`, `chrom.sizes`, `.dict`, SAM header text, BAM, CRAM
@@ -106,7 +111,24 @@ seqs = fetch(cat, "grch38-no-alt", intervals, strand="strand")
 
 # Any cataloged sequence by its MD5.
 chrM = sequence_by_md5(cat, "c68f52674c9fb33aef52dcf399755519")
+
+# Compare two collections as seqcol's /comparison does.
+from refbook import seqcol
+seqcol.compare(resolve(cat, "grch38-no-alt", 2), resolve(cat, "hg38-analysis-set", 2))
 ```
+
+`refbook serve` answers every endpoint of refget Sequences v2 and Sequence
+Collections v1 (`refbook.service`). A sequence can be named by MD5, `SQ.`
+digest or a namespaced alias (`insdc:CM000663.2`); an alias that names several
+sequences, such as `ucsc:chr1` (the root and its IUPAC→N derivative), answers
+300 with the list. Metadata adds refbook's account under `refbook`: the root,
+the nucleotide operations from it, and the flavors that use the sequence.
+Collections are served with refbook's seqcol schema: the spec's extended
+schema plus `named_sequences` and `sorted_named_sequences`. Against the seqcol
+compliance suite in the `refget` package it passes 52 of 65 checks. The rest
+are `named_sequences` appearing in comparisons (the suite expects exactly its
+own attributes) and `/list/attributes` (not in the spec). The API is described
+at `/openapi.json`.
 
 Every sequence is built from the catalog's sequence store (a root and the
 nucleotide operations applied to it) and checked against its MD5 and `SQ.`
@@ -220,7 +242,7 @@ Each script's docstring says what it reads, writes and checks.
 | --- | --- |
 | `crates/` | The Rust crates: `refbook-core` (refget digests and canonicalization, seqcol, nucleotide operations, the recipe compiler; no I/O), and its bindings, `refbook-py` (pyo3, built by maturin as `refbook._core`) and `refbook-wasm` (wasm-bindgen, for `js/`) |
 | `python/` | The Python package (`pyproject.toml`, `README.md`, and `tests/`, with real ENCODE, gnomAD and GIAB headers as fixtures) |
-| `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
+| `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `store`, `service`, `blocks`, `remote` |
 | `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Built with `pnpm build` at the root (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130) |
 | `app/` | The web app (Vite, TypeScript): the catalog, each flavor's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations. `pnpm dev` at the root serves it with the build in `catalog/output/build/grch38` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere |
 | `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |

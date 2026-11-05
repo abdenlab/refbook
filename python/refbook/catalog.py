@@ -112,6 +112,7 @@ class Catalog:
             if r["namespace"] in ("ucsc", "imgt"):
                 self.display.setdefault(r["root_id"], r["alias"])
         self._spans = {}
+        self._sequence_aliases = None
 
     def _local(self, name: str) -> Path:
         """A file's place under self.path: a build index maps names to step directories."""
@@ -142,6 +143,36 @@ class Catalog:
         """The level-2 representation of a collection in the collection store."""
         name = f"collections/{digest}.json"
         return json.loads(self.file(name).read_text()) if self.exists(name) else None
+
+    def sequence_aliases(self) -> dict[str, list[tuple[str, str]]]:
+        """sha512t24u -> [(naming_authority, alias)]: refget's aliases of each
+        stored sequence (sequence_aliases.parquet); empty if the catalog has none."""
+        if self._sequence_aliases is None:
+            self._sequence_aliases = defaultdict(list)
+            if self.exists("sequence_aliases.parquet"):
+                t = pq.read_table(self.file("sequence_aliases.parquet"))
+                for sq, auth, alias in zip(*(t[c].to_pylist() for c in ("sha512t24u", "naming_authority", "alias"))):
+                    self._sequence_aliases[sq].append((auth, alias))
+        return self._sequence_aliases
+
+    def by_identifier(self) -> dict[tuple[str, str], set[str]]:
+        """(naming_authority, alias) -> the stored sequences it names."""
+        if getattr(self, "_by_identifier", None) is None:
+            self._by_identifier = defaultdict(set)
+            for sq, pairs in self.sequence_aliases().items():
+                for pair in pairs:
+                    self._by_identifier[pair].add(sq)
+        return self._by_identifier
+
+    def flavor_names(self) -> dict[str, list[tuple[str, str]]]:
+        """sha512t24u -> [(flavor, name)]: the flavors that use a sequence, under which names."""
+        if getattr(self, "_flavor_names", None) is None:
+            out = defaultdict(list)
+            for flavor, seqs in self.manifests.items():
+                for s in seqs:
+                    out[s.sha512t24u].append((flavor, s.name))
+            self._flavor_names = {sq: sorted(v) for sq, v in out.items()}
+        return self._flavor_names
 
     def spans(self, layer: str) -> dict[str, list[tuple[int, int]]]:
         """root_id -> the spans of a mask layer (layer_<name>.parquet)."""
