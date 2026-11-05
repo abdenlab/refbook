@@ -11,7 +11,7 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@abdenlab/refbook": "file:../js",
+    "@abdenlab/refbook": "workspace:*",
     "hyparquet": "^1.32.0",
     "hyparquet-compressors": "^1.1.3"
   },

@@ -1,0 +1,5 @@
+# The JavaScript workspace: the npm package (js/) and the web app (app/), which
+# uses the package from here. One pnpm-lock.yaml at the root.
+packages:
+  - js
+  - app

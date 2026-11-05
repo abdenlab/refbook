@@ -8,8 +8,7 @@ __pycache__/
 /catalog/output/
 /target
 python/refbook/*.so
-js/node_modules/
+node_modules/
 js/pkg/
 js/dist/
-app/node_modules/
 app/dist/

@@ -2,7 +2,7 @@
 
 Runs js/test/oracle.ts under Node on the same inputs given to refbook._core:
 random sequences, every stored collection, and every recipe on the build's
-tables. Skipped without Node or a built js/pkg (cd js && npm run build).
+tables. Skipped without Node or a built js/pkg (pnpm build).
 """
 
 import base64

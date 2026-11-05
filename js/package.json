@@ -6,10 +6,13 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "pkg"],
+  "files": [
+    "dist",
+    "pkg"
+  ],
   "scripts": {
     "build:wasm": "cargo build -p refbook-wasm --target wasm32-unknown-unknown --release && wasm-bindgen --target web --out-dir pkg ../target/wasm32-unknown-unknown/release/refbook_wasm.wasm",
-    "build": "npm run build:wasm && tsc",
+    "build": "pnpm run build:wasm && tsc",
     "test": "node --test test/*.test.ts"
   },
   "devDependencies": {

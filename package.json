@@ -1,0 +1,11 @@
+{
+  "name": "refbook-workspace",
+  "private": true,
+  "description": "The repository's JavaScript workspace (pnpm): js/ and app/",
+  "packageManager": "pnpm@10.30.0",
+  "scripts": {
+    "build": "pnpm --filter @abdenlab/refbook build && pnpm --filter refbook-app build",
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter refbook-app dev"
+  }
+}
