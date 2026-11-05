@@ -1,14 +1,14 @@
 <script lang="ts">
-  // Design a flavor: edit a recipe (a form for the common parts, JSON for the
-  // rest), compiled live by the core in the browser, with what it makes: its
-  // digests, whether it is a cataloged flavor, what differs from the closest,
-  // exports, and a link that carries the recipe.
+  // Design a flavor: a recipe editor. The choices stay in view on the left; on
+  // the right, tabs show the same recipe as analysis goals, as JSON, in detail,
+  // and against the catalog (to load a flavor's recipe). The recipe is compiled
+  // live by the core in the browser; a strip on top says what it makes.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
   import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, sequenceDictionary } from "../data/exports.ts";
   import { flavors, manifest, OPERATION_LABELS, type Flavor, type ManifestRow } from "../data/flavors.ts";
-  import { pairs } from "../data/identify.ts";
+  import { pairs, type Pair } from "../data/identify.ts";
   import * as edit from "../data/recipeEdit.ts";
   import { bp, download, message, n } from "../format.ts";
   import { href } from "../route.svelte.ts";
@@ -23,26 +23,32 @@
     return { t, fs, manifests };
   }));
 
+  let recipe = $state<Recipe | null>(null);
+  let loaded = $state("");          // the recipe as last loaded, to know if it was edited
+  let jsonText = $state("");
+  let jsonError = $state<string | null>(null);
+  let tab = $state<"goals" | "json" | "details" | "catalog">("goals");
+  let catalogFilter = $state("");
+
   function initial(fs: Flavor[]): Recipe {
     try {
       const r = query.get("r");
       if (r) return decodeRecipe(r);
-    } catch { /* a bad link: start from scratch */ }
+    } catch { /* a bad link: a new recipe */ }
     const from = fs.find((f) => f.flavor === query.get("from"));
-    if (from) start = from.flavor;
     return from ? plainRecipe(JSON.parse(from.recipe)) : edit.fromScratch();
   }
-
-  let recipe = $state<Recipe | null>(null);
-  let jsonText = $state("");
-  let jsonError = $state<string | null>(null);
-  let start = $state("");
 
   function set(r: Recipe) {
     recipe = r;
     jsonText = JSON.stringify(r, null, 2);
     jsonError = null;
     history.replaceState(null, "", `#/design?r=${encodeRecipe(r)}`);
+  }
+
+  function load(r: Recipe) {
+    set(r);
+    loaded = JSON.stringify(r);
   }
 
   function fromJson(text: string) {
@@ -57,14 +63,14 @@
     }
   }
 
-  function startFrom(fs: Flavor[], label: string) {
-    start = label;
-    const f = fs.find((x) => x.flavor === label);
-    set(f ? plainRecipe(JSON.parse(f.recipe)) : edit.fromScratch());
+  function loadFlavor(f: Flavor | null) {
+    const edited = recipe && JSON.stringify(recipe) !== loaded;
+    if (edited && !confirm(`Replace the recipe you are editing with ${f ? f.flavor + "'s" : "a new one"}?`)) return;
+    load(f ? plainRecipe(JSON.parse(f.recipe)) : edit.fromScratch());
   }
 
   $effect(() => {
-    ready.then(({ fs }) => { if (recipe === null) set(initial(fs)); });
+    ready.then(({ fs }) => { if (recipe === null) load(initial(fs)); });
   });
 
   /** The design, or the compiler's error. */
@@ -72,22 +78,19 @@
     try { return { d: design(r, t, fs), error: null }; } catch (e) { return { d: null, error: e }; }
   }
 
-  const ops = (o: string[]) => (o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "as submitted");
-
-  /** The cataloged flavor with the fewest differences, and the differences. */
-  function closest(rows: ManifestRow[], manifests: Map<string, ManifestRow[]>) {
-    let best: { flavor: string; diffs: ReturnType<typeof pairs> } | null = null;
-    for (const [flavor, m] of manifests) {
-      const diffs = pairs(rows, m).filter((p) => p.kind !== "same");
-      if (!best || diffs.length < best.diffs.length) best = { flavor, diffs };
-    }
-    return best!;
+  /** Every cataloged flavor, by how many sequences differ from the design. */
+  function ranked(rows: ManifestRow[], manifests: Map<string, ManifestRow[]>) {
+    return [...manifests].map(([flavor, m]) => ({ flavor, diffs: pairs(rows, m).filter((p) => p.kind !== "same") }))
+      .sort((a, b) => a.diffs.length - b.diffs.length || a.flavor.localeCompare(b.flavor));
   }
 
+  const ops = (o: string[]) => (o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "as submitted");
+  const nameOf = (x: Pair) => ("name" in x ? x.name : "a" in x ? x.a.name : x.b.name);
   const KIND: Record<string, string> = {
-    operations: "other operations", different: "other sequences under the name", renamed: "renamed",
+    operations: "with other operations", different: "other sequences under the same name", renamed: "renamed",
     a_only: "only in yours", b_only: "only in it",
   };
+  const SHORT: Record<string, string> = { ucsc: "UCSC", grc: "GRC", genbank: "GenBank", refseq: "RefSeq" };
 </script>
 
 <section>
@@ -103,17 +106,39 @@
   {:then { t, fs, manifests }}
     {#if recipe}
       {@const p = edit.primary(recipe)}
-      {@const releases = [...t.assemblies].filter(([acc]) => acc.startsWith(edit.GRCH38))}
+      {@const releases = [...t.assemblies].filter(([acc]) => acc.startsWith(edit.GRCH38)).sort(([a], [b]) => Number(a.split(".")[1]) - Number(b.split(".")[1]))}
+      {@const latest = releases.at(-1)?.[0]}
+      {@const counts = p ? t.roleCounts.get(p.assembly) : undefined}
+      {@const release = p ? edit.releaseLabel(t.assemblies.get(p.assembly) ?? p.assembly, p.assembly === latest).split(" ")[0] : ""}
       {@const hlaAll = t.collections.get(edit.HLA) ?? []}
       {@const groups = edit.hlaGroups(recipe)}
       {@const attempted = attempt(recipe, t, fs)}
-      <div class="exports">
-        <label>Start from
-          <select value={start} onchange={(e) => startFrom(fs, e.currentTarget.value)}>
-            <option value="">scratch (GRCh38 chromosomes)</option>
-            {#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}
-          </select>
-        </label>
+      {@const ranks = attempted.d && !attempted.d.novel.length ? ranked(attempted.d.rows as ManifestRow[], manifests) : null}
+
+      <div class="strip" aria-live="polite">
+        {#if attempted.error}
+          <p class="bad compile-error">The recipe doesn't compile: {message(attempted.error)}</p>
+        {:else if attempted.d}
+          {@const d = attempted.d}
+          <p class="verdict" class:ok={!!d.equals}>
+            {#if d.equals}This is <a href={href("flavor", d.equals)}>{d.equals}</a>.
+            {:else if ranks}A flavor the catalog doesn't have; closest:
+              <a href={href("flavor", ranks[0].flavor)}>{ranks[0].flavor}</a>, {n(ranks[0].diffs.length)} sequence{ranks[0].diffs.length === 1 ? "" : "s"} differ.
+            {:else}A flavor the catalog doesn't have.{/if}
+          </p>
+          <p class="muted">{n(d.rows.length)} sequences, {bp(d.rows.reduce((s, r) => s + r.length, 0), true)}
+            {#if d.id}· flavor ID <code>{d.id.slice(0, 12)}…</code>{:else}· <span class="bad">{n(d.novel.length)} never built</span>{/if}</p>
+          <div class="exports">
+            <button type="button" onclick={() => download("recipe.json", JSON.stringify(recipe, null, 2), "application/json")}>recipe</button>
+            {#if !d.novel.length}
+              {@const rows = d.rows as ManifestRow[]}
+              <button type="button" onclick={() => download("design.chrom.sizes", chromSizes(rows))}>chrom.sizes</button>
+              <button type="button" onclick={() => download("design.dict", sequenceDictionary(rows))}>.dict</button>
+              <button type="button" onclick={() => download("design.seqcol.json", JSON.stringify(rb.seqcolLevel2(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u)), null, 1), "application/json")}>seqcol</button>
+            {/if}
+            <button type="button" onclick={() => navigator.clipboard?.writeText(location.href)}>copy link</button>
+          </div>
+        {/if}
       </div>
 
       <div class="design">
@@ -121,19 +146,39 @@
           <fieldset>
             <legend>GRCh38</legend>
             {#if p}
-              <label>Release
-                <select value={p.assembly} onchange={(e) => set(edit.setRelease(recipe!, e.currentTarget.value))}>
-                  {#each releases as [acc, name] (acc)}<option value={acc}>{name} ({acc})</option>{/each}
-                </select>
-              </label>
+              <div class="row-head">
+                <label>Release
+                  <select value={p.assembly} onchange={(e) => set(edit.setRelease(recipe!, e.currentTarget.value))}>
+                    {#each releases as [acc, name] (acc)}<option value={acc} title={acc}>{edit.releaseLabel(name, acc === latest)}</option>{/each}
+                  </select>
+                </label>
+                <label>Names
+                  <select value={recipe.rename.namespace} onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
+                    {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns]}</option>{/each}
+                  </select>
+                </label>
+              </div>
               {#each edit.ROLES_SHOWN as r (r)}
-                <label class="check"><input type="checkbox" checked={p.roles.includes(r)}
-                  onchange={(e) => set(edit.setRole(recipe!, r, e.currentTarget.checked))} /> {role(r)}</label>
+                {@const on = p.roles.includes(r)}
+                {@const count = counts?.get(r) ?? 0}
+                <div class="group">
+                  <label class="check"><input type="checkbox" checked={on} disabled={!on && !count}
+                    onchange={(e) => set(edit.setRole(recipe!, r, e.currentTarget.checked))} />
+                    <span>{role(r)}{#if count}{" "}<span class="muted">({n(count)})</span>{:else}<span class="muted">: none in {release}</span>{/if}</span></label>
+                  {#if on}
+                    {@const ns = edit.roleNamespace(recipe, r)}
+                    <select class="naming" class:inherit={!recipe.rename.by_role?.[r]} aria-label={`Names of ${role(r)}`} value={ns}
+                            onchange={(e) => set(edit.setRoleNames(recipe!, r, e.currentTarget.value))}>
+                      {#each edit.NAMESPACES as x (x)}<option value={x}>{SHORT[x]}</option>{/each}
+                    </select>
+                  {/if}
+                </div>
               {/each}
             {:else}
               <p class="muted">No GRCh38 entry. <button type="button" onclick={() => set(edit.setRelease(recipe!, `${edit.GRCH38}.15`))}>Add one</button></p>
             {/if}
           </fieldset>
+
           {#if p && p.roles.some((r) => ["alt-scaffold", "fix-patch", "novel-patch"].includes(r))}
             {@const kept = edit.placedOn(recipe)}
             <fieldset>
@@ -149,108 +194,126 @@
                 are placed on chromosomes but 3 fix patches, which fix alt scaffolds; Ensembl and GENCODE leave those out.</p>
             </fieldset>
           {/if}
+
           <fieldset>
             <legend>Other sequences</legend>
-            <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} /> EBV (<code>{edit.EBV}</code>)</label>
-            <label class="check"><input type="checkbox" checked={edit.hasDecoys(recipe)} onchange={(e) => set(edit.setDecoys(recipe!, e.currentTarget.checked))} /> hs38d1 decoys (<code>{edit.HS38D1}</code>)</label>
-            <label class="check"><input type="checkbox" checked={groups.length > 0}
-              onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} />
-              HLA alleles: hs38DH's six genes ({edit.HLA_TYPING_GROUPS.join(", ")}; {edit.HLA}, not hosted)</label>
+            <div class="group">
+              <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} />
+                <span>EBV <span class="muted">(<code>{edit.EBV}</code>)</span></span></label>
+              {#if edit.hasEbv(recipe)}
+                <input class="naming" list="ebv-names" aria-label="Name of EBV" value={edit.ebvName(recipe)}
+                       onchange={(e) => set(edit.setEbvName(recipe!, e.currentTarget.value))} />
+                <datalist id="ebv-names">{#each edit.EBV_NAMES as x (x)}<option value={x}></option>{/each}</datalist>
+              {/if}
+            </div>
+            <div class="group">
+              <label class="check"><input type="checkbox" checked={edit.hasDecoys(recipe)} onchange={(e) => set(edit.setDecoys(recipe!, e.currentTarget.checked))} />
+                <span>hs38d1 decoys <span class="muted">({n(t.roleCounts.get(edit.HS38D1)?.get("unplaced-scaffold") ?? 0)})</span></span></label>
+              {#if edit.hasDecoys(recipe)}
+                {@const tpl = edit.groupTemplate(recipe, edit.HS38D1)}
+                <select class="naming" aria-label="Names of the decoys" value={tpl} onchange={(e) => set(edit.setGroupTemplate(recipe!, edit.HS38D1, e.currentTarget.value))}>
+                  {#each edit.DECOY_NAMING as x (x.template)}<option value={x.template}>{x.example}</option>{/each}
+                  {#if tpl && !edit.DECOY_NAMING.some((x) => x.template === tpl)}<option value={tpl}>{tpl} (JSON)</option>{/if}
+                </select>
+              {/if}
+            </div>
+            <div class="group">
+              <label class="check"><input type="checkbox" checked={groups.length > 0}
+                onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} />
+                <span>HLA alleles <span class="muted">(hs38DH's six genes; not hosted)</span></span></label>
+              {#if groups.length}
+                {@const tpl = edit.groupTemplate(recipe, edit.HLA)}
+                <select class="naming" aria-label="Names of the HLA alleles" value={tpl} onchange={(e) => set(edit.setGroupTemplate(recipe!, edit.HLA, e.currentTarget.value))}>
+                  {#each edit.HLA_NAMING as x (x.template)}<option value={x.template}>{x.example}</option>{/each}
+                  {#if tpl && !edit.HLA_NAMING.some((x) => x.template === tpl)}<option value={tpl}>{tpl} (JSON)</option>{/if}
+                </select>
+              {/if}
+            </div>
             {#if edit.hlaKind(recipe) === "custom"}
-              <p class="muted">This recipe has a custom set of {groups.length} HLA gene{groups.length === 1 ? "" : "s"}
-                ({groups.join(", ")}): edit it in the JSON below. Switching HLA off and on gives hs38DH's six.</p>
+              <p class="muted small">A custom set of {groups.length} HLA gene{groups.length === 1 ? "" : "s"} ({groups.join(", ")}): edit it in the JSON.
+                Switching HLA off and on gives hs38DH's six.</p>
             {/if}
-            {#if edit.others(recipe).length}<p class="muted">And {edit.others(recipe).length} more entries: edit them in the JSON below.</p>{/if}
+            {#if edit.others(recipe).length}<p class="muted small">And {edit.others(recipe).length} more entries: edit them in the JSON.</p>{/if}
           </fieldset>
+
           <fieldset>
             <legend>Bases</legend>
             <label class="check"><input type="checkbox" checked={edit.hasMask(recipe, "hardmask_grc")} onchange={(e) => set(edit.setMask(recipe!, "hardmask_grc", e.currentTarget.checked))} /> GRC hard-mask</label>
             <label class="check"><input type="checkbox" checked={!!recipe.alphabet} onchange={(e) => set(edit.setIupacToN(recipe!, e.currentTarget.checked))} /> IUPAC → N</label>
           </fieldset>
-          <fieldset>
-            <legend>Names</legend>
-            <label>Names
-              <select value={recipe.rename.namespace} onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
-                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns]}</option>{/each}
-              </select>
-            </label>
-            <label>Chromosomes
-              <select value={recipe.rename.by_role?.["assembled-molecule"] ?? ""} onchange={(e) => set(edit.setChromosomeNames(recipe!, e.currentTarget.value || null))}>
-                <option value="">the same</option>
-                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns].split(",")[0]})</option>{/each}
-              </select>
-            </label>
-          </fieldset>
         </div>
 
-        <div class="result">
-          {#if attempted.error}
-            <p class="bad compile-error">The recipe doesn't compile: {message(attempted.error)}</p>
-          {:else if attempted.d}
-            {@const d = attempted.d}
-            {@const total = d.rows.reduce((s, r) => s + r.length, 0)}
-            {#if d.equals}
-              <p class="verdict ok">This is <a href={href("flavor", d.equals)}>{d.equals}</a>.</p>
-            {:else}
-              {@const c = closest(d.rows as ManifestRow[], manifests)}
-              {@const kinds = Object.groupBy(c.diffs, (x) => x.kind)}
-              <p class="verdict">A flavor the catalog doesn't have. Closest: <a href={href("flavor", c.flavor)}>{c.flavor}</a>, with</p>
-              <ul class="plain">
-                {#each Object.entries(kinds) as [k, xs] (k)}
-                  <li>{n(xs!.length)} {KIND[k]}{#if xs!.length <= 3}: {xs!.map((x) => "name" in x ? x.name : "a" in x ? x.a.name : x.b.name).join(", ")}{/if}</li>
-                {/each}
-              </ul>
-            {/if}
-            <p><strong>{n(d.rows.length)} sequences</strong>, {bp(total)}</p>
-            <ul class="plain small">
-              {#each Object.entries(Object.groupBy(d.rows, (r) => ops(r.operations))) as [o, rs] (o)}
-                <li>{n(rs!.length)} {o}</li>
+        <div class="panel">
+          <div class="tabs" role="tablist">
+            {#each [["goals", "Goals"], ["json", "JSON"], ["details", "Details"], ["catalog", "Catalog"]] as [k, label] (k)}
+              <button type="button" role="tab" aria-selected={tab === k} class:here={tab === k} onclick={() => (tab = k as typeof tab)}>{label}</button>
+            {/each}
+          </div>
+
+          {#if tab === "goals"}
+            <p class="muted small">Choices commonly made for an analysis goal. Switch one on or off, and watch the choices follow.</p>
+            <ul class="guide">
+              {#each edit.GUIDE as g (g.goal)}
+                {@const on = g.has(recipe)}
+                <li>
+                  <label class="switch">
+                    <input type="checkbox" role="switch" checked={on} aria-checked={on}
+                           onchange={(e) => set(g.set(recipe!, e.currentTarget.checked, { hla: hlaAll }))} />
+                    <span class="goal">{g.goal}</span>
+                  </label>
+                  <span class="muted">{g.choice}</span>
+                </li>
               {/each}
             </ul>
-            {#if d.novel.length}
-              <p class="bad">{n(d.novel.length)} sequences the catalog has never built, so their digests need their bases:
-                {d.novel.slice(0, 5).map((r) => `${r.name} (${r.root_id} ${ops(r.operations)})`).join(", ")}{d.novel.length > 5 ? ", …" : ""}</p>
-            {:else}
-              <dl class="ids">
-                <dt>Flavor ID</dt><dd><Digest value={d.id!} /></dd>
-                <dt>Seqcol digest</dt><dd><Digest value={d.seqcolDigest!} /><div class="muted">in canonical order (by name)</div></dd>
-              </dl>
-            {/if}
-            <div class="exports">
-              <button type="button" onclick={() => download("recipe.json", JSON.stringify(recipe, null, 2), "application/json")}>recipe</button>
-              {#if !d.novel.length}
-                {@const rows = d.rows as ManifestRow[]}
-                <button type="button" onclick={() => download("design.chrom.sizes", chromSizes(rows))}>chrom.sizes</button>
-                <button type="button" onclick={() => download("design.dict", sequenceDictionary(rows))}>.dict (with MD5)</button>
-                <button type="button" onclick={() => download("design.seqcol.json", JSON.stringify(rb.seqcolLevel2(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u)), null, 1), "application/json")}>seqcol (level 2)</button>
+          {:else if tab === "json"}
+            <p class="muted small">The recipe, in full. Edit it for anything the choices don't show.</p>
+            <textarea class="paste" rows="24" spellcheck="false" aria-label="Recipe JSON" value={jsonText}
+                      oninput={(e) => fromJson(e.currentTarget.value)}></textarea>
+            {#if jsonError}<p class="bad">Not JSON: {jsonError}</p>{/if}
+          {:else if tab === "details"}
+            {#if attempted.error}
+              <p class="bad">The recipe doesn't compile: {message(attempted.error)}</p>
+            {:else if attempted.d}
+              {@const d = attempted.d}
+              <h3>Sequences</h3>
+              <ul class="plain">
+                {#each Object.entries(Object.groupBy(d.rows, (r) => ops(r.operations))) as [o, rs] (o)}<li>{n(rs!.length)} {o}</li>{/each}
+              </ul>
+              {#if d.novel.length}
+                <p class="bad">{n(d.novel.length)} sequences the catalog has never built, so their digests need their bases:
+                  {d.novel.slice(0, 5).map((r) => `${r.name} (${r.root_id} ${ops(r.operations)})`).join(", ")}{d.novel.length > 5 ? ", …" : ""}</p>
+              {:else}
+                <dl class="ids">
+                  <dt>Flavor ID</dt><dd><Digest value={d.id!} /></dd>
+                  <dt>Seqcol digest</dt><dd><Digest value={d.seqcolDigest!} /><div class="muted">in canonical order (by name)</div></dd>
+                </dl>
               {/if}
-              <button type="button" onclick={() => navigator.clipboard?.writeText(location.href)}>copy link</button>
-            </div>
+              {#if ranks && !d.equals}
+                <h3>What differs from {ranks[0].flavor}</h3>
+                <ul class="plain">
+                  {#each Object.entries(Object.groupBy(ranks[0].diffs, (x) => x.kind)) as [k, xs] (k)}
+                    <li>{n(xs!.length)} {KIND[k]}{#if xs!.length <= 5}: {xs!.map(nameOf).join(", ")}{/if}</li>
+                  {/each}
+                </ul>
+              {/if}
+            {/if}
+          {:else}
+            <p class="muted small">The catalog's flavors, closest to your recipe first. Load one to start from its recipe.</p>
+            <p><button type="button" onclick={() => loadFlavor(null)}>A new recipe (GRCh38 chromosomes)</button></p>
+            <input type="search" class="filter" placeholder="Filter flavors" aria-label="Filter flavors" bind:value={catalogFilter} />
+            <ul class="plain catalog-list">
+              {#each (ranks ?? fs.map((f) => ({ flavor: f.flavor, diffs: null }))).filter((x) => x.flavor.includes(catalogFilter.trim())) as x (x.flavor)}
+                {@const f = fs.find((y) => y.flavor === x.flavor)!}
+                <li>
+                  <span><a href={href("flavor", x.flavor)}>{x.flavor}</a> <span class="muted">{n(f.n_sequences)} sequences</span></span>
+                  <span class="muted">{x.diffs === null ? "" : x.diffs.length ? `${n(x.diffs.length)} differ` : "the same"}</span>
+                  <button type="button" onclick={() => loadFlavor(f)}>Load</button>
+                </li>
+              {/each}
+            </ul>
           {/if}
         </div>
       </div>
-
-      <h2>Guide</h2>
-      <p class="muted">Choices commonly made for an analysis goal. Switch one on or off; the form and the recipe follow.</p>
-      <ul class="guide">
-        {#each edit.GUIDE as g (g.goal)}
-          {@const on = g.has(recipe)}
-          <li>
-            <label class="switch">
-              <input type="checkbox" role="switch" checked={on} aria-checked={on}
-                     onchange={(e) => set(g.set(recipe!, e.currentTarget.checked, { hla: hlaAll }))} />
-              <span class="goal">{g.goal}</span>
-            </label>
-            <span class="muted">{g.choice}</span>
-          </li>
-        {/each}
-      </ul>
-
-      <h2>Recipe</h2>
-      <p class="muted">The recipe the form edits, in full. Edit it here for anything the form doesn't show.</p>
-      <textarea class="paste" rows="14" spellcheck="false" aria-label="Recipe JSON" value={jsonText}
-                oninput={(e) => fromJson(e.currentTarget.value)}></textarea>
-      {#if jsonError}<p class="bad">Not JSON: {jsonError}</p>{/if}
     {/if}
   {:catch e}
     <ErrorBox error={e} />

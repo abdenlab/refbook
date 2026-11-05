@@ -198,6 +198,29 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, all))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
   const hg38p14 = JSON.parse(fs.find((f) => f.flavor === "hg38-p14")!.recipe);
   assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
+  // Naming per group: EBV, decoys and HLA always get a rule, so any default namespace compiles.
+  for (const ns of edit.NAMESPACES) {
+    let x = edit.setNamespace(edit.fromScratch(), ns);
+    x = edit.setHla(edit.setDecoys(edit.setEbv(x, true), true), edit.HLA_TYPING_GROUPS, all.hla);
+    const d = design(x, t, fs);
+    assert.ok(d.rows.some((r) => r.name === (ns === "ucsc" ? "chrEBV" : edit.EBV)), ns);
+    assert.ok(d.rows.some((r) => r.name === (ns === "ucsc" ? "chrUn_JTFH01000001v1_decoy" : "JTFH01000001.1")), ns);
+    assert.ok(d.rows.some((r) => r.name === "HLA-A*01:01:01:01"), ns);
+  }
+  let named = edit.setRoleNames(dh, "unplaced-scaffold", "genbank");
+  assert.equal(edit.roleNamespace(named, "unplaced-scaffold"), "genbank");
+  assert.equal(edit.roleNamespace(named, "assembled-molecule"), "ucsc");
+  assert.ok(design(named, t, fs).rows.some((r) => r.name === "KI270302.1"));
+  assert.ok(design(named, t, fs).rows.some((r) => r.name === "chrUn_JTFH01000001v1_decoy"));   // the decoys keep their template
+  named = edit.setRoleNames(named, "unplaced-scaffold", "ucsc");
+  assert.equal(named.rename.by_role, undefined);   // the default again: no by_role
+  named = edit.setGroupTemplate(edit.setEbvName(dh, "EBV"), edit.HLA, "{name}");
+  assert.ok(design(named, t, fs).rows.some((r) => r.name === "EBV"));
+  assert.ok(design(named, t, fs).rows.some((r) => r.name === "A*01:01:01:01"));
+  assert.deepEqual([edit.releaseLabel("GRCh38", false), edit.releaseLabel("GRCh38.p14", true), edit.releaseLabel("GRCh38.p3", false)],
+    ["p0 (the original release, no patches)", "p14 (latest)", "p3"]);
+  assert.equal(t.roleCounts.get("GCA_000001405.15")!.get("fix-patch") ?? 0, 0);
+  assert.equal(t.roleCounts.get("GCA_000001405.29")!.get("fix-patch"), 164);
   // Filters: leaving out patches placed on scaffolds is Ensembl's toplevel recipe; on again, back to all.
   const top = JSON.parse(fs.find((f) => f.flavor === "ensembl-grch38-toplevel")!.recipe);
   assert.deepEqual(edit.placedOn(top), ["chromosome"]);

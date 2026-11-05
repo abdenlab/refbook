@@ -30,6 +30,8 @@ export interface DesignTables {
   collections: Map<string, string[]>;
   /** The mask layers there are. */
   layers: string[];
+  /** Assembly accession -> role -> how many sequences it has. */
+  roleCounts: Map<string, Map<string, number>>;
 }
 
 const key = (root: string, ops: string[]) => [root, ...ops].join(" ");
@@ -62,6 +64,12 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       external: ext.map((e) => ({ root_id: e.root_id, collection: e.collection, group: e.group, name: e.name })),
       placements: placements.map((p) => ({ root_id: p.root_id, parent_type: p.parent_type })),
     });
+    const roleCounts = new Map<string, Map<string, number>>();
+    for (const m of members) {
+      const c = roleCounts.get(m.assembly_accession) ?? new Map<string, number>();
+      c.set(m.role, (c.get(m.role) ?? 0) + 1);
+      roleCounts.set(m.assembly_accession, c);
+    }
     const collections = new Map<string, string[]>();
     for (const e of ext) {
       const g = collections.get(e.collection) ?? [];
@@ -69,7 +77,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       collections.set(e.collection, g);
     }
     return {
-      compiler, rootLength, collections, layers: ["hardmask_grc"],
+      compiler, rootLength, collections, roleCounts, layers: ["hardmask_grc"],
       derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
       assemblies: new Map(members.map((m) => [m.assembly_accession, m.assembly_name])),
     };

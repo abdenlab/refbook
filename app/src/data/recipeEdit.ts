@@ -97,15 +97,45 @@ export function hlaKind(r: Recipe): "none" | "typing" | "custom" {
   return g.length === HLA_TYPING_GROUPS.length && HLA_TYPING_GROUPS.every((x) => g.includes(x)) ? "typing" : "custom";
 }
 
+/** EBV is in no assembly report, so it has no name in any namespace: a recipe names it. */
+export const EBV_NAMES = ["chrEBV", EBV];
+
 export function setEbv(r: Recipe, on: boolean): Recipe {
   const out = clone(r);
   out.select = out.select.filter((e) => !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV));
   if (out.rename.map) delete out.rename.map[EBV];
   if (on) {
     out.select.push({ roots: [EBV] });
-    if (out.rename.namespace === "ucsc") out.rename.map = { ...out.rename.map, [EBV]: "chrEBV" };
+    out.rename.map = { ...out.rename.map, [EBV]: out.rename.namespace === "ucsc" ? "chrEBV" : EBV };
   }
   if (out.rename.map && !Object.keys(out.rename.map).length) delete out.rename.map;
+  return out;
+}
+
+export const ebvName = (r: Recipe) => r.rename.map?.[EBV] ?? "";
+
+export function setEbvName(r: Recipe, name: string): Recipe {
+  const out = clone(r);
+  out.rename.map = { ...out.rename.map, [EBV]: name.trim() || EBV };
+  return out;
+}
+
+/** How the decoys and HLA alleles can be named: the decoys have no UCSC or RefSeq
+ * names and the alleles none in any namespace, so a recipe names them by template. */
+export const DECOY_NAMING = [
+  { template: "chrUn_{accession_v}_decoy", example: "chrUn_JTFH01000001v1_decoy" },
+  { template: "{accession}", example: "JTFH01000001.1" },
+];
+export const HLA_NAMING = [
+  { template: "HLA-{name}", example: "HLA-A*01:01:01:01" },
+  { template: "{name}", example: "A*01:01:01:01" },
+];
+
+export const groupTemplate = (r: Recipe, group: string) => r.rename.template?.[group] ?? "";
+
+export function setGroupTemplate(r: Recipe, group: string, template: string): Recipe {
+  const out = clone(r);
+  out.rename.template = { ...out.rename.template, [group]: template };
   return out;
 }
 
@@ -115,7 +145,8 @@ export function setDecoys(r: Recipe, on: boolean): Recipe {
   if (out.rename.template) delete out.rename.template[HS38D1];
   if (on) {
     out.select.push({ assembly: HS38D1, roles: ["unplaced-scaffold"] });
-    if (out.rename.namespace === "ucsc") out.rename.template = { ...out.rename.template, [HS38D1]: "chrUn_{accession_v}_decoy" };
+    out.rename.template = { ...out.rename.template,
+      [HS38D1]: out.rename.namespace === "ucsc" ? DECOY_NAMING[0].template : DECOY_NAMING[1].template };
   }
   if (out.rename.template && !Object.keys(out.rename.template).length) delete out.rename.template;
   return out;
@@ -156,14 +187,28 @@ export function setNamespace(r: Recipe, namespace: string): Recipe {
   return out;
 }
 
-/** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
-export function setChromosomeNames(r: Recipe, namespace: string | null): Recipe {
+/** The namespace a role's sequences are named in: its own, or the default. */
+export const roleNamespace = (r: Recipe, role: string) => r.rename.by_role?.[role] ?? r.rename.namespace;
+
+/** Name a role's sequences in a namespace (null, or the default's: by the default). */
+export function setRoleNames(r: Recipe, role: string, namespace: string | null): Recipe {
   const out = clone(r);
   const by = { ...out.rename.by_role };
-  if (namespace && namespace !== out.rename.namespace) by["assembled-molecule"] = namespace;
-  else delete by["assembled-molecule"];
+  if (namespace && namespace !== out.rename.namespace) by[role] = namespace;
+  else delete by[role];
   if (Object.keys(by).length) out.rename.by_role = by; else delete out.rename.by_role;
   return out;
+}
+
+/** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
+export const setChromosomeNames = (r: Recipe, namespace: string | null) => setRoleNames(r, "assembled-molecule", namespace);
+
+/** A release's name in the form: p0 is GRCh38 itself, with no patches. */
+export function releaseLabel(name: string, latest: boolean): string {
+  const m = /^GRCh38(?:\.p(\d+))?$/.exec(name);
+  if (!m) return name;
+  if (!m[1]) return "p0 (the original release, no patches)";
+  return `p${m[1]}${latest ? " (latest)" : ""}`;
 }
 
 /** The guide: analysis goals, and the choices commonly made for them, each a
