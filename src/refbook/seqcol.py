@@ -3,9 +3,9 @@
 From the spec (github.com/ga4gh/refget, docs/seqcols/README.md): canonicalize
 each attribute with RFC-8785, digest it with sha512t24u; the top-level digest
 covers the inherent attributes, names and sequences.
-"""
 
-import json
+Implemented in the Rust core (refbook._core, crates/refbook-core/src/seqcol.rs).
+"""
 
 from refbook import _core
 
@@ -13,9 +13,8 @@ INHERENT = ("names", "sequences")
 
 
 def canonical(item) -> bytes:
-    """RFC-8785 for our data: ASCII keys, no floats, integers within 64 bits."""
-    return json.dumps(item, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
-                      sort_keys=True).encode("utf8")
+    """RFC-8785 canonical JSON of a value made of strings, integers, lists and dicts."""
+    return _core.canonical_json(item).encode("utf8")
 
 
 def sha512t24u(data: bytes) -> str:
@@ -24,14 +23,12 @@ def sha512t24u(data: bytes) -> str:
 
 def level1(value) -> str:
     """The level-1 digest of an attribute's level-2 value."""
-    return sha512t24u(canonical(value))
+    return _core.level1(value)
 
 
 def digests(names: list[str], lengths: list[int], sequences: list[str]) -> tuple[str, dict]:
     """(top-level digest, level-1 digests) of a collection; sequences are SQ. ids."""
-    obj = {"lengths": lengths, "names": names, "sequences": sequences}
-    level1s = {k: level1(v) for k, v in obj.items()}
-    return sha512t24u(canonical({k: level1s[k] for k in INHERENT})), level1s
+    return _core.seqcol_digests(names, lengths, sequences)
 
 
 def ancillary(names: list[str], lengths: list[int], sequences: list[str]) -> dict:
@@ -43,16 +40,10 @@ def ancillary(names: list[str], lengths: list[int], sequences: list[str]) -> dic
     refbook's: those digests sorted, as 5.2 sorts name-length pairs. Its
     level-1 digest identifies the named sequence set, whatever the order.
     """
-    pairs = [{"name": n, "length": n_bp} for n, n_bp in zip(names, lengths)]
-    named = [level1({"name": n, "sequence": s}) for n, s in zip(names, sequences)]
-    return {"name_length_pairs": pairs,
-            "sorted_name_length_pairs": sorted(level1(p) for p in pairs),
-            "sorted_sequences": sorted(sequences),
-            "named_sequences": named,
-            "sorted_named_sequences": sorted(named)}
+    return _core.seqcol_ancillary(names, lengths, sequences)
 
 
 def named_set_digest(names: list[str], sequences: list[str]) -> str:
     """The order-independent identifier of a named sequence set: the level-1
     digest of sorted_named_sequences."""
-    return level1(sorted(level1({"name": n, "sequence": s}) for n, s in zip(names, sequences)))
+    return _core.named_set_digest(names, sequences)

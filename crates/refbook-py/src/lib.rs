@@ -3,7 +3,9 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString, PyTuple};
 use refbook_core::refget;
+use refbook_core::seqcol::{self, Json};
 
 fn non_canonical(e: refget::NonCanonicalBase) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -58,6 +60,92 @@ fn scan<'py>(py: Python<'py>, seq: &[u8]) -> PyResult<Bound<'py, pyo3::types::Py
     Ok(d)
 }
 
+fn to_json(obj: &Bound<'_, PyAny>) -> PyResult<Json> {
+    if obj.is_instance_of::<PyString>() {
+        Ok(Json::Str(obj.extract()?))
+    } else if obj.is_instance_of::<PyBool>() {
+        Err(PyValueError::new_err(
+            "booleans are not part of seqcol's JSON",
+        ))
+    } else if obj.is_instance_of::<PyInt>() {
+        Ok(Json::Int(obj.extract()?))
+    } else if obj.is_instance_of::<PyList>() || obj.is_instance_of::<PyTuple>() {
+        obj.try_iter()?
+            .map(|item| to_json(&item?))
+            .collect::<PyResult<_>>()
+            .map(Json::Arr)
+    } else if obj.is_instance_of::<PyDict>() {
+        let d: Bound<'_, PyDict> = obj.extract()?;
+        d.iter()
+            .map(|(k, v)| Ok((k.extract::<String>()?, to_json(&v)?)))
+            .collect::<PyResult<_>>()
+            .map(Json::Obj)
+    } else {
+        Err(PyValueError::new_err(format!(
+            "not a seqcol JSON value: {obj}"
+        )))
+    }
+}
+
+/// RFC-8785 canonical JSON of a value made of strings, integers, lists and dicts.
+#[pyfunction]
+fn canonical_json(obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(seqcol::canonical(&to_json(obj)?))
+}
+
+/// The level-1 digest of an attribute's level-2 value.
+#[pyfunction]
+fn level1(obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(seqcol::level1(&to_json(obj)?))
+}
+
+/// (top-level digest, level-1 digests of names, lengths and sequences).
+#[pyfunction]
+fn seqcol_digests<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    lengths: Vec<i64>,
+    sequences: Vec<String>,
+) -> PyResult<(String, Bound<'py, PyDict>)> {
+    let (top, l1) = py.detach(|| seqcol::digests(&names, &lengths, &sequences));
+    let d = PyDict::new(py);
+    d.set_item("lengths", l1.lengths)?;
+    d.set_item("names", l1.names)?;
+    d.set_item("sequences", l1.sequences)?;
+    Ok((top, d))
+}
+
+/// Level-2 values of the ancillary attributes, by name.
+#[pyfunction]
+fn seqcol_ancillary<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    lengths: Vec<i64>,
+    sequences: Vec<String>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let a = py.detach(|| seqcol::ancillary(&names, &lengths, &sequences));
+    let pairs = PyList::empty(py);
+    for (name, length) in a.name_length_pairs {
+        let p = PyDict::new(py);
+        p.set_item("name", name)?;
+        p.set_item("length", length)?;
+        pairs.append(p)?;
+    }
+    let d = PyDict::new(py);
+    d.set_item("name_length_pairs", pairs)?;
+    d.set_item("sorted_name_length_pairs", a.sorted_name_length_pairs)?;
+    d.set_item("sorted_sequences", a.sorted_sequences)?;
+    d.set_item("named_sequences", a.named_sequences)?;
+    d.set_item("sorted_named_sequences", a.sorted_named_sequences)?;
+    Ok(d)
+}
+
+/// The order-independent identifier of a named sequence set.
+#[pyfunction]
+fn named_set_digest(py: Python<'_>, names: Vec<String>, sequences: Vec<String>) -> String {
+    py.detach(|| seqcol::named_set_digest(&names, &sequences))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(canonical_bases, m)?)?;
@@ -65,5 +153,14 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(digests, m)?)?;
     m.add_function(wrap_pyfunction!(sha512t24u, m)?)?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
+    for f in [
+        wrap_pyfunction!(canonical_json, m)?,
+        wrap_pyfunction!(level1, m)?,
+        wrap_pyfunction!(seqcol_digests, m)?,
+        wrap_pyfunction!(seqcol_ancillary, m)?,
+        wrap_pyfunction!(named_set_digest, m)?,
+    ] {
+        m.add_function(f)?;
+    }
     Ok(())
 }

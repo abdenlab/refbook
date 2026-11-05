@@ -81,3 +81,50 @@ def test_every_root_digest():
     assert len(roots) == 3097
     for r in roots:
         assert _core.digests(bytes(bases.get(r["root_id"]))) == (r["md5"], r["sha512t24u"]), r["root_id"]
+
+
+# seqcol
+
+def reference_canonical_json(item) -> str:
+    import json
+    return json.dumps(item, separators=(",", ":"), ensure_ascii=False, allow_nan=False, sort_keys=True)
+
+
+def random_strings(n: int, seed: int = 3):
+    rng = random.Random(seed)
+    pool = [chr(c) for c in range(0, 0x80)] + ["é", "ß", "中", "😀", " ", "﻿", "\\", '"']
+    for _ in range(n):
+        yield "".join(rng.choice(pool) for _ in range(rng.randrange(0, 20)))
+
+
+def test_canonical_json_agrees_with_pythons_json():
+    rng = random.Random(9)
+    strings = list(random_strings(3000))
+    for i in range(0, len(strings), 7):
+        chunk = strings[i:i + 7]
+        assert _core.canonical_json(chunk) == reference_canonical_json(chunk)
+        ints = [rng.randrange(-2**63, 2**63) for _ in range(5)]
+        assert _core.canonical_json(ints) == reference_canonical_json(ints)
+        obj = [{"name": s, "length": n} for s, n in zip(chunk, ints)]
+        assert _core.canonical_json(obj) == reference_canonical_json(obj)
+    with pytest.raises(ValueError):
+        _core.canonical_json([True])
+
+
+@needs_build
+def test_every_stored_collection():
+    """Every collection the build stores: its name is its top-level digest, and its
+    ancillary attributes are those the core computes."""
+    import json
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
+    import layout
+    files = sorted(layout.path(BUILD, "collections").glob("*.json"))
+    assert len(files) == 26
+    for f in files:
+        doc = json.loads(f.read_text())
+        names, lengths, sqs = doc["names"], doc["lengths"], doc["sequences"]
+        top, _ = _core.seqcol_digests(names, lengths, sqs)
+        assert top == f.stem
+        anc = _core.seqcol_ancillary(names, lengths, sqs)
+        assert anc == {k: doc[k] for k in anc}, f.name
