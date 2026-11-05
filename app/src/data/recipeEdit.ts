@@ -12,7 +12,14 @@ export const HLA_TYPING_GROUPS = ["A", "B", "C", "DQA", "DQB", "DRB1"];   // hs3
 export const ROLES = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "fix-patch", "novel-patch"];
 /** The roles in the form's order: novel patches (alternate loci) next to the alts. */
 export const ROLES_SHOWN = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "novel-patch", "fix-patch"];
-export const NAMESPACES = ["ucsc", "sequence", "genbank", "refseq"];
+export const NAMESPACES = ["ucsc", "grc", "genbank", "refseq"];
+/** Each namespace as the form shows it, with examples (a chromosome, an unlocalized scaffold). */
+export const NAMESPACE_LABELS: Record<string, string> = {
+  ucsc: "UCSC (chr1, chr1_KI270706v1_random)",
+  grc: "GRC (1, HSCHR1_CTG1_UNLOCALIZED)",
+  genbank: "GenBank (CM000663.2, KI270706.1)",
+  refseq: "RefSeq (NC_000001.11, NT_187361.1)",
+};
 
 type Assembly = Extract<SelectEntry, { assembly: string }>;
 const isAssembly = (e: SelectEntry): e is Assembly => "assembly" in e;
@@ -149,7 +156,7 @@ export function setNamespace(r: Recipe, namespace: string): Recipe {
   return out;
 }
 
-/** The chromosomes' names, if not the default namespace's (Ensembl names them "1", GENCODE "chr1"). */
+/** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
 export function setChromosomeNames(r: Recipe, namespace: string | null): Recipe {
   const out = clone(r);
   const by = { ...out.rename.by_role };

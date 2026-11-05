@@ -250,7 +250,7 @@ def test_select_errors():
 
 
 def test_name_of_precedence():
-    rename = {"namespace": "ucsc", "by_role": {"assembled-molecule": "sequence"},
+    rename = {"namespace": "ucsc", "by_role": {"assembled-molecule": "grc"},
               "map": {"U1.1": "mapped"}, "template": {"GCA_1.1": "t_{accession_v}"}}
     s = {"root_id": "C1.1", "assembly": "GCA_1.1", "member": MEMBERS[0]}
     assert reference_engine.name_of({**s, "root_id": "U1.1"}, rename) == "mapped"       # map first

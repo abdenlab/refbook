@@ -20,7 +20,7 @@
       "rename": {
         "namespace": "genbank",
         "by_role": {
-          "assembled-molecule": "sequence"
+          "assembled-molecule": "grc"
         }
       }
     },
@@ -49,10 +49,10 @@
       "rename": {
         "namespace": "genbank",
         "by_role": {
-          "assembled-molecule": "sequence",
-          "alt-scaffold": "sequence",
-          "fix-patch": "sequence",
-          "novel-patch": "sequence"
+          "assembled-molecule": "grc",
+          "alt-scaffold": "grc",
+          "fix-patch": "grc",
+          "novel-patch": "grc"
         }
       }
     }

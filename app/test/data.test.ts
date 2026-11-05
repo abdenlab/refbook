@@ -147,6 +147,9 @@ test("every flavor's recipe, compiled in the browser, is that flavor", { skip },
   }
   const r = plainRecipe(JSON.parse(fs[0].recipe));
   assert.deepEqual(decodeRecipe(encodeRecipe(r)), r);
+  const old = { ...r, rename: { namespace: "genbank", by_role: { "assembled-molecule": "sequence" } } };
+  assert.deepEqual(decodeRecipe(encodeRecipe(old)).rename, { namespace: "genbank", by_role: { "assembled-molecule": "grc" } });
+  assert.deepEqual(design(old, t, fs).rows, design(decodeRecipe(encodeRecipe(old)), t, fs).rows);
   assert.throws(() => design({ ...r, mask: [{ layer: "nope", with: "N" }] }, t, fs), /nope/);
 });
 
@@ -180,7 +183,7 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   // Ensembl's names: GenBank by default, its own for chromosomes; IUPAC -> N.
   let e = edit.setNamespace(edit.setRelease(edit.fromScratch(), "GCA_000001405.29"), "genbank");
   for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) e = edit.setRole(e, role, true);
-  e = edit.setChromosomeNames(edit.setIupacToN(e, true), "sequence");
+  e = edit.setChromosomeNames(edit.setIupacToN(e, true), "grc");
   assert.equal(is(e), "ensembl-grch38-primary");
   assert.deepEqual(edit.others(dh), []);
   // Every goal toggles: on adds it, off takes it away, each the other's inverse here.

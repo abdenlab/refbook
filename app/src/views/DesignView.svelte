@@ -5,7 +5,7 @@
   // exports, and a link that carries the recipe.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
-  import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe, type Recipe } from "../data/design.ts";
+  import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, sequenceDictionary } from "../data/exports.ts";
   import { flavors, manifest, OPERATION_LABELS, type Flavor, type ManifestRow } from "../data/flavors.ts";
   import { pairs } from "../data/identify.ts";
@@ -48,7 +48,8 @@
   function fromJson(text: string) {
     jsonText = text;
     try {
-      recipe = JSON.parse(text);
+      const parsed: Recipe = JSON.parse(text);
+      recipe = parsed?.rename ? { ...parsed, rename: grcNames(parsed.rename) } : parsed;
       jsonError = null;
       history.replaceState(null, "", `#/design?r=${encodeRecipe(recipe!)}`);
     } catch (e) {
@@ -170,13 +171,13 @@
             <legend>Names</legend>
             <label>Names
               <select value={recipe.rename.namespace} onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
-                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{ns}</option>{/each}
+                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns]}</option>{/each}
               </select>
             </label>
             <label>Chromosomes
               <select value={recipe.rename.by_role?.["assembled-molecule"] ?? ""} onchange={(e) => set(edit.setChromosomeNames(recipe!, e.currentTarget.value || null))}>
                 <option value="">the same</option>
-                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{ns}</option>{/each}
+                {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns].split(",")[0]})</option>{/each}
               </select>
             </label>
           </fieldset>

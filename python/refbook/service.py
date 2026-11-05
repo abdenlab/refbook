@@ -18,7 +18,12 @@ Sequence Collections v1 (docs/seqcols/README.md)
     GET  /attribute/collection/:attribute/:digest
     GET  /openapi.json                 this API (seqcol 3.6)
 
-:id is any identifier `refbook.store.find` accepts. The collections are the
+:id is any identifier `refbook.store.find` accepts. Naming authorities
+(service-info's identifier_types) are those of sequence_aliases.parquet:
+`insdc`, `refseq`, `ensembl` (identifiers.org prefixes, and in refget's
+recommended list), `imgt.hla` (an identifiers.org prefix), `ucsc` (in refget's
+list, not at identifiers.org) and `grc` (refbook's, for GRC Sequence-Names
+such as `1` or `HSCHR1_CTG1_UNLOCALIZED`). The collections are the
 catalog's stored ones (every flavor and target), plus any level-2 collections
 passed as `extra` (for instance the compliance suite's test collections). The
 sequences are the catalog's, plus any passed as `sequences`, test sequences

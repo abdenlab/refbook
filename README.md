@@ -135,7 +135,10 @@ seqcol.compare(resolve(cat, "grch38-no-alt", 2), resolve(cat, "hg38-analysis-set
 Collections v1 (`refbook.service`). A sequence can be named by MD5, `SQ.`
 digest or a namespaced alias (`insdc:CM000663.2`); an alias that names several
 sequences, such as `ucsc:chr1` (the root and its IUPAC→N derivative), answers
-300 with the list. Metadata adds refbook's account under `refbook`: the root,
+300 with the list. Naming authorities are refget's recommended `insdc`,
+`refseq`, `ensembl` and `ucsc`, plus `imgt.hla` and refbook's `grc` (GRC
+Sequence-Names, e.g. `grc:HSCHR1_CTG1_UNLOCALIZED`); of these, `insdc`,
+`refseq`, `ensembl` and `imgt.hla` are identifiers.org prefixes. Metadata adds refbook's account under `refbook`: the root,
 the nucleotide operations from it, and the flavors that use the sequence.
 Collections are served with refbook's seqcol schema: the spec's extended
 schema plus `named_sequences` and `sorted_named_sequences`. Against the seqcol

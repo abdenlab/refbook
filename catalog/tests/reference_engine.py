@@ -66,7 +66,7 @@ def name_of(s: dict, rename: dict) -> str:
 
 
 # Recipe namespace -> assembly_members column.
-NAMESPACES = {"ucsc": "ucsc_name", "sequence": "sequence_name",
+NAMESPACES = {"ucsc": "ucsc_name", "sequence": "sequence_name", "grc": "sequence_name",
               "genbank": "genbank_accession", "refseq": "refseq_accession"}
 
 

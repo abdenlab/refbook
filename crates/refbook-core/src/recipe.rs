@@ -98,12 +98,15 @@ impl fmt::Display for RecipeError {
 
 impl std::error::Error for RecipeError {}
 
-/// A name column of assembly_members.
+/// A name column of assembly_members: UCSC names, GRC's Sequence-Names
+/// (`grc`; `sequence`, the report column's name, is accepted too), GenBank
+/// and RefSeq accessions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Namespace {
     Ucsc,
-    Sequence,
+    #[serde(alias = "sequence")]
+    Grc,
     Genbank,
     Refseq,
 }
@@ -112,7 +115,7 @@ impl fmt::Display for Namespace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Namespace::Ucsc => "ucsc",
-            Namespace::Sequence => "sequence",
+            Namespace::Grc => "grc",
             Namespace::Genbank => "genbank",
             Namespace::Refseq => "refseq",
         })
@@ -257,7 +260,7 @@ impl Member {
     fn name(&self, ns: Namespace) -> Option<&str> {
         match ns {
             Namespace::Ucsc => self.ucsc_name.as_deref(),
-            Namespace::Sequence => self.sequence_name.as_deref(),
+            Namespace::Grc => self.sequence_name.as_deref(),
             Namespace::Genbank => Some(self.accession.as_str()),
             Namespace::Refseq => self.refseq_accession.as_deref(),
         }
@@ -599,7 +602,7 @@ mod tests {
                 "unlocalized-scaffold", "unplaced-scaffold"]}, {"roots": ["EBV.1"]},
                 {"collection": "HLA", "groups": ["A"]}],
             "mask": [{"layer": "hardmask_x", "with": "N"}], "alphabet": {"iupac": "N"},
-            "rename": {"namespace": "ucsc", "by_role": {"assembled-molecule": "sequence"},
+            "rename": {"namespace": "ucsc", "by_role": {"assembled-molecule": "grc"},
                 "map": {"U1.1": "mapped", "EBV.1": "chrEBV"},
                 "template": {"HLA": "HLA-{name}"}}}"#,
         );
@@ -611,7 +614,7 @@ mod tests {
             r#"{"select": [{"assembly": "GCA_1.1", "roles": ["assembled-molecule",
                 "unlocalized-scaffold", "unplaced-scaffold"]}, {"roots": ["EBV.1"]}],
             "mask": [{"layer": "hardmask_x", "with": "N"}], "alphabet": {"iupac": "N"},
-            "rename": {"namespace": "ucsc", "by_role": {"assembled-molecule": "sequence"},
+            "rename": {"namespace": "ucsc", "by_role": {"assembled-molecule": "grc"},
                 "map": {"U1.1": "mapped", "EBV.1": "chrEBV"},
                 "template": {"GCA_1.1": "t_{accession_v}"}}}"#,
         )
@@ -697,5 +700,16 @@ mod tests {
         for bad in ["{nope}", "{accession", "}", "{name}"] {
             assert!(fill_template(bad, "K.1", None).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn sequence_is_still_the_grc_namespace() {
+        let r = Recipe::from_json(
+            r#"{"select": [{"assembly": "A", "roles": ["assembled-molecule"]}],
+                "rename": {"namespace": "sequence"}}"#,
+        )
+        .unwrap();
+        assert_eq!(r.rename.namespace, Namespace::Grc);
+        assert_eq!(r.rename.namespace.to_string(), "grc");
     }
 }

@@ -113,9 +113,17 @@ export function design(recipe: Recipe, t: DesignTables, flavors: Flavor[]): Desi
 export const asManifest = (rows: DesignRow[]): ManifestRow[] =>
   rows.map((r) => ({ ...r, md5: r.md5!, sha512t24u: r.sha512t24u! }));
 
+/** GRC's Sequence-Names were the `sequence` namespace before they were `grc`; the compiler takes both. */
+export function grcNames(rename: Recipe["rename"]): Recipe["rename"] {
+  const g = (ns: string) => (ns === "sequence" ? "grc" : ns);
+  const out = { ...rename, namespace: g(rename.namespace) };
+  if (rename.by_role) out.by_role = Object.fromEntries(Object.entries(rename.by_role).map(([k, v]) => [k, g(v)]));
+  return out;
+}
+
 /** The recipe without metadata (flavor, published, ...): only what the compiler reads. */
 export function plainRecipe(r: Recipe & Record<string, unknown>): Recipe {
-  const out: Recipe = { select: r.select, rename: r.rename };
+  const out: Recipe = { select: r.select, rename: grcNames(r.rename) };
   if (r.mask?.length) out.mask = r.mask;
   if (r.alphabet) out.alphabet = r.alphabet;
   return out;
@@ -126,6 +134,7 @@ export const encodeRecipe = (r: Recipe) =>
   btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(r)))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 export function decodeRecipe(s: string): Recipe {
   const b = atob(s.replaceAll("-", "+").replaceAll("_", "/"));
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(b, (c) => c.charCodeAt(0))));
+  const r: Recipe = JSON.parse(new TextDecoder().decode(Uint8Array.from(b, (c) => c.charCodeAt(0))));
+  return { ...r, rename: grcNames(r.rename) };
 }
 
