@@ -46,6 +46,7 @@ def test_parse_formats(tmp_path):
     assert [(e.name, e.length) for e in fa.entries] == [("chr1", 8), ("chr2", 3)]
     assert fa.entries[0].md5 == hashlib.md5(b"ACGTNNNA").hexdigest()  # uppercased, lines joined
     assert fa.entries[1].md5 == hashlib.md5(b"RYA").hexdigest()        # IUPAC codes kept
+    assert [e.sq for e in fa.entries] == ["SQ." + seqcol.sha512t24u(b) for b in (b"ACGTNNNA", b"RYA")]
 
 
 def test_parse_bam_binary_reference_list(tmp_path):
@@ -86,6 +87,45 @@ def rows(cat, x):
 def write_dict(path, seqs):
     path.write_text("@HD\tVN:1.6\n" + "".join(f"@SQ\tSN:{n}\tLN:{l}\tM5:{m}\n" for n, l, m in seqs))
     return path
+
+
+@needs_catalog
+def test_every_manifest_sequence_is_identified(cat):
+    """By its MD5 or SQ. digest: the sequence, root, operations and flavors (as
+    store.metadata has them). By name and length: the root, with the sequence
+    among its cognates, wherever the name names one root."""
+    from refbook import store
+    from refbook.identify import sequences
+    rows = [(f, s) for f, seqs in cat.manifests.items() for s in seqs]
+    by_md5 = sequences([{"name": s.name, "length": s.length, "md5": s.md5.upper()} for _, s in rows], cat)
+    by_sq = sequences([{"sq": s.sha512t24u} for _, s in rows], cat)
+    by_name = sequences([{"name": s.name, "length": s.length} for _, s in rows], cat)
+    settled = 0
+    for (flavor, s), a, b, c in zip(rows, by_md5, by_sq, by_name):
+        m = store.metadata(cat, s.sha512t24u)["refbook"]
+        assert a["evidence"] == "digest" and not a["notes"], (flavor, s.name, a["notes"])
+        assert (a["sequence"], a["root_id"], a["operations"]) == (s.sha512t24u, m["root_id"], m["operations"])
+        assert [{"flavor": u["flavor"], "name": u["name"]} for u in a["flavors"]] == m["flavors"]
+        assert b == a
+        if c["evidence"] == "name_and_length":
+            settled += 1
+            assert c["root_id"] == s.root_id and s.sha512t24u in c["cognates"]
+            assert {"flavor": flavor, "name": s.name, "sequence": s.sha512t24u} in c["flavors"]
+        else:
+            assert [n["kind"] for n in c["notes"]] == ["ambiguous_name"], (flavor, s.name, c)
+    assert settled > 0.99 * len(rows)
+
+
+@needs_catalog
+def test_identify_sequences_of_a_fasta(cat, tmp_path):
+    from refbook.identify import sequences
+    from refbook.materialize import Bases, sequence_bases
+    sq = next(s.sha512t24u for s in cat.manifests["hg38-analysis-set"] if s.name == "chrEBV")
+    bases = sequence_bases(cat, sq, Bases(cat))
+    (tmp_path / "x.fa").write_bytes(b">ebv\n" + bases + b"\n>mine\nACGT\n")
+    ebv, mine = sequences(read_header(tmp_path / "x.fa"), cat)
+    assert (ebv["evidence"], ebv["sequence"], ebv["root_id"]) == ("digest", sq, "AJ507799.2")
+    assert (mine["evidence"], [n["kind"] for n in mine["notes"]]) == ("nothing", ["unknown_digest", "unknown_digest"])
 
 
 @needs_catalog

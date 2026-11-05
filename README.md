@@ -60,6 +60,13 @@ $ uv run refbook identify HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
     hg38-analysis-set vs grch38-no-alt: 14 sequences differ in bases (12: as submitted (INSDC) vs IUPAC -> N; ...)
     grch38-no-alt: in the order of GRC GCA_000001405.15_GRCh38_no_alt_analysis_set; Illumina iGenomes NCBI/GRCh38
 
+# What each sequence is, on its own evidence (root, operations, flavors).
+$ uv run refbook identify sample.dict --sequences
+  sequences:
+    chr1	248956422	CM000663.2 as submitted (INSDC), in 6 flavors
+    chr2	242193529	CM000664.2 (by name and length), one of 2 cataloged versions
+    phiX	5386	unknown to the catalog
+
 # Fill htslib's reference cache so a CRAM decodes without its FASTA.
 $ uv run refbook populate-ref-cache sample.cram --root ~/refcache
 $ REF_CACHE=~/refcache/%2s/%2s/%s samtools view sample.cram
@@ -78,6 +85,13 @@ such as spike-ins), **subset**, or the **closest** match with an itemized
 difference. Order is reported separately: which published files list the
 sequences in the header's order, which is what BAM reference IDs and sorted
 files depend on.
+
+`--sequences` (and `refbook.identify.sequences` in Python, `identifySequences`
+in JS) says what each sequence is on its own: with a digest the catalog knows,
+the sequence, its root, the nucleotide operations from it and the flavors that
+use it; from a name and length, the root and the cataloged versions it could
+be; and notes on whatever disagrees (an unknown digest, a length, a name that
+names another root). A FASTA's sequences are digested (MD5 and `SQ.`).
 
 ## Python
 

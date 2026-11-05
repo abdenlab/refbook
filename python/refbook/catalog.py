@@ -174,6 +174,19 @@ class Catalog:
             self._flavor_names = {sq: sorted(v) for sq, v in out.items()}
         return self._flavor_names
 
+    def identify_tables(self):
+        """The tables identify reads, built once (refbook-core identify)."""
+        if getattr(self, "_identify_tables", None) is None:
+            from refbook import _core
+            stored = [(sq, r["md5"], r["length"], r["root_id"], list(r["operations"]))
+                      for sq, r in self.sequence.items()]
+            aliases = pq.read_table(self.file("aliases.parquet"), columns=["root_id", "alias"])
+            manifests = [(f, s.name, s.sha512t24u) for f, seqs in self.manifests.items() for s in seqs]
+            self._identify_tables = _core.IdentifyTables(
+                stored, list(self.root_length.items()),
+                list(zip(aliases["root_id"].to_pylist(), aliases["alias"].to_pylist())), manifests)
+        return self._identify_tables
+
     def spans(self, layer: str) -> dict[str, list[tuple[int, int]]]:
         """root_id -> the spans of a mask layer (layer_<name>.parquet)."""
         if layer not in self._spans:

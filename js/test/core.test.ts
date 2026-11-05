@@ -99,3 +99,23 @@ test("the recipe compiler", () => {
   assert.deepEqual(rb.compileRecipe(JSON.stringify(recipe), tables), want);
   assert.throws(() => rb.compileRecipe({ ...recipe, rename: { namespace: "ucsc" } }, tables), /EBV.1: no ucsc name/);
 });
+
+test("identify: each entry on its own evidence", () => {
+  const t = rb.identifyTables({
+    sequences: [
+      { sha512t24u: "SQ.r1", md5: "aa", length: 100, root_id: "R1", operations: [] },
+      { sha512t24u: "SQ.r1n", md5: "ab", length: 100, root_id: "R1", operations: ["iupac_to_n"] },
+    ],
+    roots: [{ root_id: "R1", length: 100 }],
+    aliases: [{ root_id: "R1", alias: "chr1" }],
+    manifests: [{ flavor: "hg", name: "chr1", sha512t24u: "SQ.r1n" }],
+  });
+  const [byDigest, byName, wrong, unknown] = rb.identifySequences(
+    [{ md5: "AB" }, { name: "chr1", length: 100 }, { name: "chr1", length: 7 }, { name: "x" }], t);
+  assert.deepEqual([byDigest.evidence, byDigest.sequence, byDigest.operations], ["digest", "SQ.r1n", ["iupac_to_n"]]);
+  assert.deepEqual(byDigest.flavors, [{ flavor: "hg", name: "chr1", sequence: "SQ.r1n" }]);
+  assert.deepEqual([byName.evidence, byName.root_id, byName.cognates], ["name_and_length", "R1", ["SQ.r1", "SQ.r1n"]]);
+  assert.deepEqual(wrong.notes, [{ kind: "length_differs", expected: 100 }, { kind: "no_root_of_this_length", roots: ["R1"] }]);
+  assert.deepEqual([unknown.evidence, unknown.root_id, unknown.notes], ["nothing", null, []]);
+});
+

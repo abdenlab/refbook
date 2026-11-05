@@ -1,7 +1,8 @@
 // Run the wasm build on a request file and print the results as JSON, for
 // tests/test_wasm.py to compare with the Python bindings of the same core.
 // Request: {sequences: [base64], collections: [{names, lengths, sequences}],
-// tables, recipes}.
+// tables, recipes, identify?: {tables, entries}}. Every pair of collections is
+// also compared.
 import { readFileSync } from "node:fs";
 import * as rb from "../src/index.ts";
 
@@ -17,10 +18,15 @@ const collections = req.collections.map((c: any) => ({
   ...rb.seqcolDigests(c.names, c.lengths, c.sequences),
   ancillary: rb.seqcolAncillary(c.names, c.lengths, c.sequences),
   named_set: rb.namedSetDigest(c.names, c.sequences),
+  level1_attributes: rb.seqcolLevel1(c.names, c.lengths, c.sequences),
+  level2: rb.seqcolLevel2(c.names, c.lengths, c.sequences),
 }));
+const comparisons = collections.map((a: any) => collections.map((b: any) => rb.seqcolCompare(a.level2, b.level2)));
 const compiled: Record<string, unknown> = {};
 if (req.tables) {
   const tables = rb.recipeTables(req.tables);
   for (const r of req.recipes) compiled[r.flavor] = attempt(() => rb.compileRecipe(r, tables));
 }
-process.stdout.write(JSON.stringify({ scans, collections, compiled }));
+const identified = req.identify
+  ? rb.identifySequences(req.identify.entries, rb.identifyTables(req.identify.tables)) : null;
+process.stdout.write(JSON.stringify({ scans, collections, comparisons, compiled, identified }));

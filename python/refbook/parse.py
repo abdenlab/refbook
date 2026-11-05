@@ -1,18 +1,20 @@
 """Read the sequence list of a reference from its index, header or FASTA.
 
-Every format becomes the same thing: an ordered list of (name, length, md5),
-where md5 is the refget MD5 (uppercase, A-Z only) if the format carries it.
+Every format becomes the same thing: an ordered list of (name, length, md5,
+sq), where md5 is the refget MD5 (uppercase, A-Z only) if the format carries
+it, and sq the SQ. digest (only a FASTA's, which are computed here).
 
 - .fai, chrom.sizes         names and lengths
 - .dict / SAM header text   @SQ SN, LN and M5 (also `samtools view -H` output)
 - BAM                       its header text, or its binary reference list
 - VCF (plain or bgzipped)   ##contig ID, length and md5
-- FASTA (plain or gzipped)  digested here: names, lengths and MD5s
+- FASTA (plain or gzipped)  digested here: names, lengths, MD5s and SQ. digests
 - CRAM 2.x/3.x               the SAM header in the first container (raw,
                             gzip, bzip2 or lzma; rANS-compressed headers are
                             not supported, run `samtools view -H` then)
 """
 
+import base64
 import bz2
 import gzip
 import hashlib
@@ -31,6 +33,7 @@ class Entry:
     name: str
     length: int
     md5: str | None = None
+    sq: str | None = None          # the SQ. digest, if known (a FASTA's are computed)
 
 
 @dataclass
@@ -162,19 +165,26 @@ def cram_header_text(path: Path) -> str:
 
 
 def _fasta_entries(path: Path) -> list[Entry]:
-    out, name, h, n = [], None, None, 0
+    """Names, lengths and both digests, over the refget-canonical bases (A-Z)."""
+    out, name, md5, sha, n = [], None, None, None, 0
+
+    def done():
+        sq = "SQ." + base64.urlsafe_b64encode(sha.digest()[:24]).decode()
+        out.append(Entry(name, n, md5.hexdigest(), sq))
+
     with _open_text(path) as f:
         for line in f:
             if line.startswith(">"):
                 if name is not None:
-                    out.append(Entry(name, n, h.hexdigest()))
-                name, h, n = line[1:].split()[0], hashlib.md5(), 0
+                    done()
+                name, md5, sha, n = line[1:].split()[0], hashlib.md5(), hashlib.sha512(), 0
             else:
-                s = line.rstrip("\r\n").encode()
+                s = NOT_AZ.sub(b"", line.rstrip("\r\n").encode().upper())
                 n += len(s)
-                h.update(NOT_AZ.sub(b"", s.upper()))
+                md5.update(s)
+                sha.update(s)
     if name is not None:
-        out.append(Entry(name, n, h.hexdigest()))
+        done()
     return out
 
 

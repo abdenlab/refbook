@@ -1,6 +1,13 @@
 """Identify a reference from its sequence list.
 
-Two layers:
+sequences(header, cat) says what each sequence is, on its own evidence (the
+Rust core's identify): with a digest the store knows, the sequence, its root,
+the nucleotide operations from it, and the flavors that use it; otherwise,
+from a name that names a root of that length, the root and its cognates
+(the stored sequences it could be); and notes on whatever disagrees.
+
+identify(header, cat), below, summarizes a whole header against the flavors.
+It has two layers:
 
 - Per sequence: each header sequence with an MD5 is looked up in the sequence
   store, which says what it is ("CM000663.2 with IUPAC -> N"). This needs no
@@ -27,12 +34,25 @@ Sequences are paired by name first, then (for renamed headers) by what they
 are: an MD5 we know, or a name that is an alias of a root.
 """
 
+import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from refbook import seqcol
+from refbook import _core, seqcol
 from refbook.catalog import Catalog, Seq
 from refbook.parse import Entry, Header
+
+
+def sequences(x: Header | list, cat: Catalog) -> list[dict]:
+    """What each entry is: one identity per entry, in order (see the module
+    docstring). x is a Header, or a list of Entry or of dicts with any of
+    name, length, md5 and sq."""
+    entries = x.entries if isinstance(x, Header) else x
+    rows = []
+    for e in entries:
+        d = e if isinstance(e, dict) else vars(e)
+        rows.append((d.get("name"), d.get("length"), d.get("md5"), d.get("sq")))
+    return json.loads(_core.identify_sequences(rows, cat.identify_tables()))
 
 
 @dataclass

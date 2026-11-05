@@ -1,4 +1,4 @@
-"""Command line: `refbook identify FILE...`, `refbook populate-ref-cache FILE... --root DIR`, `refbook serve`."""
+"""Command line: `refbook identify FILE... [--sequences]`, `refbook populate-ref-cache FILE... --root DIR`, `refbook serve`."""
 
 import argparse
 import json
@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from refbook.catalog import Catalog
-from refbook.identify import describe, identify
+from refbook.identify import describe, identify, sequences
 from refbook.parse import read_header
 from refbook.refcache import populate_ref_cache
 
@@ -15,7 +15,7 @@ from refbook.refcache import populate_ref_cache
 DEFAULT_CATALOG = "https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/"
 
 
-def report(path: str, cat: Catalog, as_json: bool) -> dict:
+def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -> dict:
     header = read_header(path)
     res = identify(header, cat)
     out = {
@@ -32,6 +32,8 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
         "runners_up": [{"flavor": c.flavor, "score": round(c.score, 4)}
                        for c in res.ranked[len(res.best):len(res.best) + 3]],
     }
+    if per_sequence:
+        out["per_sequence"] = sequences(header, cat)
     if as_json:
         return out
     print(f"{path}\n  {header.format}, {len(header.entries)} sequences, "
@@ -74,7 +76,26 @@ def report(path: str, cat: Catalog, as_json: bool) -> dict:
     if res.seqcol_digest:
         also = f" = {', '.join(res.seqcol_matches)}" if res.seqcol_matches else ""
         print(f"  seqcol digest: {res.seqcol_digest}{also}")
+    if per_sequence:
+        print("  sequences:")
+        for e, i in zip(header.entries, out["per_sequence"]):
+            print(f"    {e.name}\t{e.length}\t{_identity(i, cat)}")
     return out
+
+
+def _identity(i: dict, cat: Catalog) -> str:
+    """One identity, in a line."""
+    notes = "; ".join(n["kind"].replace("_", " ") + (f" {n['expected']:,}" if "expected" in n else "")
+                      + (f" ({', '.join(n['roots'][:3])})" if "roots" in n else "") for n in i["notes"])
+    if i["evidence"] == "digest":
+        what = f"{i['root_id']} {cat.how(i['sequence'])}, in {len({u['flavor'] for u in i['flavors']})} flavors"
+    elif i["root_id"]:
+        what = (f"{i['root_id']} (by {i['evidence'].replace('_', ' ')}), "
+                f"one of {len(i['cognates'])} cataloged versions" if i["cognates"] else
+                f"{i['root_id']} (by {i['evidence'].replace('_', ' ')}), a version the catalog lacks")
+    else:
+        what = "unknown to the catalog"
+    return what + (f" [{notes}]" if notes else "")
 
 
 def _orders(res, cat: Catalog) -> None:
@@ -94,6 +115,7 @@ def main() -> None:
     p.add_argument("files", nargs="+")
     p.add_argument("--catalog", default=os.environ.get("REFBOOK_CATALOG", DEFAULT_CATALOG))
     p.add_argument("--json", action="store_true")
+    p.add_argument("--sequences", action="store_true", help="also say what each sequence is, on its own evidence")
     q = sub.add_parser("populate-ref-cache",
                        help="fill htslib's REF_CACHE with the sequences a CRAM/BAM/SAM header names by M5")
     q.add_argument("files", nargs="+", help="CRAM, BAM, SAM header or .dict files, or bare MD5s")
@@ -144,7 +166,7 @@ def main() -> None:
     results = []
     for f in args.files:
         try:
-            results.append(report(f, cat, args.json))
+            results.append(report(f, cat, args.json, args.sequences))
         except (ValueError, OSError) as e:
             print(f"{f}: {e}", file=sys.stderr)
     if args.json:

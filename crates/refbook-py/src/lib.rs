@@ -5,6 +5,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString, PyTuple};
+use refbook_core::identify;
 use refbook_core::operations;
 use refbook_core::recipe;
 use refbook_core::refget;
@@ -345,6 +346,62 @@ fn compile_recipe(
     .map_err(|e| RecipeError::new_err(e.to_string()))
 }
 
+/// The catalog tables identify reads, indexed once: the sequence store as
+/// (sq, md5, length, root_id, operations), roots as (root_id, length),
+/// aliases as (root_id, alias), manifests as (flavor, name, sq).
+#[pyclass(frozen)]
+struct IdentifyTables(identify::IdentifyTables);
+
+#[pymethods]
+impl IdentifyTables {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        stored: Vec<(String, String, u64, String, Vec<String>)>,
+        roots: Vec<(String, u64)>,
+        aliases: Vec<(String, String)>,
+        manifests: Vec<(String, String, String)>,
+    ) -> Self {
+        let stored = stored
+            .into_iter()
+            .map(|(sq, md5, length, root_id, operations)| identify::Stored {
+                sq,
+                md5,
+                length,
+                root_id,
+                operations,
+            })
+            .collect();
+        IdentifyTables(
+            py.detach(|| identify::IdentifyTables::new(stored, roots, aliases, manifests)),
+        )
+    }
+}
+
+/// (name, length, md5, sq), any of them None.
+type EntryRow = (Option<String>, Option<u64>, Option<String>, Option<String>);
+
+/// Identify each entry (name, length, md5, sq; any may be None), as JSON text:
+/// a list of identities.
+#[pyfunction]
+fn identify_sequences(
+    py: Python<'_>,
+    entries: Vec<EntryRow>,
+    tables: &IdentifyTables,
+) -> PyResult<String> {
+    let entries: Vec<identify::Entry> = entries
+        .into_iter()
+        .map(|(name, length, md5, sq)| identify::Entry {
+            name,
+            length,
+            md5,
+            sq,
+        })
+        .collect();
+    let ids = py.detach(|| identify::identify(&entries, &tables.0));
+    serde_json::to_string(&ids).map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(canonical_bases, m)?)?;
@@ -364,12 +421,14 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(seqcol_compare, m)?,
         wrap_pyfunction!(apply_operations, m)?,
         wrap_pyfunction!(compile_recipe, m)?,
+        wrap_pyfunction!(identify_sequences, m)?,
     ] {
         m.add_function(f)?;
     }
     m.add("SEQCOL_SCHEMA", seqcol::SCHEMA)?;
     m.add("SEQCOL_TRANSIENT", seqcol::TRANSIENT.to_vec())?;
     m.add_class::<RecipeTables>()?;
+    m.add_class::<IdentifyTables>()?;
     m.add("RecipeError", m.py().get_type::<RecipeError>())?;
     Ok(())
 }

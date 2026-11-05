@@ -172,3 +172,59 @@ export const recipeTables = (tables: Tables): RecipeTables => new core.RecipeTab
  * doesn't compile. */
 export const compileRecipe = (recipe: object | string, tables: RecipeTables): ManifestRow[] =>
   core.compileRecipe(recipe, tables);
+
+// identify
+
+/** The catalog tables identify reads, in the catalog's column names. */
+export interface IdentifyInput {
+  /** sequences.parquet rows. */
+  sequences: { sha512t24u: string; md5: string; length: number; root_id: string; operations: string[] }[];
+  /** Every root, hosted and external. */
+  roots: { root_id: string; length: number }[];
+  /** aliases.parquet rows. */
+  aliases: { root_id: string; alias: string }[];
+  /** manifests.parquet rows. */
+  manifests: { flavor: string; name: string; sha512t24u: string }[];
+}
+
+export const IdentifyTables = core.IdentifyTables;
+export type IdentifyTables = core.IdentifyTables;
+
+/** Build the identify tables once; identify any number of entries against them. */
+export const identifyTables = (tables: IdentifyInput): IdentifyTables => new core.IdentifyTables(tables);
+
+/** An entry of a sequence list: any of name, length, MD5 and SQ. digest. */
+export interface Entry {
+  name?: string | null;
+  length?: number | null;
+  md5?: string | null;
+  sq?: string | null;
+}
+
+export type Note =
+  | { kind: "unknown_digest"; digest: string }
+  | { kind: "digests_disagree" }
+  | { kind: "length_differs"; expected: number }
+  | { kind: "name_of_other_roots"; roots: string[] }
+  | { kind: "ambiguous_name"; roots: string[] }
+  | { kind: "no_root_of_this_length"; roots: string[] };
+
+/** What one entry is, on its own evidence. */
+export interface Identity {
+  evidence: "digest" | "name_and_length" | "name" | "nothing";
+  sequence: string | null;
+  md5: string | null;
+  length: number | null;
+  root_id: string | null;
+  /** The operations from the root, when a digest pins the sequence. */
+  operations: string[] | null;
+  /** Without a known digest: the stored sequences of the root it could be. */
+  cognates: string[];
+  flavors: { flavor: string; name: string; sequence: string }[];
+  notes: Note[];
+}
+
+/** What each entry is: one identity per entry, in order. */
+export const identifySequences = (entries: Entry[], tables: IdentifyTables): Identity[] =>
+  core.identifySequences(entries, tables);
+

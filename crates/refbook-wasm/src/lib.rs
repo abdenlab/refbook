@@ -4,7 +4,7 @@
 //! same JSON reads the same in Python and JavaScript.
 
 use refbook_core::seqcol::{self, Json};
-use refbook_core::{operations, recipe, refget};
+use refbook_core::{identify, operations, recipe, refget};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use serde_json::Value;
@@ -384,4 +384,107 @@ pub fn compile_recipe(recipe: JsValue, tables: &RecipeTables) -> Result<JsValue,
             })
             .collect::<Vec<_>>(),
     )
+}
+
+// identify
+
+#[derive(Deserialize)]
+struct StoredRow {
+    sha512t24u: String,
+    md5: String,
+    length: u64,
+    root_id: String,
+    operations: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct RootRow {
+    root_id: String,
+    length: u64,
+}
+
+#[derive(Deserialize)]
+struct AliasRow {
+    root_id: String,
+    alias: String,
+}
+
+#[derive(Deserialize)]
+struct ManifestUse {
+    flavor: String,
+    name: String,
+    sha512t24u: String,
+}
+
+#[derive(Deserialize)]
+struct IdentifyIn {
+    sequences: Vec<StoredRow>,
+    roots: Vec<RootRow>,
+    aliases: Vec<AliasRow>,
+    manifests: Vec<ManifestUse>,
+}
+
+/// The catalog tables identify reads, built once. From {sequences, roots,
+/// aliases, manifests}: rows of sequences.parquet, of roots (root_id,
+/// length; hosted and external), of aliases.parquet (root_id, alias) and of
+/// manifests.parquet (flavor, name, sha512t24u).
+#[wasm_bindgen]
+pub struct IdentifyTables(identify::IdentifyTables);
+
+#[wasm_bindgen]
+impl IdentifyTables {
+    #[wasm_bindgen(constructor)]
+    pub fn new(tables: JsValue) -> Result<IdentifyTables, JsError> {
+        let t: IdentifyIn = from_js(tables, "tables")?;
+        Ok(IdentifyTables(identify::IdentifyTables::new(
+            t.sequences
+                .into_iter()
+                .map(|s| identify::Stored {
+                    sq: s.sha512t24u,
+                    md5: s.md5,
+                    length: s.length,
+                    root_id: s.root_id,
+                    operations: s.operations,
+                })
+                .collect(),
+            t.roots.into_iter().map(|r| (r.root_id, r.length)).collect(),
+            t.aliases
+                .into_iter()
+                .map(|a| (a.root_id, a.alias))
+                .collect(),
+            t.manifests
+                .into_iter()
+                .map(|m| (m.flavor, m.name, m.sha512t24u))
+                .collect(),
+        )))
+    }
+}
+
+#[derive(Deserialize)]
+struct EntryIn {
+    name: Option<String>,
+    length: Option<u64>,
+    md5: Option<String>,
+    sq: Option<String>,
+}
+
+/// What each entry ({name?, length?, md5?, sq?}) is: one identity per entry.
+#[wasm_bindgen(js_name = identifySequences)]
+pub fn identify_sequences(entries: JsValue, tables: &IdentifyTables) -> Result<JsValue, JsError> {
+    let entries: Vec<EntryIn> = from_js(entries, "entries")?;
+    let entries: Vec<identify::Entry> = entries
+        .into_iter()
+        .map(|e| identify::Entry {
+            name: e.name,
+            length: e.length,
+            md5: e.md5,
+            sq: e.sq,
+        })
+        .collect();
+    let s = serde_wasm_bindgen::Serializer::new()
+        .serialize_maps_as_objects(true)
+        .serialize_missing_as_null(true);
+    identify::identify(&entries, &tables.0)
+        .serialize(&s)
+        .map_err(|e| JsError::new(&e.to_string()))
 }

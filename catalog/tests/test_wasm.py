@@ -1,8 +1,9 @@
 """The wasm build of the core (js/) against the Python build of the same core.
 
 Runs js/test/oracle.ts under Node on the same inputs given to refbook._core:
-random sequences, every stored collection, and every recipe on the build's
-tables. Skipped without Node or a built js/pkg (pnpm build).
+random sequences, every stored collection (digests, levels, and every pair
+compared), every recipe on the build's tables, and identify on every
+manifest sequence. Skipped without Node or a built js/pkg (pnpm build).
 """
 
 import base64
@@ -64,6 +65,11 @@ def test_wasm_agrees_on_sequences_and_collections(tmp_path):
         assert (w["digest"], w["level1"]) == (top, level1)
         assert w["ancillary"] == _core.seqcol_ancillary(c["names"], c["lengths"], c["sequences"])
         assert w["named_set"] == _core.named_set_digest(c["names"], c["sequences"])
+        assert w["level1_attributes"] == _core.seqcol_level1(c["names"], c["lengths"], c["sequences"])
+        assert w["level2"] == _core.seqcol_level2(c["names"], c["lengths"], c["sequences"])
+    for a, row in zip(got["collections"], got["comparisons"]):
+        for b, w in zip(got["collections"], row):
+            assert w == json.loads(_core.seqcol_compare(a["level2"], b["level2"]))
 
 
 @pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
@@ -84,3 +90,28 @@ def test_wasm_compiles_every_recipe_like_python(tmp_path):
     for r in recipes:
         want = [{"name": n, "root_id": acc, "operations": ops} for n, acc, ops in engine.compile(r, t)]
         assert got["compiled"][r["flavor"]] == {"ok": want}, r["flavor"]
+
+
+@pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
+def test_wasm_identifies_like_python(tmp_path):
+    import pyarrow.parquet as pq
+
+    from refbook import Catalog
+    cat = Catalog(BUILD)
+    aliases = pq.read_table(cat.file("aliases.parquet"), columns=["root_id", "alias"]).to_pylist()
+    tables = {
+        "sequences": [{"sha512t24u": sq, **{k: r[k] for k in ("md5", "length", "root_id", "operations")}}
+                      for sq, r in cat.sequence.items()],
+        "roots": [{"root_id": r, "length": n} for r, n in cat.root_length.items()],
+        "aliases": aliases,
+        "manifests": [{"flavor": f, "name": s.name, "sha512t24u": s.sha512t24u}
+                      for f, seqs in cat.manifests.items() for s in seqs],
+    }
+    seqs = [s for seqs in cat.manifests.values() for s in seqs]
+    entries = ([{"name": s.name, "length": s.length} for s in seqs] +
+               [{"md5": s.md5, "name": s.name} for s in seqs[:500]] +
+               [{"name": "chr1", "length": 5}, {"sq": "SQ.unknown"}, {}])
+    got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": None, "recipes": [],
+                              "identify": {"tables": tables, "entries": entries}})
+    rows = [(e.get("name"), e.get("length"), e.get("md5"), e.get("sq")) for e in entries]
+    assert got["identified"] == json.loads(_core.identify_sequences(rows, cat.identify_tables()))
