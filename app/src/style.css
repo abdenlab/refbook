@@ -71,8 +71,12 @@ details > summary { cursor: pointer; }
 .design .row-head { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; }
 .design .group { display: flex; gap: 0.6rem; align-items: baseline; justify-content: space-between; }
 .design .group label.check { flex: 1; }
-.design .naming { font-size: 0.88rem; max-width: 14rem; min-width: 0; }
+.design .naming { font-size: 0.88rem; width: 10rem; max-width: 45%; flex: none; }
 .design select.naming.inherit { color: var(--muted); }
+.design select.naming:not(.inherit) { font-weight: 600; }
+.design .names-head { margin: 0.6rem 0 0.2rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--line); }
+.design p.clear { margin: 0.3rem 0 0; text-align: right; }
+button.link { border: none; background: none; padding: 0; color: var(--accent); font-size: 0.88rem; cursor: pointer; }
 .design input.naming { width: 9rem; }
 .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 0.4rem 1rem 0.8rem; }
 .tabs { display: flex; gap: 0.2rem; border-bottom: 1px solid var(--line); margin: 0 -1rem 0.6rem; padding: 0 0.6rem; }

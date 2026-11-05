@@ -200,6 +200,13 @@ export function setRoleNames(r: Recipe, role: string, namespace: string | null):
   return out;
 }
 
+/** Every role by the default namespace: no overrides. */
+export function clearRoleNames(r: Recipe): Recipe {
+  const out = clone(r);
+  delete out.rename.by_role;
+  return out;
+}
+
 /** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
 export const setChromosomeNames = (r: Recipe, namespace: string | null) => setRoleNames(r, "assembled-molecule", namespace);
 

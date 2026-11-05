@@ -152,11 +152,14 @@
                     {#each releases as [acc, name] (acc)}<option value={acc} title={acc}>{edit.releaseLabel(name, acc === latest)}</option>{/each}
                   </select>
                 </label>
-                <label>Names
-                  <select value={recipe.rename.namespace} onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
-                    {#each edit.NAMESPACES as ns (ns)}<option value={ns}>{edit.NAMESPACE_LABELS[ns]}</option>{/each}
-                  </select>
-                </label>
+              </div>
+              {@const overrides = Object.keys(recipe.rename.by_role ?? {}).length}
+              <div class="group names-head">
+                <span><strong>Names</strong> <span class="muted">of all sequences, unless a role says otherwise</span></span>
+                <select class="naming" aria-label="Names of all sequences" value={recipe.rename.namespace}
+                        onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
+                  {#each edit.NAMESPACES as x (x)}<option value={x} title={edit.NAMESPACE_LABELS[x]}>{SHORT[x]}</option>{/each}
+                </select>
               </div>
               {#each edit.ROLES_SHOWN as r (r)}
                 {@const on = p.roles.includes(r)}
@@ -166,14 +169,19 @@
                     onchange={(e) => set(edit.setRole(recipe!, r, e.currentTarget.checked))} />
                     <span>{role(r)}{#if count}{" "}<span class="muted">({n(count)})</span>{:else}<span class="muted">: none in {release}</span>{/if}</span></label>
                   {#if on}
-                    {@const ns = edit.roleNamespace(recipe, r)}
-                    <select class="naming" class:inherit={!recipe.rename.by_role?.[r]} aria-label={`Names of ${role(r)}`} value={ns}
-                            onchange={(e) => set(edit.setRoleNames(recipe!, r, e.currentTarget.value))}>
-                      {#each edit.NAMESPACES as x (x)}<option value={x}>{SHORT[x]}</option>{/each}
+                    {@const own = recipe.rename.by_role?.[r] ?? ""}
+                    <select class="naming" class:inherit={!own} aria-label={`Names of ${role(r)}`} value={own}
+                            onchange={(e) => set(edit.setRoleNames(recipe!, r, e.currentTarget.value || null))}>
+                      <option value="">default: {SHORT[recipe.rename.namespace]}</option>
+                      {#each edit.NAMESPACES as x (x)}<option value={x} title={edit.NAMESPACE_LABELS[x]}>{SHORT[x]}</option>{/each}
                     </select>
                   {/if}
                 </div>
               {/each}
+              {#if overrides}
+                <p class="clear"><button type="button" class="link" onclick={() => set(edit.clearRoleNames(recipe!))}>
+                  clear {overrides === 1 ? "the override" : `${overrides} overrides`}: every role by the default</button></p>
+              {/if}
             {:else}
               <p class="muted">No GRCh38 entry. <button type="button" onclick={() => set(edit.setRelease(recipe!, `${edit.GRCH38}.15`))}>Add one</button></p>
             {/if}

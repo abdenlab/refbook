@@ -214,6 +214,9 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "chrUn_JTFH01000001v1_decoy"));   // the decoys keep their template
   named = edit.setRoleNames(named, "unplaced-scaffold", "ucsc");
   assert.equal(named.rename.by_role, undefined);   // the default again: no by_role
+  const two = edit.setRoleNames(edit.setRoleNames(dh, "unplaced-scaffold", "genbank"), "alt-scaffold", "grc");
+  assert.deepEqual(Object.keys(two.rename.by_role!).sort(), ["alt-scaffold", "unplaced-scaffold"]);
+  assert.equal(is(edit.clearRoleNames(two)), "hs38dh");
   named = edit.setGroupTemplate(edit.setEbvName(dh, "EBV"), edit.HLA, "{name}");
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "EBV"));
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "A*01:01:01:01"));
