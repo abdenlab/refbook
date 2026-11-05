@@ -222,6 +222,7 @@ Each script's docstring says what it reads, writes and checks.
 | `python/` | The Python package (`pyproject.toml`, `README.md`, and `tests/`, with real ENCODE, gnomAD and GIAB headers as fixtures) |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
+| `app/` | The web app (Vite, TypeScript): the catalog, each flavor's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations. `cd app && npm install && npm run dev` serves it with the build in `catalog/output/build/grch38` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere; `npm test` checks its data layer against the build |
 | `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
 | `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
 | `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |

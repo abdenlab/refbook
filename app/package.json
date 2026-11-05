@@ -1,0 +1,23 @@
+{
+  "name": "refbook-app",
+  "private": true,
+  "version": "0.0.0",
+  "description": "refbook's web app: the catalog, each flavor's recipe, identity and sequences, in the browser",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@abdenlab/refbook": "file:../js",
+    "hyparquet": "^1.32.0",
+    "hyparquet-compressors": "^1.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.0"
+  }
+}
