@@ -92,7 +92,7 @@ def reference_canonical_json(item) -> str:
 
 def random_strings(n: int, seed: int = 3):
     rng = random.Random(seed)
-    pool = [chr(c) for c in range(0, 0x80)] + ["é", "ß", "中", "😀", " ", "﻿", "\\", '"']
+    pool = [chr(c) for c in range(0x80)] + ["é", "ß", "中", "😀", " ", "﻿", "\\", '"']
     for _ in range(n):
         yield "".join(rng.choice(pool) for _ in range(rng.randrange(0, 20)))
 
