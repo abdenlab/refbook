@@ -9,3 +9,6 @@ build/
 /raw
 /target
 python/refbook/*.so
+js/node_modules/
+js/pkg/
+js/dist/

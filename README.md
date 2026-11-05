@@ -217,6 +217,7 @@ Each script's docstring says what it reads, writes and checks.
 | `crates/refbook-core/` | The Rust core: refget digests and canonicalization, seqcol, nucleotide operations, the recipe compiler. No I/O |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `python/rust/` | The core's Python bindings (`refbook-py`, built by maturin as `refbook._core`) |
+| `js/` | The npm package `@abdenlab/refbook`: the core's wasm bindings (`js/rust/`, `refbook-wasm`) and their TypeScript front end (`js/src/`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
 | `pipeline/` | The numbered steps that build, check and export the catalog, and their shared modules (`layout`, `engine`, `observe`) |
 | `assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
 | `tests/` | Tests, with real ENCODE, gnomAD and GIAB headers as fixtures |

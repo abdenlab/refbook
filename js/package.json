@@ -1,0 +1,19 @@
+{
+  "name": "@abdenlab/refbook",
+  "version": "0.0.0",
+  "description": "refbook's core in the browser and Node: refget and seqcol digests, nucleotide operations, the recipe compiler",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "pkg"],
+  "scripts": {
+    "build:wasm": "cargo build -p refbook-wasm --target wasm32-unknown-unknown --release && wasm-bindgen --target web --out-dir pkg ../target/wasm32-unknown-unknown/release/refbook_wasm.wasm",
+    "build": "npm run build:wasm && tsc",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
