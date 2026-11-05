@@ -19,9 +19,8 @@ import layout
 import pyarrow.parquet as pq
 import pytest
 
-BUILD = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/build/grch38"))
+BUILD = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))
 RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
-RECIPES = sorted((Path(__file__).resolve().parent.parent / "recipes").glob("*.json"))
 pytestmark = pytest.mark.skipif(
     not (BUILD / "catalog.json").exists() or not (RELEASE / "catalog.json").exists(),
     reason="no build or release")
@@ -36,7 +35,7 @@ def sha256(path: Path) -> str:
 
 
 def recipes() -> list[dict]:
-    return [r for path in RECIPES for r in json.loads(path.read_text())["recipes"]]
+    return layout.recipes()
 
 
 def golden(name: str) -> list[dict]:

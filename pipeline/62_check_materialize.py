@@ -18,11 +18,11 @@ external roots) through the library, independently of the recipe engine:
 Step 1 covers every sequence of every collection, since collections are made
 of the store's sequences; step 3 covers the stream.
 
-Writes REGISTRY/build/grch38/62_check_materialize/check_materialize.json (the
+Writes build/grch38/62_check_materialize/check_materialize.json (the
 result, with the sha256 of each input) and exits nonzero, after recording it,
 on any failure.
 
-Usage: uv run python -I pipeline/62_check_materialize.py REGISTRY_DIR [--stream NAME] [--stream-all] [--assembly grch38]
+Usage: uv run python -I pipeline/62_check_materialize.py [--stream NAME] [--stream-all] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -93,12 +93,10 @@ def stream(cat: Catalog, name: str, want: str, bases: Bases) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
     ap.add_argument("--stream", default="grch38-no-alt")
     ap.add_argument("--stream-all", action="store_true")
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build = layout.build_dir(args.registry, args.assembly)
+    args = layout.arguments(ap)
+    build = args.build
     with layout.step_output(build, STEP) as out:
         errors = run(build, out, args.stream, args.stream_all)
     if errors:

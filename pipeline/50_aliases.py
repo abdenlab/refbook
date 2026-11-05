@@ -1,6 +1,6 @@
 """Build the aliases table: every root's names across naming conventions.
 
-Writes REGISTRY/build/grch38/50_aliases/aliases.parquet: root_id, namespace, alias,
+Writes build/grch38/50_aliases/aliases.parquet: root_id, namespace, alias,
 source. GenBank, RefSeq, UCSC and GRC Sequence-Name from the assembly reports;
 Ensembl from UCSC's p14 chromAlias.txt, checked against the names in the
 reproduced Ensembl targets; UCSC-style names for EBV and the decoys from the
@@ -8,7 +8,7 @@ GRC analysis sets; IMGT allele names for HLA.
 
 (Flavors, targets and seqcol documents are built by 41_flavors.py.)
 
-Usage: uv run python -I pipeline/50_aliases.py REGISTRY_DIR [--assembly grch38]
+Usage: uv run python -I pipeline/50_aliases.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -28,13 +28,11 @@ CHROMALIAS = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.chrom
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build = layout.build_dir(args.registry, args.assembly)
+    args = layout.arguments(ap)
+    build = args.build
     with layout.step_output(build, STEP) as out:
-        run(layout.raw_dir(args.registry), build, out)
-        layout.record_inputs(out, STEP, layout.TARGETS_LOCK)  # chromAlias.txt
+        run(args.raw, build, out)
+        layout.record_inputs(out, STEP, layout.targets_lock(args.assembly))  # chromAlias.txt
 
 
 def run(raw: Path, build: Path, out: Path) -> None:

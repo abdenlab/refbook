@@ -6,7 +6,7 @@ must match the target's observation by name (same names, and for each the same
 length and digests, where the observation has them). The target's order is
 taken from its observation.
 
-Writes REGISTRY/build/grch38/40_recipes/flavor_sequences.parquet (flavor, position, name,
+Writes build/grch38/40_recipes/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u): each target's sequences, in the target's
 observed order, from the observations (30_observe: a target's FASTA, or its
 .dict, which gives only name, length and M5).
@@ -15,11 +15,10 @@ flavors.) Exits nonzero, writing nothing, if any target does not reproduce.
 
 The output holds exactly the recipes given, so pass every recipe file.
 
-Usage: uv run python -I pipeline/40_recipes.py REGISTRY_DIR recipes/*.json [--assembly grch38]
+Usage: uv run python -I pipeline/40_recipes.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -35,13 +34,10 @@ STEP = "40_recipes"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("recipes", type=Path, nargs="+")
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build = layout.build_dir(args.registry, args.assembly)
+    args = layout.arguments(ap)
+    build = args.build
 
-    recipes = [r for path in args.recipes for r in json.loads(path.read_text())["recipes"]]
+    recipes = layout.recipes(args.assembly)
     flavors = [r["flavor"] for r in recipes]
     if len(flavors) != len(set(flavors)):
         sys.exit("a flavor is defined in more than one recipe")

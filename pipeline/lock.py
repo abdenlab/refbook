@@ -1,19 +1,20 @@
 """Lock the raw downloads: check them against their publishers' checksums and a lock.
 
-A lock (locks/inputs.lock, locks/targets.lock) lists every file the build uses
-from some hosts under REGISTRY/raw: path, size, sha256, the server's
+A lock (assemblies/<assembly>/locks/inputs.lock and targets.lock) lists every
+file the build uses from some hosts under raw/: path, size, sha256, the server's
 Last-Modified (wget -N keeps it as the file's mtime) and source URL. It is
 committed, so a build is pinned to exact bytes, and a release records the
 hashes of the locks it was built from.
 
 Every run:
-1. Hashes every file under REGISTRY/raw/<host> for each host given.
+1. Hashes every file under raw/<host> for each host given.
 2. Checks every file a publisher's checksum list covers: NCBI md5checksums.txt,
    UCSC md5sum.txt and GENCODE MD5SUMS (MD5), Ensembl CHECKSUMS (BSD `sum`,
    computed with the system's `sum`). Broad and iGenomes publish theirs only
    in response headers, which wget doesn't keep, so their files are covered
    by the lock alone.
-   A mismatch is accepted only if locks/checksum_exceptions.tsv lists it
+   A mismatch is accepted only if checksum_exceptions.tsv, next to the lock,
+   lists it
    exactly (the path, the listed MD5 and the MD5 of the file we have), with
    the reason: a publisher serving a file its own list disagrees with.
 3. Compares with the lock. With no lock yet, trusts the files on first use
@@ -23,7 +24,7 @@ Every run:
 
 Exits nonzero on any error. Run by 00_fetch_inputs.sh and 01_fetch_targets.sh.
 
-Usage: uv run python -I pipeline/lock.py REGISTRY_DIR LOCK HOST... [--update]
+Usage: uv run python -I pipeline/lock.py LOCK HOST... [--raw DIR] [--update]
 """
 
 import argparse
@@ -81,20 +82,19 @@ def write_lock(path: Path, entries: dict[str, dict]) -> None:
     tmp.replace(path)
 
 
-EXCEPTIONS = Path(__file__).resolve().parent.parent / "locks" / "checksum_exceptions.tsv"
-
-
-def known_mismatches() -> set[tuple[str, str, str]]:
+def known_mismatches(exceptions: Path) -> set[tuple[str, str, str]]:
     """(path, listed MD5, served MD5) of every documented publisher mismatch."""
-    if not EXCEPTIONS.exists():
+    if not exceptions.exists():
         return set()
-    rows = [line.split("\t") for line in EXCEPTIONS.read_text().splitlines()[1:]]
+    rows = [line.split("\t") for line in exceptions.read_text().splitlines()[1:]]
     return {(r[0], r[1], r[2]) for r in rows}
 
 
-def publisher_checks(raw: Path, files: dict[str, dict]) -> tuple[int, list[str]]:
-    """Check every file a publisher's checksum list covers; return (checked, errors)."""
-    checked, errors, known = 0, [], known_mismatches()
+def publisher_checks(raw: Path, files: dict[str, dict],
+                     known: set[tuple[str, str, str]] = frozenset()) -> tuple[int, list[str]]:
+    """Check every file a publisher's checksum list covers, allowing the known
+    mismatches; return (checked, errors)."""
+    checked, errors = 0, []
     for rel in sorted(files):
         name = Path(rel).name
         if name not in MD5_LISTS | SUM_LISTS:
@@ -119,16 +119,16 @@ def publisher_checks(raw: Path, files: dict[str, dict]) -> tuple[int, list[str]]
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
     ap.add_argument("lock", type=Path)
     ap.add_argument("hosts", nargs="+")
     ap.add_argument("--update", action="store_true", help="accept changes and rewrite the lock")
+    ap.add_argument("--raw", type=Path, help="the downloads (default: raw/ in the repository, or $REFBOOK_RAW)")
     args = ap.parse_args()
-    raw = args.registry / "raw"
+    raw = args.raw or Path(os.environ.get("REFBOOK_RAW") or Path(__file__).resolve().parent.parent / "raw")
 
     missing = [h for h in args.hosts if not (raw / h).is_dir()]
     if missing:
-        sys.exit(f"no {', '.join(missing)} under {raw}: is {args.registry} the registry?")
+        sys.exit(f"no {', '.join(missing)} under {raw}: is that the raw downloads directory?")
     files = {}
     for host in args.hosts:
         for path in sorted(p for p in (raw / host).rglob("*") if p.is_file()):
@@ -138,7 +138,7 @@ def main() -> None:
             files[rel.as_posix()] = {"path": rel.as_posix(), "bytes": path.stat().st_size,
                                      "sha256": sha, "md5": md5, "last_modified": mtime,
                                      "url": source_url(rel)}
-    checked, errors = publisher_checks(raw, files)
+    checked, errors = publisher_checks(raw, files, known_mismatches(args.lock.with_name("checksum_exceptions.tsv")))
     print(f"{len(files)} files under {', '.join(args.hosts)}; {checked} checked against "
           "their publishers' checksums", file=sys.stderr)
 

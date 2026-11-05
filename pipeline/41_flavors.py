@@ -1,10 +1,11 @@
 """Build the flavors, the targets that reproduce them, and each flavor's manifest.
 
 A flavor is a named sequence set that refbook catalogs; a target is a file
-that reproduces one (see GLOSSARY.md). Reads the reproduced targets
+that reproduces one (see docs/GLOSSARY.md). Reads the reproduced targets
 (flavor_sequences.parquet, from 40_recipes.py), the
-recipes, the catalog tables, and the curated labels in flavors.json, and
-writes to REGISTRY/build/grch38/41_flavors/:
+recipes, the catalog tables, and the curated labels in
+assemblies/<assembly>/flavors.json, and
+writes to build/grch38/41_flavors/:
 
 - flavors.parquet     one row per flavor: label, id (the named-sequence-set
                       digest, refbook.seqcol.named_set_digest), the seqcol
@@ -20,7 +21,7 @@ writes to REGISTRY/build/grch38/41_flavors/:
 - targets.parquet     one row per target: its flavor, publisher, alias (the
                       publisher's name for the file), URLs, the exact file it
                       was checked against (sha256, size and Last-Modified from
-                      locks/targets.lock) and the evidence (FASTA content or
+                      the targets lock) and the evidence (FASTA content or
                       .dict), and the seqcol digests of the target's own
                       collection (its order)
 - target_sequences.parquet   each target's order: target, position, name
@@ -40,7 +41,7 @@ Fails unless the targets that share a named-sequence-set digest are exactly
 the targets flavors.json lists under one label, and unless rebuilding each
 manifest row from its root and operations gives its digests.
 
-Usage: uv run python -I pipeline/41_flavors.py REGISTRY_DIR flavors.json recipes/*.json [--assembly grch38]
+Usage: uv run python -I pipeline/41_flavors.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -112,20 +113,16 @@ def collection_files(names, lengths, sequences, out: Path) -> tuple[str, dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("labels", type=Path)
-    ap.add_argument("recipes", type=Path, nargs="+")
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build = layout.build_dir(args.registry, args.assembly)
+    args = layout.arguments(ap)
+    build = args.build
     with layout.step_output(build, STEP) as out:
         run(args, build, out)
 
 
 def run(args, build: Path, out: Path) -> None:
 
-    recipes = {r["flavor"]: r for p in args.recipes for r in json.loads(p.read_text())["recipes"]}
-    curated = json.loads(args.labels.read_text())["flavors"]
+    recipes = {r["flavor"]: r for r in layout.recipes(args.assembly)}
+    curated = json.loads(layout.flavors_file(args.assembly).read_text())["flavors"]
     label_of = {t: f["label"] for f in curated for t in f["targets"]}
     target_meta = {t: m for f in curated for t, m in f["targets"].items()}
     if len({f["label"] for f in curated}) != len(curated):

@@ -3,8 +3,8 @@
 An external root's bases are never hosted (no root_blocks rows), because its
 licence does not allow it; the library fetches them from the source. For now
 that is IPD-IMGT/HLA release 3.18.0 (CC BY-ND), the HLA alleles in bwakit's
-hs38DH. Reads its per-gene FASTAs from REGISTRY/raw (see 00_fetch_inputs.sh) and
-writes REGISTRY/build/grch38/11_external_roots/roots_external.parquet:
+hs38DH. Reads its per-gene FASTAs from raw/ (see 00_fetch_inputs.sh) and
+writes build/grch38/11_external_roots/roots_external.parquet:
 
 - root_id      IMGTHLA:<release>:<IMGT accession>, e.g. IMGTHLA:3.18.0:HLA00001.
                A release can carry one accession twice (3.18.0: HLA00664,
@@ -19,7 +19,7 @@ writes REGISTRY/build/grch38/11_external_roots/roots_external.parquet:
 - length, md5, sha512t24u, n_N, n_iupac, n_lower   as in roots.parquet
 - source       URL of the gene FASTA
 
-Usage: uv run python -I pipeline/11_external_roots.py REGISTRY_DIR [--assembly grch38]
+Usage: uv run python -I pipeline/11_external_roots.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -67,12 +67,10 @@ def parse_header(header: str) -> tuple[str, str, int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
-        run(layout.raw_dir(args.registry), out)
-        layout.record_inputs(out, STEP, layout.INPUTS_LOCK)
+    args = layout.arguments(ap)
+    with layout.step_output(args.build, STEP) as out:
+        run(args.raw, out)
+        layout.record_inputs(out, STEP, layout.inputs_lock(args.assembly))
 
 
 def run(raw: Path, out_dir: Path) -> None:

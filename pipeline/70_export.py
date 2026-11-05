@@ -1,6 +1,6 @@
 """Export a catalog release: the published tables plus a manifest.
 
-Copies the published files from the step directories of REGISTRY/build/grch38
+Copies the published files from the step directories of build/grch38
 into OUT_DIR, in the flat layout a release has (copies,
 not links, so a later rebuild can't change a release) and writes
 OUT_DIR/catalog.json: the
@@ -17,11 +17,11 @@ the tables it read must still have the hashes it recorded, so a release ships
 only files that passed every check as they are. The root check must have
 consulted ENA; --development accepts a run with --skip-ena, for exports that
 are not releases. Every step that read raw/ must have read it through the
-current locks (locks/inputs.lock, locks/targets.lock). catalog.json records
+current locks (assemblies/<assembly>/locks/). catalog.json records
 each check's result and the hash of each lock, and the locks ship under
 evidence/locks/.
 
-Usage: uv run python -I pipeline/70_export.py REGISTRY_DIR OUT_DIR VERSION [--development] [--assembly grch38]
+Usage: uv run python -I pipeline/70_export.py OUT_DIR VERSION [--development] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -91,7 +91,7 @@ def card(build: Path, version: str) -> str:
 CHECKS = ["check_gaps", "check_roots", "check_materialize"]
 
 
-def gate(build: Path, development: bool = False) -> tuple[dict, list[str]]:
+def gate(build: Path, development: bool = False, assembly: str = layout.ASSEMBLY) -> tuple[dict, list[str]]:
     """Each check's recorded result, and why the build can't be exported, if it can't."""
     results, problems = {}, []
     for check in CHECKS:
@@ -113,7 +113,7 @@ def gate(build: Path, development: bool = False) -> tuple[dict, list[str]]:
         if r["details"].get("ena") == "skipped" and not development:
             problems.append(f"{check}: ran without ENA (--skip-ena); rerun it, or export --development")
     # Every step that read raw/ must have read it through the current locks.
-    locks = {lock.name: layout.sha256(lock) for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK)}
+    locks = {lock.name: layout.sha256(lock) for lock in (layout.inputs_lock(assembly), layout.targets_lock(assembly))}
     for d in layout.step_dirs(build):
         for f in d.glob("*.inputs.json"):
             for name, digest in json.loads(f.read_text()).items():
@@ -124,17 +124,15 @@ def gate(build: Path, development: bool = False) -> tuple[dict, list[str]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("version")
     ap.add_argument("--development", action="store_true",
                     help="accept a root check run without ENA (not for releases)")
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build, out, version = layout.build_dir(args.registry, args.assembly), args.out, args.version
+    args = layout.arguments(ap)
+    build, out, version = args.build, args.out, args.version
     if out.exists():
         sys.exit(f"{out} exists: a release is never overwritten")
-    results, problems = gate(build, args.development)
+    results, problems = gate(build, args.development, args.assembly)
     if problems:
         sys.exit("not exported:\n  " + "\n  ".join(problems))
     staging = out.with_name(out.name + ".partial")
@@ -149,7 +147,7 @@ def main() -> None:
         src = layout.path(build, name)
         entries += [(p, f"evidence/{name}" + (f"/{p.name}" if src.is_dir() else ""), "evidence")
                     for p in ([src] if src.is_file() else sorted(src.glob("*")))]
-    for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK, layout.LOCKS / "checksum_exceptions.tsv"):
+    for lock in (layout.inputs_lock(args.assembly), layout.targets_lock(args.assembly), layout.inputs_lock(args.assembly).with_name("checksum_exceptions.tsv")):
         entries.append((lock, f"evidence/locks/{lock.name}", "evidence"))
     files = {}
     for src, rel, role in entries:
@@ -159,7 +157,7 @@ def main() -> None:
         print(f"{rel}\t{dst.stat().st_size}", file=sys.stderr)
     manifest = {
         "name": "refbook", "format": FORMAT, "version": version,
-        "locks": {lock.name: layout.sha256(lock) for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK)},
+        "locks": {lock.name: layout.sha256(lock) for lock in (layout.inputs_lock(args.assembly), layout.targets_lock(args.assembly))},
         "checks": {c: {"passed": r["passed"], **({"ena": r["details"]["ena"]} if "ena" in r["details"] else {})}
                    for c, r in results.items()},
         "created": datetime.date.today().isoformat(),

@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Fetch published GRCh38 flavor files (the recipe targets) into $REGISTRY/raw.
+# Fetch published GRCh38 flavor files (the recipe targets) into raw/.
 #
 # Same conventions as 00_fetch_inputs.sh: files land at raw/<host>/<url path>,
 # wget -N keeps the server's Last-Modified time and skips unchanged files.
 # Each source's own checksum list is fetched too, and lock.py checks every
-# file against it and against locks/targets.lock at the end (written on first
+# file against it and against assemblies/grch38/locks/targets.lock at the end (written on first
 # use; pass --update to accept changes).
 #
-# Usage: 01_fetch_targets.sh REGISTRY_DIR [--update]
+# Usage: 01_fetch_targets.sh [--update]   (downloads to raw/, or $REFBOOK_RAW)
 set -euo pipefail
 
-mkdir -p "${1:?usage: 01_fetch_targets.sh REGISTRY_DIR [--update]}"
-REGISTRY=$(cd "$1" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
-mkdir -p "$REGISTRY/raw"
-cd "$REGISTRY/raw"
+RAW=${REFBOOK_RAW:-$HERE/../raw}
+mkdir -p "$RAW"
+RAW=$(cd "$RAW" && pwd)
+LOCKS=$HERE/../assemblies/grch38/locks
+cd "$RAW"
 
 wget_mirror() {
     wget --no-verbose --timestamping --force-directories \
@@ -73,6 +74,6 @@ for f in Homo_sapiens_assembly38.dict Homo_sapiens_assembly38.fasta.fai; do
 done
 echo "fetch complete" >&2
 
-uv run --project "$HERE/.." python -I "$HERE/lock.py" "$REGISTRY" "$HERE/../locks/targets.lock" \
+uv run --project "$HERE/.." python -I "$HERE/lock.py" "$LOCKS/targets.lock" --raw "$RAW" \
     hgdownload.soe.ucsc.edu ftp.ensembl.org ftp.ebi.ac.uk storage.googleapis.com \
-    ftp.1000genomes.ebi.ac.uk ngi-igenomes.s3.amazonaws.com "${@:2}"
+    ftp.1000genomes.ebi.ac.uk ngi-igenomes.s3.amazonaws.com "$@"

@@ -5,11 +5,11 @@ digest, findable by MD5), how to make its bases: a root and the nucleotide
 operations applied to it. The collection store holds named collections by
 seqcol digest. Flavors (cataloged named sequence sets, with labels, recipes and
 facets) and targets (the files that reproduce them) are curated entries on top;
-see GLOSSARY.md.
+see docs/GLOSSARY.md.
 
 A catalog is a directory of the pipeline's outputs: a release made by
 pipeline/70_export.py (with a catalog.json manifest), or the build
-directory itself (REGISTRY/build/grch38, whose catalog.json indexes the step
+directory itself (build/grch38, whose catalog.json indexes the step
 directories the pipeline wrote). Open it by path or by URL. Remotely,
 each table is downloaded once into a cache keyed by the release version and
 checked against the manifest's sha256; root_blocks is never downloaded, only

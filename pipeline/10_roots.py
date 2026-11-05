@@ -1,8 +1,8 @@
 """Build the GRCh38 root tables from the raw NCBI downloads.
 
 The roots are every GRCh38 sequence (p0-p14) plus the roots its flavors add:
-the hs38d1 decoys and EBV. Reads REGISTRY/raw (see 00_fetch_inputs.sh) and
-writes Parquet to REGISTRY/build/grch38/10_roots/:
+the hs38d1 decoys and EBV. Reads raw/ (see 00_fetch_inputs.sh) and
+writes Parquet to build/grch38/10_roots/:
 
 - roots.parquet             one row per sequence accession.version: length,
                             refget digests (MD5, SQ.), base composition counts
@@ -16,7 +16,7 @@ writes Parquet to REGISTRY/build/grch38/10_roots/:
 Fails if a report lists a sequence that is missing or has the wrong length
 (EBV's length comes from its GenBank record).
 
-Usage: uv run python -I pipeline/10_roots.py REGISTRY_DIR [--assembly grch38] [--block-size N]
+Usage: uv run python -I pipeline/10_roots.py [--assembly A] [--raw DIR] [--build DIR] [--block-size N]
 """
 
 import argparse
@@ -125,15 +125,13 @@ def build_members(raw: Path) -> pa.Table:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     ap.add_argument("--block-size", type=int, default=root_blocks.BLOCK_SIZE)
-    args = ap.parse_args()
+    args = layout.arguments(ap)
     if args.assembly != "grch38":
         sys.exit(f"{args.assembly}: only grch38's sources are defined (see layout.py)")
-    with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
-        run(layout.raw_dir(args.registry), out, args.block_size)
-        layout.record_inputs(out, STEP, layout.INPUTS_LOCK)
+    with layout.step_output(args.build, STEP) as out:
+        run(args.raw, out, args.block_size)
+        layout.record_inputs(out, STEP, layout.inputs_lock(args.assembly))
 
 
 def run(raw: Path, out: Path, block_size: int) -> None:

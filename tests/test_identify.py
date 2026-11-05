@@ -1,6 +1,6 @@
 """Tests for seqcol digests, header parsing and identify.
 
-Identify tests need the catalog (REGISTRY/build/grch38); they are skipped
+Identify tests need the catalog (build/grch38); they are skipped
 when it is not there. Set REFBOOK_CATALOG to point elsewhere.
 """
 
@@ -16,7 +16,7 @@ from refbook import seqcol
 from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CATALOG = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/build/grch38"))
+CATALOG = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))
 needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 

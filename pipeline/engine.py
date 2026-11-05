@@ -2,7 +2,7 @@
 
 A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it,
 and it is the reference the Rust core must agree with (tests/test_golden.py).
-A recipe (see recipes/*.json) is data. The operations, in the order applied:
+A recipe (see assemblies/<assembly>/recipes/*.json) is data. The operations, in the order applied:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
            accession.version>, "roles": [...], "accessions": [...]?} (rows of

@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# Fetch the raw NCBI inputs for the GRCh38 roots into $REGISTRY/raw.
+# Fetch the raw NCBI inputs for the GRCh38 roots into raw/.
 #
 # Files land at raw/<host>/<url path>, so every file's source URL is its path.
 # wget -N keeps the server's Last-Modified time as the file's mtime and skips
 # files that haven't changed, so the script is safe to re-run. At the end,
 # lock.py checks every file against its publisher's checksums and against
-# locks/inputs.lock (written on first use; pass --update to accept changes).
+# assemblies/grch38/locks/inputs.lock (written on first use; pass --update to accept changes).
 #
-# Usage: 00_fetch_inputs.sh REGISTRY_DIR [--update]
+# Usage: 00_fetch_inputs.sh [--update]   (downloads to raw/, or $REFBOOK_RAW)
 set -euo pipefail
 
-mkdir -p "${1:?usage: 00_fetch_inputs.sh REGISTRY_DIR [--update]}"
-REGISTRY=$(cd "$1" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
-RAW="$REGISTRY/raw"
+RAW=${REFBOOK_RAW:-$HERE/../raw}
+mkdir -p "$RAW"
+RAW=$(cd "$RAW" && pwd)
+LOCKS=$HERE/../assemblies/grch38/locks
 NCBI=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405
 mkdir -p "$RAW"
 cd "$RAW"
@@ -114,5 +115,5 @@ for x in json.load(sys.stdin)["tree"]:
     | while read -r path; do wget_mirror "$IMGT/$path"; done
 echo "fetch complete" >&2
 
-uv run --project "$HERE/.." python -I "$HERE/lock.py" "$REGISTRY" "$HERE/../locks/inputs.lock" \
-    ftp.ncbi.nlm.nih.gov eutils.ncbi.nlm.nih.gov raw.githubusercontent.com "${@:2}"
+uv run --project "$HERE/.." python -I "$HERE/lock.py" "$LOCKS/inputs.lock" --raw "$RAW" \
+    ftp.ncbi.nlm.nih.gov eutils.ncbi.nlm.nih.gov raw.githubusercontent.com "$@"

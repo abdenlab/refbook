@@ -8,7 +8,7 @@
    19, 21, 22, Y) it must differ. Pass a *_plus_hs38d1_analysis_set to also
    cover the decoys and EBV.
 
-Writes REGISTRY/build/grch38/61_check_roots/: verify_roots.tsv and
+Writes build/grch38/61_check_roots/: verify_roots.tsv and
 check_roots.json (the result, with the sha256 of each input table), and prints
 a summary. Exits nonzero, after recording it, if any root is absent from ENA
 or has another length there, or if any GRC M5 is unexpected.
@@ -16,7 +16,7 @@ or has another length there, or if any GRC M5 is unexpected.
 With --skip-ena, only the GRC comparison runs, and the result says so (a
 release can require the full check).
 
-Usage: uv run python -I pipeline/61_check_roots.py REGISTRY_DIR [--analysis-set FNA_GZ] [--skip-ena] [--assembly grch38]
+Usage: uv run python -I pipeline/61_check_roots.py [--analysis-set FNA_GZ] [--skip-ena] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -89,16 +89,14 @@ def status(length: int, md5: str, ena_length: int | None, grc_md5: str | None,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     ap.add_argument("--analysis-set", type=Path, help="GRC analysis-set FASTA whose deflines carry M5 "
                     "(default: the full_plus_hs38d1 set under raw/)")
     ap.add_argument("--skip-ena", action="store_true",
                     help="skip the ENA lookups (3,097 requests, minutes); recorded in the result")
-    args = ap.parse_args()
-    analysis = args.analysis_set or (layout.release_dir(layout.raw_dir(args.registry), 0)
+    args = layout.arguments(ap)
+    analysis = args.analysis_set or (layout.release_dir(args.raw, 0)
                                      / "seqs_for_alignment_pipelines.ucsc_ids" / ANALYSIS_SET)
-    build = layout.build_dir(args.registry, args.assembly)
+    build = args.build
     with layout.step_output(build, STEP) as out:
         failed = run(build, out, analysis, args.skip_ena)
     if failed:

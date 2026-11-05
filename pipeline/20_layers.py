@@ -1,7 +1,7 @@
 """Build the GRCh38 annotation layers from the raw NCBI downloads.
 
-Reads REGISTRY/raw (see 00_fetch_inputs.sh) and the roots (10_roots), and
-writes Parquet to REGISTRY/build/grch38/20_layers/:
+Reads raw/ (see 00_fetch_inputs.sh) and the roots (10_roots), and
+writes Parquet to build/grch38/20_layers/:
 
 - layer_agp.parquet   one row per AGP part of each root's component-level AGP
                       (*.comp.agp.gz, *.scaf.agp.gz of GRCh38 and hs38d1; EBV,
@@ -19,7 +19,7 @@ writes Parquet to REGISTRY/build/grch38/20_layers/:
 A root's AGP is the same in every release (checked by 60_check_gaps.py and again
 here), so each root appears once.
 
-Usage: uv run python -I pipeline/20_layers.py REGISTRY_DIR [--assembly grch38]
+Usage: uv run python -I pipeline/20_layers.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -292,15 +292,13 @@ def build_hardmask_grc(raw: Path, length: dict, regions: pa.Table) -> pa.Table:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
+    args = layout.arguments(ap)
     if args.assembly != "grch38":
         sys.exit(f"{args.assembly}: only grch38's sources are defined (see layout.py)")
-    build = layout.build_dir(args.registry, args.assembly)
+    build = args.build
     with layout.step_output(build, STEP) as out:
-        run(layout.raw_dir(args.registry), build, out)
-        layout.record_inputs(out, STEP, layout.INPUTS_LOCK)
+        run(args.raw, build, out)
+        layout.record_inputs(out, STEP, layout.inputs_lock(args.assembly))
 
 
 def run(raw: Path, build: Path, out: Path) -> None:

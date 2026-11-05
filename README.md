@@ -145,7 +145,7 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
   and checked against ENA's refget server.
 - **Layers** annotate roots in their own coordinates.
 - **Recipes** turn roots into a published file: select, mask, change the
-  alphabet (IUPAC→N) and rename. They are data, in `recipes/*.json`. Order
+  alphabet (IUPAC→N) and rename. They are data, in `assemblies/grch38/recipes/*.json`. Order
   isn't part of a recipe: each published file's order is recorded as observed.
 - **Reconstruction is the verification.** A file counts as cataloged only when
   its recipe reproduces it, sequence by sequence: names, lengths, MD5 and `SQ.`
@@ -153,7 +153,8 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
   order UCSC uses, which patches Ensembl leaves out, and how bwakit chose its HLA
   alleles.
 
-[`SCOPE.md`](SCOPE.md) is the design document.
+[`docs/SCOPE.md`](docs/SCOPE.md) is the design document, and
+[`docs/GLOSSARY.md`](docs/GLOSSARY.md) defines its terms.
 
 ## Building the catalog
 
@@ -161,41 +162,49 @@ The pipeline in `pipeline/` builds a catalog from the original downloads; it
 runs on the lab server and needs about 15 GB.
 
 ```bash
-R=/path/to/registry
-pipeline/00_fetch_inputs.sh $R      # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks locks/inputs.lock
-pipeline/01_fetch_targets.sh $R     # published files used as reproduction targets; checks locks/targets.lock
-uv run python -I pipeline/10_roots.py $R
-uv run python -I pipeline/11_external_roots.py $R
-uv run python -I pipeline/20_layers.py $R
-uv run python -I pipeline/30_observe.py $R recipes/*.json
-uv run python -I pipeline/40_recipes.py $R recipes/*.json
-uv run python -I pipeline/41_flavors.py $R flavors.json recipes/*.json
-uv run python -I pipeline/50_aliases.py $R
-uv run python -I pipeline/60_check_gaps.py $R
-uv run python -I pipeline/61_check_roots.py $R
-uv run python -I pipeline/62_check_materialize.py $R
-uv run python -I pipeline/70_export.py $R $R/catalog/<version> <version>
+ln -s /path/to/a/mirror raw          # optional: share raw/ between checkouts (gitignored)
+pipeline/00_fetch_inputs.sh          # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks the inputs lock
+pipeline/01_fetch_targets.sh         # published files used as reproduction targets; checks the targets lock
+uv run python -I pipeline/10_roots.py
+uv run python -I pipeline/11_external_roots.py
+uv run python -I pipeline/20_layers.py
+uv run python -I pipeline/30_observe.py
+uv run python -I pipeline/40_recipes.py
+uv run python -I pipeline/41_flavors.py
+uv run python -I pipeline/50_aliases.py
+uv run python -I pipeline/60_check_gaps.py
+uv run python -I pipeline/61_check_roots.py
+uv run python -I pipeline/62_check_materialize.py
+uv run python -I pipeline/70_export.py build/releases/<version> <version>
 ```
 
-Each step writes its own directory, `build/grch38/<NN_step>/`, assembled under a
-temporary name and renamed into place when it finishes, so a rerun replaces
+Steps read `raw/` and write `build/<assembly>/` in the repository (both
+gitignored; override with `--raw`/`--build` or `REFBOOK_RAW`/`REFBOOK_BUILD`).
+Their declarative inputs are in `assemblies/<assembly>/`: the recipes, the
+cataloged flavors, and the locks.
+
+Each step writes its own directory, `build/grch38/<NN_step>/`, assembled under
+a temporary name and renamed into place when it finishes, so a rerun replaces
 exactly that step's outputs. A step finds earlier steps' tables by name, and
 `build/grch38/catalog.json` indexes them all, so `Catalog("build/grch38")` opens
-a build directly. The checks (60-62) record their results with the hashes of
-the tables they read, and the export refuses unless every check passed on
-exactly the files it ships.
-
-The fetch steps pin their downloads with **locks** (`locks/inputs.lock`,
-`locks/targets.lock`): every file's size, sha256, Last-Modified and URL. A
-fetch checks each file against its publisher's checksum list where there is
-one, and against the lock; anything new or changed fails until you accept it
-with `--update`. On the first run there is no lock, so the files are trusted
-and the lock is written. Publisher checksums that disagree with what the
-publisher actually serves are listed, with the reason, in
-`locks/checksum_exceptions.tsv`. Each observation records the exact target
-file it was made from, and a release records the hash of each lock. Every step takes `--assembly` (only `grch38` is defined
-so far); `pipeline/layout.py` holds the layout and the GRCh38 releases, and
+a build directly. Every step takes `--assembly` (only `grch38` is defined so
+far). `pipeline/layout.py` holds the layout and the GRCh38 releases, and
 `pipeline/engine.py` the recipe engine.
+
+The checks (60-62) record their results with the hashes of the tables they
+read, and the export refuses unless every check passed on exactly the files it
+ships.
+
+The fetch steps pin their downloads with **locks**
+(`assemblies/grch38/locks/inputs.lock` and `targets.lock`): every file's size,
+sha256, Last-Modified and URL. A fetch checks each file against its publisher's
+checksum list where there is one, and against the lock; anything new or
+changed fails until you accept it with `--update`. On the first run there is no
+lock, so the files are trusted and the lock is written. Publisher checksums
+that disagree with what the publisher actually serves are listed, with the
+reason, in `checksum_exceptions.tsv` next to the locks. Each observation records
+the exact target file it was made from, and a release records the hash of each
+lock.
 
 Each script's docstring says what it reads, writes and checks.
 
@@ -205,11 +214,9 @@ Each script's docstring says what it reads, writes and checks.
 | --- | --- |
 | `src/refbook/` | The library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `pipeline/` | The numbered steps that build, check and export the catalog, and their shared modules (`layout`, `engine`, `observe`) |
-| `recipes/` | The recipes, one JSON file per publisher |
-| `flavors.json` | The cataloged flavors: labels, and the targets (published files) that reproduce each |
+| `assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
 | `tests/` | Tests, with real ENCODE, gnomAD and GIAB headers as fixtures |
-| `experiments/` | Measurements behind design decisions, e.g. the Parquet layout |
-| `pages/` | The family tree page and the scripts that build it |
+| `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 
 ## Development
 

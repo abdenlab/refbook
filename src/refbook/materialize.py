@@ -47,7 +47,7 @@ class Bases:
         self.blocks = cat.open_blocks()
         self.http = cat.blocks_http if cat.remote else None   # this Bases' own range reader
         self.row_groups = row_groups_by_root(self.blocks)
-        # A local mirror of the sources (REGISTRY/raw), when the catalog sits in REGISTRY/*/*.
+        # A local mirror of the sources (raw/), when the catalog is a build (build/<assembly>).
         self.mirror = None if cat.remote else cat.path.parent.parent / "raw"
         self.cache = Path(cache or os.environ.get("REFBOOK_CACHE",
                                                   Path.home() / ".cache" / "refbook"))

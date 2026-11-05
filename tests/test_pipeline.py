@@ -336,11 +336,11 @@ def test_export_gate_on_locks(tmp_path):
     (build / "10_roots").mkdir(parents=True)
     (build / "10_roots" / "10_roots.inputs.json").write_text('{"inputs.lock": "not the current lock"}')
     assert "10_roots: built from another inputs.lock; rerun it" in export.gate(build)[1]
-    layout.record_inputs(build / "10_roots", "10_roots", layout.INPUTS_LOCK)
+    layout.record_inputs(build / "10_roots", "10_roots", layout.inputs_lock())
     assert not any("built from another" in p for p in export.gate(build)[1])
 
 
-def test_lock_publisher_checks(tmp_path, monkeypatch):
+def test_lock_publisher_checks(tmp_path):
     import hashlib
     raw = tmp_path / "raw"
     (raw / "h/d").mkdir(parents=True)
@@ -352,11 +352,12 @@ def test_lock_publisher_checks(tmp_path, monkeypatch):
     for p in sorted(q for q in raw.rglob("*") if q.is_file()):
         sha, m = lock.digests(p)
         files[p.relative_to(raw).as_posix()] = {"md5": m, "sha256": sha}
-    monkeypatch.setattr(lock, "known_mismatches", lambda: set())
     checked, errors = lock.publisher_checks(raw, files)
     assert checked == 2 and errors == ["h/d/b.txt: does not match h/d/md5checksums.txt"]
-    monkeypatch.setattr(lock, "known_mismatches", lambda: {("h/d/b.txt", "0" * 32, md5["b"])})
-    assert lock.publisher_checks(raw, files) == (2, [])          # a documented mismatch
+    known = {("h/d/b.txt", "0" * 32, md5["b"])}
+    assert lock.publisher_checks(raw, files, known) == (2, [])   # a documented mismatch
+    (tmp_path / "checksum_exceptions.tsv").write_text(f"path\tlisted_md5\tserved_md5\tnote\nh/d/b.txt\t{'0' * 32}\t{md5['b']}\twhy\n")
+    assert lock.known_mismatches(tmp_path / "checksum_exceptions.tsv") == known
 
 
 def test_lock_round_trip(tmp_path):

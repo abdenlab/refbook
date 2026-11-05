@@ -1,7 +1,7 @@
 """Check that every run of N in the roots is explained by the AGP.
 
 Reads the component-level AGPs (*.comp.agp.gz, *.scaf.agp.gz) of every GRCh38
-release and of hs38d1 in REGISTRY/raw, plus
+release and of hs38d1 in raw/, plus
 the roots, N-runs and assembly members (10_roots), and checks:
 
 - every root in an assembly has an AGP (EBV is in none), identical in every
@@ -12,12 +12,12 @@ the roots, N-runs and assembly members (10_roots), and checks:
 - each release's genomic_gaps.txt.gz (p7, p13, p14 only) is exactly its AGP
   gaps plus the N-runs inside components of >= MIN_COMPONENT_N
 
-Writes REGISTRY/build/grch38/60_check_gaps/: check_gaps.tsv (one row per N-run
+Writes build/grch38/60_check_gaps/: check_gaps.tsv (one row per N-run
 or gap that is not an exact match) and check_gaps.json (the result, with the
 sha256 of each input table), and prints a summary. Exits nonzero on a hard
 failure, after recording it.
 
-Usage: uv run python -I pipeline/60_check_gaps.py REGISTRY_DIR [--assembly grch38]
+Usage: uv run python -I pipeline/60_check_gaps.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -115,12 +115,10 @@ def read_genomic_gaps(path: Path) -> dict[str, set[tuple[int, int]]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("registry", type=Path)
-    ap.add_argument("--assembly", default=layout.ASSEMBLY)
-    args = ap.parse_args()
-    build = layout.build_dir(args.registry, args.assembly)
+    args = layout.arguments(ap)
+    build = args.build
     with layout.step_output(build, STEP) as out:
-        passed = run(layout.raw_dir(args.registry), build, out)
+        passed = run(args.raw, build, out)
     if not passed:
         sys.exit(1)
 

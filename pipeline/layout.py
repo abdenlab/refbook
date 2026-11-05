@@ -1,11 +1,17 @@
-"""The registry's layout and the GRCh38 releases, defined once for every step.
+"""Where everything is, and the GRCh38 releases, defined once for every step.
 
-A registry directory holds raw/ (downloads, at raw/<host>/<url path>) and
-build/<assembly>/ (the steps' outputs).
+- raw/: the downloads, at raw/<host>/<url path> (a symlink to a shared mirror
+  is fine). Override with --raw or REFBOOK_RAW.
+- build/<assembly>/: the steps' outputs. Override with --build or REFBOOK_BUILD.
+- assemblies/<assembly>/: the declarative inputs: recipes/*.json,
+  flavors.json, and locks/ (written by lock.py).
+
+Every path defaults to the repository, so a step needs no arguments.
 """
 
 import hashlib
 import json
+import os
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,12 +27,43 @@ RELEASES = [(n, f"{GRCH38}{15 + n}", "GRCh38" if n == 0 else f"GRCh38.p{n}") for
 LATEST = RELEASES[-1]
 
 
-def raw_dir(registry: Path) -> Path:
-    return registry / "raw"
+REPO = Path(__file__).resolve().parent.parent
 
 
-def build_dir(registry: Path, assembly: str = ASSEMBLY) -> Path:
-    return registry / "build" / assembly
+def raw_dir(raw: Path | None = None) -> Path:
+    return Path(raw or os.environ.get("REFBOOK_RAW") or REPO / "raw")
+
+
+def build_dir(assembly: str = ASSEMBLY, build: Path | None = None) -> Path:
+    return Path(build or os.environ.get("REFBOOK_BUILD") or REPO / "build") / assembly
+
+
+def assembly_dir(assembly: str = ASSEMBLY) -> Path:
+    return REPO / "assemblies" / assembly
+
+
+def recipe_files(assembly: str = ASSEMBLY) -> list[Path]:
+    return sorted((assembly_dir(assembly) / "recipes").glob("*.json"))
+
+
+def recipes(assembly: str = ASSEMBLY) -> list[dict]:
+    """Every recipe of an assembly, from assemblies/<assembly>/recipes/*.json."""
+    return [r for p in recipe_files(assembly) for r in json.loads(p.read_text())["recipes"]]
+
+
+def flavors_file(assembly: str = ASSEMBLY) -> Path:
+    return assembly_dir(assembly) / "flavors.json"
+
+
+def arguments(ap):
+    """Parse a step's arguments, with the options every step shares; args.raw and
+    args.build come back as the resolved directories."""
+    ap.add_argument("--assembly", default=ASSEMBLY)
+    ap.add_argument("--raw", type=Path, help="the downloads (default: raw/, or $REFBOOK_RAW)")
+    ap.add_argument("--build", type=Path, help="where steps write (default: build/, or $REFBOOK_BUILD)")
+    args = ap.parse_args()
+    args.raw, args.build = raw_dir(args.raw), build_dir(args.assembly, args.build)
+    return args
 
 
 def release_dir(raw: Path, n: int) -> Path:
@@ -133,9 +170,14 @@ def record_check(build: Path, out: Path, check: str, passed: bool, inputs: list[
 
 
 # Locks (see lock.py): the exact bytes the build reads from raw/.
-LOCKS = Path(__file__).resolve().parent.parent / "locks"
-INPUTS_LOCK = LOCKS / "inputs.lock"     # 00_fetch_inputs.sh: NCBI, efetch, IMGT/HLA
-TARGETS_LOCK = LOCKS / "targets.lock"   # 01_fetch_targets.sh: the published files
+def inputs_lock(assembly: str = ASSEMBLY) -> Path:
+    """00_fetch_inputs.sh's lock: NCBI, efetch, IMGT/HLA."""
+    return assembly_dir(assembly) / "locks" / "inputs.lock"
+
+
+def targets_lock(assembly: str = ASSEMBLY) -> Path:
+    """01_fetch_targets.sh's lock: the publishers' files."""
+    return assembly_dir(assembly) / "locks" / "targets.lock"
 
 
 def read_lock(lock: Path) -> dict[str, dict]:

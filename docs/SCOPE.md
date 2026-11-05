@@ -250,7 +250,7 @@ A **flavor** is a recipe applied to roots. The operations:
 4. **change the alphabet**: IUPAC→`N`, or a change of case;
 5. **rename** into a namespace, or with an explicit map;
 6. ~~**order** the sequences~~ and 7. ~~**format** the output~~: removed
-   2026-11-04. A flavor is a named sequence set (GLOSSARY.md), so order and
+   2026-11-04. A flavor is a named sequence set (docs/GLOSSARY.md), so order and
    formatting are recorded from each published file, not reproduced.
 
 A root after the sequence-level operations (mask, alphabet) is a
@@ -445,7 +445,8 @@ distribution and the library.
    tracks reproduce `hg38.fa`'s lowercase exactly? It isn't part of identity,
    but it is a test of whether the soft-mask layers are faithful.
 3. **Block size and layout of `root_blocks`.** Settled (measured in
-   `experiments/root_blocks_layout.py`). Keep fixed 64 kb rows. Gaps cost
+   the experiment script `experiments/root_blocks_layout.py`, since removed;
+   it is in git history). Keep fixed 64 kb rows. Gaps cost
    nothing (all 2,219 all-N blocks compress to ~17 kB), and AGP components vary
    from <1 kb to 4.8 Mb, which would make fetch cost uneven and need a lookup.
    Use row groups of 32 blocks that never span roots, statistics on
