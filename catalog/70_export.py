@@ -41,6 +41,7 @@ FILES = {
     "roots.parquet": "roots", "roots_external.parquet": "roots",
     "root_blocks.parquet": "bases",
     "assembly_members.parquet": "assemblies", "aliases.parquet": "aliases",
+    "sequence_aliases.parquet": "aliases",
     "layer_agp.parquet": "layer", "layer_regions.parquet": "layer",
     "layer_placements.parquet": "layer", "layer_hardmask_grc.parquet": "layer",
     "layer_iupac.parquet": "layer", "layer_n_runs.parquet": "layer",

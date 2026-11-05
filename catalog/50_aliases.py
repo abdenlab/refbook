@@ -1,10 +1,25 @@
-"""Build the aliases table: every root's names across naming conventions.
+"""Build the aliases tables: every root's names across naming conventions, and
+every stored sequence's names as refget serves them.
 
-Writes build/grch38/50_aliases/aliases.parquet: root_id, namespace, alias,
-source. GenBank, RefSeq, UCSC and GRC Sequence-Name from the assembly reports;
-Ensembl from UCSC's p14 chromAlias.txt, checked against the names in the
-reproduced Ensembl targets; UCSC-style names for EBV and the decoys from the
-GRC analysis sets; IMGT allele names for HLA.
+Writes to build/grch38/50_aliases/:
+
+- aliases.parquet   root_id, namespace, alias, source. GenBank, RefSeq, UCSC
+                    and GRC Sequence-Name from the assembly reports (GenBank
+                    also for the roots fetched from INSDC by accession, such
+                    as EBV); Ensembl
+                    from UCSC's p14 chromAlias.txt, checked against the names
+                    in the reproduced Ensembl targets; UCSC-style names for
+                    EBV and the decoys from the GRC analysis sets; IMGT allele
+                    names and accessions for HLA.
+- sequence_aliases.parquet   sha512t24u, naming_authority, alias: the
+                    `aliases` of refget's /sequence/:id/metadata. A root as
+                    submitted has all its root's aliases. A derivative (a root
+                    with nucleotide operations applied) has only the names
+                    flavors give it that are names of its root (UCSC, GRC,
+                    Ensembl, IMGT allele), never an accession: an INSDC or
+                    RefSeq accession identifies the bases as submitted.
+                    Namespaces become refget naming authorities (genbank ->
+                    insdc; both IMGT namespaces -> imgt.hla).
 
 (Flavors, targets and seqcol documents are built by 41_flavors.py.)
 
@@ -23,6 +38,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves thi
 import layout
 
 STEP = "50_aliases"
+AUTHORITY = {"genbank": "insdc", "refseq": "refseq", "ucsc": "ucsc", "ensembl": "ensembl", "grc": "grc",
+             "imgt": "imgt.hla", "imgt_accession": "imgt.hla"}
+NAMES = {"ucsc", "grc", "ensembl", "imgt"}  # namespaces of names, not of accessions
 CHROMALIAS = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.chromAlias.txt"
 
 
@@ -52,6 +70,10 @@ def run(raw: Path, build: Path, out: Path) -> None:
             aliases.add((acc, "ucsc", m["ucsc_name"], src))
         if m["assembly_name"].startswith("GRCh38"):
             aliases.add((acc, "grc", m["sequence_name"], src))
+    # Roots fetched from INSDC one by one (EBV): their accession is their GenBank name.
+    for r in pq.read_table(layout.path(build, "roots.parquet"), columns=["root_id", "source"]).to_pylist():
+        if "eutils.ncbi.nlm.nih.gov" in r["source"] and f"id={r['root_id']}&" in r["source"]:
+            aliases.add((r["root_id"], "genbank", r["root_id"], "INSDC record"))
     ensembl = {}
     lines = (raw / CHROMALIAS).read_text().splitlines()
     header = lines[0].lstrip("# ").split("\t")
@@ -86,6 +108,33 @@ def run(raw: Path, build: Path, out: Path) -> None:
     for ns in table["namespace"].to_pylist():
         counts[ns] += 1
     print(f"aliases.parquet: {table.num_rows} rows {dict(counts)}", file=sys.stderr)
+
+    seq_aliases = sequence_aliases(build, aliases)
+    cols = list(zip(*sorted(seq_aliases)))
+    pq.write_table(pa.table(dict(zip(("sha512t24u", "naming_authority", "alias"), cols))),
+                   out / "sequence_aliases.parquet", compression="zstd")
+    print(f"sequence_aliases.parquet: {len(seq_aliases)} rows for "
+          f"{len({a[0] for a in seq_aliases})} sequences", file=sys.stderr)
+
+
+def sequence_aliases(build: Path, aliases: set) -> set[tuple[str, str, str]]:
+    """(sha512t24u, naming_authority, alias) for every stored sequence; see the module docstring."""
+    by_root = defaultdict(set)
+    for root, ns, alias, _ in aliases:
+        by_root[root].add((ns, alias))
+    flavor_names = defaultdict(set)
+    for m in pq.read_table(layout.path(build, "manifests.parquet"), columns=["name", "sha512t24u"]).to_pylist():
+        flavor_names[m["sha512t24u"]].add(m["name"])
+    out = set()
+    for s in pq.read_table(layout.path(build, "sequences.parquet"),
+                           columns=["sha512t24u", "root_id", "operations"]).to_pylist():
+        sq, root = s["sha512t24u"], s["root_id"]
+        if not s["operations"]:
+            out |= {(sq, AUTHORITY[ns], alias) for ns, alias in by_root[root]}
+        else:
+            names = flavor_names[sq]
+            out |= {(sq, AUTHORITY[ns], alias) for ns, alias in by_root[root] if ns in NAMES and alias in names}
+    return out
 
 
 if __name__ == "__main__":
