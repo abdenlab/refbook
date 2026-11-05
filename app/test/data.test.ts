@@ -165,7 +165,10 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.equal(is(r), "grch38-full");
   r = edit.setDecoys(r, true);
   assert.equal(is(r), "grch38-full-hs38d1");
-  const dh = edit.GUIDE.find((g) => g.goal === "HLA typing")!.apply(r, all);
+  const hla = edit.GUIDE.find((g) => g.goal === "HLA typing")!;
+  assert.equal(hla.has(r), false);
+  const dh = hla.set(r, true, all);
+  assert.equal(hla.has(dh), true);
   assert.equal(is(dh), "hs38dh");
   // And back: each edit undoes, keeping the rest.
   assert.equal(is(edit.setHla(edit.setDecoys(dh, false), [], all.hla)), "grch38-full");
@@ -176,6 +179,16 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   e = edit.setChromosomeNames(edit.setIupacToN(e, true), "sequence");
   assert.equal(is(e), "ensembl-grch38-primary");
   assert.deepEqual(edit.others(dh), []);
+  // Every goal toggles: on adds it, off takes it away, each the other's inverse here.
+  for (const g of edit.GUIDE) {
+    const on = g.set(dh, true, all), off = g.set(dh, false, all);
+    assert.ok(g.has(on) && !g.has(off), g.goal);
+    assert.equal(is(g.set(off, true, all)), is(on), g.goal);
+  }
+  const scratch = edit.fromScratch();
+  const primaryGoal = edit.GUIDE[0];
+  assert.equal(primaryGoal.has(scratch), false);
+  assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, all))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
   const hg38p14 = JSON.parse(fs.find((f) => f.flavor === "hg38-p14")!.recipe);
   assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
 });

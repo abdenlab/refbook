@@ -29,6 +29,7 @@
       if (r) return decodeRecipe(r);
     } catch { /* a bad link: start from scratch */ }
     const from = fs.find((f) => f.flavor === query.get("from"));
+    if (from) start = from.flavor;
     return from ? plainRecipe(JSON.parse(from.recipe)) : edit.fromScratch();
   }
 
@@ -222,18 +223,20 @@
       </div>
 
       <h2>Guide</h2>
-      <p class="muted">Choices commonly made for an analysis goal. Apply one to add it to the recipe.</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Goal</th><th>Choice</th><th></th></tr></thead>
-          <tbody>
-            {#each edit.GUIDE as g (g.goal)}
-              <tr><td>{g.goal}</td><td>{g.choice}</td>
-                <td><button type="button" onclick={() => set(g.apply(recipe!, { hla: hlaAll }))}>Apply</button></td></tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+      <p class="muted">Choices commonly made for an analysis goal. Switch one on or off; the form and the recipe follow.</p>
+      <ul class="guide">
+        {#each edit.GUIDE as g (g.goal)}
+          {@const on = g.has(recipe)}
+          <li>
+            <label class="switch">
+              <input type="checkbox" role="switch" checked={on} aria-checked={on}
+                     onchange={(e) => set(g.set(recipe!, e.currentTarget.checked, { hla: hlaAll }))} />
+              <span class="goal">{g.goal}</span>
+            </label>
+            <span class="muted">{g.choice}</span>
+          </li>
+        {/each}
+      </ul>
 
       <h2>Recipe</h2>
       <p class="muted">The recipe the form edits, in full. Edit it here for anything the form doesn't show.</p>

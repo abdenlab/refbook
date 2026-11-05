@@ -135,22 +135,38 @@ export function setChromosomeNames(r: Recipe, namespace: string | null): Recipe 
   return out;
 }
 
-/** The guide: analysis goals, and the choices commonly made for them. */
-export interface Goal { goal: string; choice: string; apply: (r: Recipe, all: { hla: string[] }) => Recipe }
+/** The guide: analysis goals, and the choices commonly made for them, each a
+ * toggle: whether the recipe has the choice, and the edit that adds or removes it. */
+export interface Goal {
+  goal: string;
+  choice: string;
+  has: (r: Recipe) => boolean;
+  set: (r: Recipe, on: boolean, all: { hla: string[] }) => Recipe;
+}
+
+const SCAFFOLDS = ["unlocalized-scaffold", "unplaced-scaffold"];
 
 export const GUIDE: Goal[] = [
-  { goal: "Alt-aware alignment", choice: "include the alt scaffolds (an aligner also needs their alignments, e.g. bwakit's .alt file)",
-    apply: (r) => setRole(r, "alt-scaffold", true) },
-  { goal: "Germline calling on chrX and chrY", choice: "the GRC hard-mask: chrY's PARs (chrX keeps them), and duplicate copies of centromeric and acrocentric arrays on chr5, 14, 19, 21 and 22",
-    apply: (r) => setMask(r, "hardmask_grc", true) },
-  { goal: "Fewer false positives from reads of unassembled sequence", choice: "the hs38d1 decoys",
-    apply: (r) => setDecoys(r, true) },
-  { goal: "HLA typing", choice: `HLA alleles (${HLA_TYPING_GROUPS.join(", ")}, as hs38DH)`,
-    apply: (r, all) => setHla(r, HLA_TYPING_GROUPS, all.hla) },
-  { goal: "Catch EBV contamination", choice: "an EBV sequence for its reads to align to",
-    apply: (r) => setEbv(r, true) },
-  { goal: "Tools that reject IUPAC codes", choice: "IUPAC → N",
-    apply: (r) => setIupacToN(r, true) },
-  { goal: "The latest GRCh38", choice: "patch release p14, with its fix and novel patches",
-    apply: (r) => setRole(setRole(setRelease(r, `${GRCH38}.29`), "fix-patch", true), "novel-patch", true) },
+  { goal: "Most alignment tasks",
+    choice: "the complete primary assembly: the chromosomes with the unlocalized and unplaced scaffolds, so reads from those sequences don't land on similar sequence elsewhere (bwa: \"recommended … for all analyses\")",
+    has: (r) => SCAFFOLDS.every((x) => primary(r)?.roles.includes(x)),
+    set: (r, on) => SCAFFOLDS.reduce((acc, x) => setRole(acc, x, on), r) },
+  { goal: "Catch EBV contamination",
+    choice: "the EBV genome, for reads from EBV (in EBV-transformed cell lines, for example) to align to",
+    has: hasEbv, set: (r, on) => setEbv(r, on) },
+  { goal: "Fewer false positives from reads of unassembled sequence",
+    choice: "the hs38d1 decoys: sequence missing from GRCh38, so its reads don't land on similar sequence in it",
+    has: hasDecoys, set: (r, on) => setDecoys(r, on) },
+  { goal: "Alternate haplotypes",
+    choice: "the alt scaffolds; without an ALT-aware aligner and their alignments (bwa-mem with an .alt file), reads in those regions lose mapping quality",
+    has: (r) => !!primary(r)?.roles.includes("alt-scaffold"), set: (r, on) => setRole(r, "alt-scaffold", on) },
+  { goal: "HLA typing",
+    choice: `HLA alleles (${HLA_TYPING_GROUPS.join(", ")}, as hs38DH)`,
+    has: (r) => hlaGroups(r).length > 0, set: (r, on, all) => setHla(r, on ? HLA_TYPING_GROUPS : [], all.hla) },
+  { goal: "Masking duplicated sequence",
+    choice: "the GRC hard-mask: chrY's PARs (chrX keeps them), and duplicate copies of centromeric and acrocentric arrays on chr5, 14, 19, 21 and 22",
+    has: (r) => hasMask(r, "hardmask_grc"), set: (r, on) => setMask(r, "hardmask_grc", on) },
+  { goal: "Tools that reject IUPAC codes",
+    choice: "IUPAC → N: the few ambiguity codes in GRCh38 written as N",
+    has: (r) => !!r.alphabet, set: (r, on) => setIupacToN(r, on) },
 ];
