@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig, type Plugin } from "vite";
 import { catalogHandler } from "./server/catalog.ts";
 
@@ -17,7 +18,7 @@ function serveCatalog(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [serveCatalog()],
+  plugins: [svelte(), serveCatalog()],
   optimizeDeps: { exclude: ["@abdenlab/refbook"] },
   server: { fs: { allow: [".", "../js"] } },
   build: { target: "es2022" },
