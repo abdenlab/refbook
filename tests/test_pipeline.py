@@ -300,3 +300,31 @@ def test_grch38_releases():
 def test_verify_status_without_ena():
     assert verify_roots.status(100, "m", verify_roots.SKIPPED, "m", False) == ("not checked", "match", True)
     assert verify_roots.status(100, "m", verify_roots.SKIPPED, "x", False)[2] is False
+
+
+# 70_export: the gate on the checks
+
+def test_export_gate(tmp_path):
+    export = step("70_export")
+    build = tmp_path / "build"
+    for d, name in (("10_roots", "roots.parquet"), ("20_layers", "layer_hardmask_grc.parquet")):
+        (build / d).mkdir(parents=True)
+        (build / d / name).write_bytes(b"data " + name.encode())
+    assert export.gate(build)[1] == [f"{c}: has not run" for c in export.CHECKS]
+
+    def record(check, passed=True, ena=None):
+        out = build / f"6{export.CHECKS.index(check)}_{check}"
+        out.mkdir(exist_ok=True)
+        layout.record_check(build, out, check, passed, ["roots.parquet"], {"ena": ena} if ena else {})
+    for c in export.CHECKS:
+        record(c)
+    assert export.gate(build)[1] == []
+    record("check_roots", ena="skipped")
+    assert export.gate(build)[1] == ["check_roots: ran without ENA (--skip-ena); rerun it, or export --development"]
+    assert export.gate(build, development=True)[1] == []
+    record("check_roots")
+    record("check_gaps", passed=False)
+    assert export.gate(build)[1] == ["check_gaps: failed"]
+    record("check_gaps")
+    (build / "10_roots" / "roots.parquet").write_bytes(b"rebuilt")
+    assert all("roots.parquet has changed" in p for p in export.gate(build)[1])

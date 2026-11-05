@@ -12,7 +12,13 @@ URL (`Catalog("https://.../catalog/")`) or by path. A release is never
 overwritten: OUT_DIR must not exist. It is assembled in OUT_DIR.partial and
 renamed into place when complete.
 
-Usage: uv run python -I pipeline/70_export.py REGISTRY_DIR OUT_DIR VERSION [--assembly grch38]
+The export is gated on the checks (60-62): each must have recorded a pass, and
+the tables it read must still have the hashes it recorded, so a release ships
+only files that passed every check as they are. The root check must have
+consulted ENA; --development accepts a run with --skip-ena, for exports that
+are not releases. catalog.json records each check's result.
+
+Usage: uv run python -I pipeline/70_export.py REGISTRY_DIR OUT_DIR VERSION [--development] [--assembly grch38]
 """
 
 import argparse
@@ -79,16 +85,48 @@ def card(build: Path, version: str) -> str:
                            n_grch38=len(grch38), n_decoys=len(decoys))
 
 
+CHECKS = ["check_gaps", "check_roots", "check_materialize"]
+
+
+def gate(build: Path, development: bool = False) -> tuple[dict, list[str]]:
+    """Each check's recorded result, and why the build can't be exported, if it can't."""
+    results, problems = {}, []
+    for check in CHECKS:
+        try:
+            r = json.loads(layout.path(build, f"{check}.json").read_text())
+        except FileNotFoundError:
+            problems.append(f"{check}: has not run")
+            continue
+        results[check] = r
+        if not r["passed"]:
+            problems.append(f"{check}: failed")
+        for name, digest in r["inputs"].items():
+            try:
+                now = layout.sha256(layout.path(build, name))
+            except FileNotFoundError:
+                now = None
+            if now != digest:
+                problems.append(f"{check}: {name} has changed since the check ran; rerun it")
+        if r["details"].get("ena") == "skipped" and not development:
+            problems.append(f"{check}: ran without ENA (--skip-ena); rerun it, or export --development")
+    return results, problems
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("version")
+    ap.add_argument("--development", action="store_true",
+                    help="accept a root check run without ENA (not for releases)")
     ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
     build, out, version = layout.build_dir(args.registry, args.assembly), args.out, args.version
     if out.exists():
         sys.exit(f"{out} exists: a release is never overwritten")
+    results, problems = gate(build, args.development)
+    if problems:
+        sys.exit("not exported:\n  " + "\n  ".join(problems))
     staging = out.with_name(out.name + ".partial")
     if staging.exists():
         shutil.rmtree(staging)  # left by an interrupted export
@@ -109,6 +147,8 @@ def main() -> None:
         print(f"{rel}\t{dst.stat().st_size}", file=sys.stderr)
     manifest = {
         "name": "refbook", "format": FORMAT, "version": version,
+        "checks": {c: {"passed": r["passed"], **({"ena": r["details"]["ena"]} if "ena" in r["details"] else {})}
+                   for c, r in results.items()},
         "created": datetime.date.today().isoformat(),
         "description": "GRCh38 roots, layers and reproduced flavor recipes",
         "files": files,
