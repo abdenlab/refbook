@@ -252,6 +252,7 @@ version = "0.0.0"
 dependencies = [
  "pyo3",
  "refbook-core",
+ "serde_json",
 ]
 
 [[package]]

@@ -89,6 +89,42 @@ export const seqcolAncillary = (names: string[], lengths: number[], sequences: s
 export const namedSetDigest = (names: string[], sequences: string[]): string =>
   core.namedSetDigest(names, sequences);
 
+/** A collection as seqcol attributes: arrays at level 2, digests at level 1. */
+export type Collection = Record<string, SeqcolJson>;
+
+/** The seqcol schema refbook serves: the spec's extended schema plus
+ * named_sequences and sorted_named_sequences. */
+export const seqcolSchema = (): Record<string, unknown> => JSON.parse(core.seqcolSchema());
+
+/** The level-2 representation: every attribute but the transient ones. */
+export const seqcolLevel2 = (names: string[], lengths: number[], sequences: string[]): Collection =>
+  core.seqcolLevel2(names, lengths, sequences);
+
+/** The level-1 representation: the digest of every attribute, transient ones included. */
+export const seqcolLevel1 = (names: string[], lengths: number[], sequences: string[]): Record<string, string> =>
+  core.seqcolLevel1(names, lengths, sequences);
+
+/** The top-level digest of a collection (level 2 or 1), or undefined without
+ * the inherent attributes. */
+export const topLevelDigest = (collection: Collection): string | undefined => core.topLevelDigest(collection);
+
+/** seqcol's /comparison (spec 3.3). */
+export interface Comparison {
+  digests: { a: string | null; b: string | null };
+  attributes: { a_only: string[]; b_only: string[]; a_and_b: string[] };
+  array_elements: {
+    a_count: Record<string, number>;
+    b_count: Record<string, number>;
+    a_and_b_count: Record<string, number>;
+    a_and_b_same_order: Record<string, boolean | null>;
+  };
+}
+
+/** Compare two collections given as their level-2 attributes, as seqcol's
+ * /comparison does. Shared elements count with multiplicity; the order of
+ * fewer than 2 shared elements, or of unbalanced duplicates, is null. */
+export const seqcolCompare = (a: Collection, b: Collection): Comparison => core.seqcolCompare(a, b);
+
 // nucleotide operations
 
 /** A root's bases (root positions start..start + length) with the spans set

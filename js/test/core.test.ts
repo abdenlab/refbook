@@ -1,7 +1,7 @@
 // The wasm build against known vectors. The cross-language checks (random
 // inputs, every recipe on the build) are in tests/test_wasm.py.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as rb from "../src/index.ts";
 
@@ -25,6 +25,33 @@ test("seqcol: the spec's example", () => {
   assert.equal(d.digest, "sjNNwm4zov3Dl0FRWbRTcZwzqrTQKIqL");
   assert.deepEqual(d.level1, { names: "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
     lengths: "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2", sequences: "rD29ZKmEqwwHRXjiQ36p6UMZQ5hemmsb" });
+});
+
+const FIXTURES = new URL("../../python/tests/fixtures/refget_compliance/", import.meta.url);
+const fixture = (path: string) => JSON.parse(readFileSync(new URL(path, FIXTURES), "utf8"));
+
+test("seqcol: levels and comparisons are the compliance suite's", () => {
+  for (const [file, f] of Object.entries<any>(fixture("test_fasta_digests.json"))) {
+    const { names, lengths, sequences } = f.level2;
+    const l2 = rb.seqcolLevel2(names, lengths, sequences);
+    for (const k of Object.keys(f.level2)) assert.deepEqual(l2[k], f.level2[k], `${file} ${k}`);
+    assert.ok(!("sorted_name_length_pairs" in l2) && !("sorted_named_sequences" in l2), file);
+    const l1 = rb.seqcolLevel1(names, lengths, sequences);
+    for (const k of Object.keys(f.level1)) assert.equal(l1[k], f.level1[k], `${file} ${k}`);
+    assert.equal(rb.topLevelDigest(l2), f.top_level_digest, file);
+  }
+  const files = readdirSync(new URL("comparison/", FIXTURES));
+  assert.equal(files.length, 15);
+  for (const file of files) {
+    const [a, b] = file.replace(/^compare_/, "").replace(/\.fa\.json$/, "").split(".fa_");
+    const want = fixture(`comparison/${file}`);
+    // The one divergence (refbook-core seqcol::compare): a single shared element has no order.
+    for (const [k, n] of Object.entries<number>(want.array_elements.a_and_b_count))
+      if (n < 2) want.array_elements.a_and_b_same_order[k] = null;
+    assert.deepEqual(rb.seqcolCompare(fixture(`collection/${a}.fa.json`), fixture(`collection/${b}.fa.json`)), want, file);
+  }
+  assert.deepEqual(rb.seqcolSchema().ga4gh, { inherent: ["names", "sequences"],
+    transient: ["sorted_name_length_pairs", "sorted_named_sequences"] });
 });
 
 test("seqcol: the refget package's compliance data", () => {

@@ -143,6 +143,85 @@ fn seqcol_ancillary<'py>(
     Ok(d)
 }
 
+fn to_py<'py>(py: Python<'py>, j: &Json) -> PyResult<Bound<'py, PyAny>> {
+    Ok(match j {
+        Json::Str(s) => s.into_pyobject(py)?.into_any(),
+        Json::Int(i) => i.into_pyobject(py)?.into_any(),
+        Json::Arr(items) => {
+            let l = PyList::empty(py);
+            for item in items {
+                l.append(to_py(py, item)?)?;
+            }
+            l.into_any()
+        }
+        Json::Obj(members) => {
+            let d = PyDict::new(py);
+            for (k, v) in members {
+                d.set_item(k, to_py(py, v)?)?;
+            }
+            d.into_any()
+        }
+    })
+}
+
+fn members(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vec<(String, Json)>> {
+    match to_json(obj)? {
+        Json::Obj(m) => Ok(m),
+        _ => Err(PyValueError::new_err(format!(
+            "{what}: not a collection (a dict)"
+        ))),
+    }
+}
+
+/// The level-2 representation: every attribute refbook gives a collection
+/// but the transient ones, as a dict in schema order.
+#[pyfunction]
+fn seqcol_level2<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    lengths: Vec<i64>,
+    sequences: Vec<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let l2 = py.detach(|| seqcol::level2(&names, &lengths, &sequences));
+    to_py(py, &Json::Obj(l2))
+}
+
+/// The level-1 representation: the digest of every attribute, transient ones
+/// included.
+#[pyfunction]
+fn seqcol_level1<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    lengths: Vec<i64>,
+    sequences: Vec<String>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let l1 = py.detach(|| seqcol::level1_attributes(&names, &lengths, &sequences));
+    let d = PyDict::new(py);
+    for (k, v) in l1 {
+        d.set_item(k, v)?;
+    }
+    Ok(d)
+}
+
+/// The top-level digest of a collection given as a dict of attributes (level
+/// 2, or level 1), or None without the inherent attributes.
+#[pyfunction]
+fn seqcol_top_level_digest(collection: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    Ok(seqcol::top_level_digest(&members(
+        collection,
+        "collection",
+    )?))
+}
+
+/// seqcol's /comparison of two collections given as dicts of their level-2
+/// attributes, as JSON text.
+#[pyfunction]
+fn seqcol_compare(py: Python<'_>, a: &Bound<'_, PyAny>, b: &Bound<'_, PyAny>) -> PyResult<String> {
+    let (a, b) = (members(a, "a")?, members(b, "b")?);
+    let c = py.detach(|| seqcol::compare(&a, &b));
+    serde_json::to_string(&c).map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
 /// The order-independent identifier of a named sequence set.
 #[pyfunction]
 fn named_set_digest(py: Python<'_>, names: Vec<String>, sequences: Vec<String>) -> String {
@@ -279,11 +358,17 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(seqcol_digests, m)?,
         wrap_pyfunction!(seqcol_ancillary, m)?,
         wrap_pyfunction!(named_set_digest, m)?,
+        wrap_pyfunction!(seqcol_level2, m)?,
+        wrap_pyfunction!(seqcol_level1, m)?,
+        wrap_pyfunction!(seqcol_top_level_digest, m)?,
+        wrap_pyfunction!(seqcol_compare, m)?,
         wrap_pyfunction!(apply_operations, m)?,
         wrap_pyfunction!(compile_recipe, m)?,
     ] {
         m.add_function(f)?;
     }
+    m.add("SEQCOL_SCHEMA", seqcol::SCHEMA)?;
+    m.add("SEQCOL_TRANSIENT", seqcol::TRANSIENT.to_vec())?;
     m.add_class::<RecipeTables>()?;
     m.add("RecipeError", m.py().get_type::<RecipeError>())?;
     Ok(())

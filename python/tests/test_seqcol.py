@@ -54,3 +54,32 @@ def test_named_set_digest_is_the_level1_digest_of_sorted_named_sequences():
     assert anc["named_sequences"][0] == seqcol.level1({"name": "chrX", "sequence": sequences[0]})
     assert anc["sorted_named_sequences"] == sorted(anc["named_sequences"])
     assert seqcol.named_set_digest(names, sequences) == seqcol.level1(anc["sorted_named_sequences"])
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "refget_compliance"
+
+
+@pytest.mark.parametrize("name", sorted(BUNDLES))
+def test_levels_are_the_compliance_suites(name):
+    want = BUNDLES[name]
+    l2 = seqcol.level2(*level2(name))
+    assert set(l2) == set(want["level2"]) | {"named_sequences"}   # refbook's, not transient
+    assert {k: l2[k] for k in want["level2"]} == want["level2"]
+    assert not set(seqcol.TRANSIENT) & set(l2)
+    l1 = seqcol.level1_attributes(*level2(name))
+    assert {k: l1[k] for k in want["level1"]} == want["level1"]
+    assert set(l1) == set(seqcol.SCHEMA["properties"])
+    assert seqcol.top_level_digest(l2) == seqcol.top_level_digest(l1) == want["top_level_digest"]
+
+
+@pytest.mark.parametrize("path", sorted((FIXTURES / "comparison").glob("*.json")), ids=lambda p: p.stem)
+def test_comparisons_are_the_compliance_suites(path):
+    a, b = path.stem.removeprefix("compare_").removesuffix(".fa").split(".fa_")
+    got = seqcol.compare(*(json.loads((FIXTURES / "collection" / f"{x}.fa.json").read_text()) for x in (a, b)))
+    want = json.loads(path.read_text())
+    # The one divergence (see refbook-core seqcol::compare): spec 3.3 leaves the
+    # order of a single shared element undefined; the reference gives one.
+    for k, n in want["array_elements"]["a_and_b_count"].items():
+        if n < 2:
+            want["array_elements"]["a_and_b_same_order"][k] = None
+    assert got == want

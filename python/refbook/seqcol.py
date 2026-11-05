@@ -1,15 +1,22 @@
-"""GA4GH sequence collection (seqcol) digests.
+"""GA4GH sequence collection (seqcol) digests, representations and comparison.
 
 From the spec (github.com/ga4gh/refget, docs/seqcols/README.md): canonicalize
 each attribute with RFC-8785, digest it with sha512t24u; the top-level digest
-covers the inherent attributes, names and sequences.
+covers the inherent attributes, names and sequences. SCHEMA is the schema
+refbook serves: the spec's extended schema plus named_sequences and
+sorted_named_sequences. Transient attributes (TRANSIENT) have a level-1 digest
+but no level-2 value.
 
 Implemented in the Rust core (refbook._core, crates/refbook-core/src/seqcol.rs).
 """
 
+import json
+
 from refbook import _core
 
 INHERENT = ("names", "sequences")
+TRANSIENT = tuple(_core.SEQCOL_TRANSIENT)
+SCHEMA = json.loads(_core.SEQCOL_SCHEMA)
 
 
 def canonical(item) -> bytes:
@@ -47,3 +54,29 @@ def named_set_digest(names: list[str], sequences: list[str]) -> str:
     """The order-independent identifier of a named sequence set: the level-1
     digest of sorted_named_sequences."""
     return _core.named_set_digest(names, sequences)
+
+
+def level2(names: list[str], lengths: list[int], sequences: list[str]) -> dict:
+    """The level-2 representation (/collection?level=2): every attribute but
+    the transient ones."""
+    return _core.seqcol_level2(names, lengths, sequences)
+
+
+def level1_attributes(names: list[str], lengths: list[int], sequences: list[str]) -> dict:
+    """The level-1 representation (/collection?level=1): the digest of every
+    attribute, transient ones included."""
+    return _core.seqcol_level1(names, lengths, sequences)
+
+
+def top_level_digest(collection: dict) -> str | None:
+    """The top-level digest of a collection given as its attributes (level 2,
+    or level 1), or None without the inherent attributes."""
+    return _core.seqcol_top_level_digest(collection)
+
+
+def compare(a: dict, b: dict) -> dict:
+    """seqcol's /comparison (spec 3.3) of two collections given as their
+    level-2 attributes. Arrays are counted; an attribute given as a digest is
+    listed only. Shared elements count with multiplicity; the order of fewer
+    than 2 shared elements, or of unbalanced duplicates, is None."""
+    return json.loads(_core.seqcol_compare(a, b))

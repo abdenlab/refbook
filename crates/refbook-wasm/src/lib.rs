@@ -83,23 +83,15 @@ pub fn scan(seq: &[u8]) -> Result<JsValue, JsError> {
 // seqcol
 
 fn to_json(v: Value) -> Result<Json, JsError> {
-    match v {
-        Value::String(s) => Ok(Json::Str(s)),
-        Value::Number(n) => n
-            .as_i64()
-            .map(Json::Int)
-            .ok_or_else(|| JsError::new(&format!("not an integer: {n}"))),
-        Value::Array(items) => items
-            .into_iter()
-            .map(to_json)
-            .collect::<Result<_, _>>()
-            .map(Json::Arr),
-        Value::Object(m) => m
-            .into_iter()
-            .map(|(k, v)| Ok((k, to_json(v)?)))
-            .collect::<Result<_, _>>()
-            .map(Json::Obj),
-        other => Err(JsError::new(&format!("not a seqcol JSON value: {other}"))),
+    Json::try_from(v).map_err(|e| JsError::new(&e))
+}
+
+fn members(value: JsValue, what: &str) -> Result<Vec<(String, Json)>, JsError> {
+    match to_json(from_js(value, what)?)? {
+        Json::Obj(m) => Ok(m),
+        _ => Err(JsError::new(&format!(
+            "{what}: not a collection (an object)"
+        ))),
     }
 }
 
@@ -183,6 +175,64 @@ pub fn seqcol_ancillary(
         named_sequences: a.named_sequences,
         sorted_named_sequences: a.sorted_named_sequences,
     })
+}
+
+/// The seqcol schema refbook serves: the spec's extended schema plus
+/// named_sequences and sorted_named_sequences, as JSON text.
+#[wasm_bindgen(js_name = seqcolSchema)]
+pub fn seqcol_schema() -> String {
+    seqcol::SCHEMA.to_string()
+}
+
+/// The level-2 representation: every attribute but the transient ones.
+#[wasm_bindgen(js_name = seqcolLevel2)]
+pub fn seqcol_level2(
+    names: Vec<String>,
+    lengths: JsValue,
+    sequences: Vec<String>,
+) -> Result<JsValue, JsError> {
+    let lengths: Vec<i64> = from_js(lengths, "lengths")?;
+    let l2 = seqcol::level2(&names, &lengths, &sequences);
+    to_js(&Value::from(&Json::Obj(l2)))
+}
+
+/// The level-1 representation: the digest of every attribute, transient ones
+/// included.
+#[wasm_bindgen(js_name = seqcolLevel1)]
+pub fn seqcol_level1(
+    names: Vec<String>,
+    lengths: JsValue,
+    sequences: Vec<String>,
+) -> Result<JsValue, JsError> {
+    let lengths: Vec<i64> = from_js(lengths, "lengths")?;
+    let l1: std::collections::BTreeMap<String, String> =
+        seqcol::level1_attributes(&names, &lengths, &sequences)
+            .into_iter()
+            .collect();
+    to_js(&l1)
+}
+
+/// The top-level digest of a collection given as its attributes (level 2, or
+/// level 1), or undefined without the inherent attributes.
+#[wasm_bindgen(js_name = topLevelDigest)]
+pub fn top_level_digest(collection: JsValue) -> Result<Option<String>, JsError> {
+    Ok(seqcol::top_level_digest(&members(
+        collection,
+        "collection",
+    )?))
+}
+
+/// seqcol's /comparison (spec 3.3) of two collections given as their level-2
+/// attributes.
+#[wasm_bindgen(js_name = seqcolCompare)]
+pub fn seqcol_compare(a: JsValue, b: JsValue) -> Result<JsValue, JsError> {
+    // Undefined orders and digests are null, as in the spec's JSON.
+    let s = serde_wasm_bindgen::Serializer::new()
+        .serialize_maps_as_objects(true)
+        .serialize_missing_as_null(true);
+    seqcol::compare(&members(a, "a")?, &members(b, "b")?)
+        .serialize(&s)
+        .map_err(|e| JsError::new(&e.to_string()))
 }
 
 /// The order-independent identifier of a named sequence set.

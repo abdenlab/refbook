@@ -1,0 +1,65 @@
+{
+  "description": "A collection of biological sequences. The GA4GH seqcol v1.0.0 extended schema (names, lengths, sequences and the approved ancillary attributes, with the qualifiers of spec section 5), plus refbook's named_sequences and sorted_named_sequences.",
+  "type": "object",
+  "properties": {
+    "lengths": {
+      "type": "array",
+      "collated": true,
+      "description": "Number of elements, such as nucleotides or amino acids, in each sequence.",
+      "items": {"type": "integer"}
+    },
+    "names": {
+      "type": "array",
+      "collated": true,
+      "description": "Human-readable labels of each sequence (chromosome names).",
+      "items": {"type": "string"}
+    },
+    "sequences": {
+      "type": "array",
+      "collated": true,
+      "items": {"type": "string", "description": "Refget sequences v2 identifiers for sequences."}
+    },
+    "name_length_pairs": {
+      "type": "array",
+      "collated": true,
+      "description": "Human-readable labels paired with number of elements in each sequence.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Human-readable label of the sequence (chromosome name)."},
+          "length": {"type": "integer", "description": "Number of elements, such as nucleotides or amino acids, in the sequence."}
+        },
+        "required": ["name", "length"]
+      }
+    },
+    "sorted_name_length_pairs": {
+      "type": "array",
+      "collated": false,
+      "description": "The digest of each name-length pair, sorted lexicographically: an order-invariant coordinate system (spec 5.2).",
+      "items": {"type": "string"}
+    },
+    "sorted_sequences": {
+      "type": "array",
+      "collated": false,
+      "description": "The sequence digests, sorted lexicographically (spec 5.3).",
+      "items": {"type": "string", "description": "Refget sequences v2 identifiers for sequences."}
+    },
+    "named_sequences": {
+      "type": "array",
+      "collated": true,
+      "description": "refbook: the digest of each {\"name\", \"sequence\"} pair, as spec footnote F1 suggests.",
+      "items": {"type": "string"}
+    },
+    "sorted_named_sequences": {
+      "type": "array",
+      "collated": false,
+      "description": "refbook: named_sequences, sorted lexicographically. Its level-1 digest identifies the named sequence set whatever the order; it is a refbook flavor's id.",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["names", "lengths", "sequences"],
+  "ga4gh": {
+    "inherent": ["names", "sequences"],
+    "transient": ["sorted_name_length_pairs", "sorted_named_sequences"]
+  }
+}
