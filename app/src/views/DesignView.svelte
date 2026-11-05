@@ -125,7 +125,7 @@
                   {#each releases as [acc, name] (acc)}<option value={acc}>{name} ({acc})</option>{/each}
                 </select>
               </label>
-              {#each edit.ROLES as r (r)}
+              {#each edit.ROLES_SHOWN as r (r)}
                 <label class="check"><input type="checkbox" checked={p.roles.includes(r)}
                   onchange={(e) => set(edit.setRole(recipe!, r, e.currentTarget.checked))} /> {role(r)}</label>
               {/each}

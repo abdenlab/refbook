@@ -10,6 +10,8 @@ export const EBV = "AJ507799.2";
 export const HLA = "IMGT/HLA 3.18.0";
 export const HLA_TYPING_GROUPS = ["A", "B", "C", "DQA", "DQB", "DRB1"];   // hs38DH's
 export const ROLES = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "fix-patch", "novel-patch"];
+/** The roles in the form's order: novel patches (alternate loci) next to the alts. */
+export const ROLES_SHOWN = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "novel-patch", "fix-patch"];
 export const NAMESPACES = ["ucsc", "sequence", "genbank", "refseq"];
 
 type Assembly = Extract<SelectEntry, { assembly: string }>;
