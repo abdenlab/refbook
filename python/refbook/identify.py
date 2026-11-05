@@ -67,45 +67,54 @@ class Comparison:
     extra: list[Entry] = field(default_factory=list)                   # in header only
     missing: list[Seq] = field(default_factory=list)                   # in flavor only
     in_order_of: list[str] = field(default_factory=list)               # targets whose order it follows
+    entries: list[Entry] = field(default_factory=list, repr=False)     # the header's
+    identities: list[dict] = field(default_factory=list, repr=False)   # per entry (sequences())
 
 
-def _root_of(e: Entry, cat: Catalog, roots_here: set[str]) -> str | None:
-    sq = cat.sq_by_md5.get(e.md5) if e.md5 else None
-    if sq is not None:
-        return cat.sequence[sq]["root_id"]
-    hits = cat.by_alias.get(e.name, set()) & roots_here
-    if len(hits) == 1:
-        return next(iter(hits))
-    return None
+def _roots(i: dict) -> set[str]:
+    """The roots an identity allows: its root, or those its ambiguous name names."""
+    if i["root_id"]:
+        return {i["root_id"]}
+    return {r for n in i["notes"] if n["kind"] == "ambiguous_name" for r in n["roots"]}
 
 
-def compare(header: Header, flavor: str, cat: Catalog) -> Comparison:
+def _bases_differ(e: Entry, s: Seq) -> bool:
+    return bool((e.md5 and e.md5.lower() != s.md5) or (e.sq and e.sq != s.sha512t24u))
+
+
+def compare(header: Header, flavor: str, cat: Catalog, identities: list[dict] | None = None) -> Comparison:
+    """A header against one flavor, on the per-sequence identities: entries pair
+    with the flavor's sequences by name, then (renamed) by the root each
+    identity gives."""
+    ids = identities if identities is not None else sequences(header, cat)
     seqs = cat.manifests[flavor]
     by_name = {s.name: s for s in seqs}
     by_root = {s.root_id: s for s in seqs}
     pairs, unpaired = [], []
-    for e in header.entries:
+    for k, e in enumerate(header.entries):
         if e.name in by_name:
-            pairs.append((e, by_name[e.name], False))
+            pairs.append((k, by_name[e.name], False))
         else:
-            unpaired.append(e)
+            unpaired.append(k)
     used = {s.name for _, s, _ in pairs}
-    c = Comparison(flavor, "partial", 0.0)
-    for e in unpaired:
-        root = _root_of(e, cat, set(by_root))
-        s = by_root.get(root) if root else None
+    c = Comparison(flavor, "partial", 0.0, entries=header.entries, identities=ids)
+    for k in unpaired:
+        e = header.entries[k]
+        here = _roots(ids[k]) & set(by_root)
+        s = by_root[next(iter(here))] if len(here) == 1 else None
         if s is not None and s.name not in used and s.length == e.length:
-            pairs.append((e, s, True))
+            pairs.append((k, s, True))
             used.add(s.name)
         else:
             c.extra.append(e)
     c.missing = [s for s in seqs if s.name not in used]
     good = 0
-    for e, s, renamed in pairs:
+    for k, s, renamed in pairs:
+        e = header.entries[k]
         if e.length != s.length:
             c.different_length.append((e, s))
             continue
-        if e.md5 and e.md5 != s.md5:
+        if _bases_differ(e, s):
             c.different_bases.append((e, s))
             continue
         good += 1
@@ -113,7 +122,7 @@ def compare(header: Header, flavor: str, cat: Catalog) -> Comparison:
             c.renamed.append((e.name, s.name))
     c.matched = good
     # Which of the flavor's targets list the paired sequences in the header's order.
-    header_order = [s.name for _, s, _ in sorted(pairs, key=lambda p: header.entries.index(p[0]))]
+    header_order = [s.name for _, s, _ in sorted(pairs, key=lambda p: p[0])]
     for t, r in cat.targets.items():
         if r["flavor"] == flavor:
             shared = set(header_order)
@@ -124,7 +133,7 @@ def compare(header: Header, flavor: str, cat: Catalog) -> Comparison:
     c.score = weighted / (len(header.entries) + len(seqs) - good) if seqs else 0.0
     unchanged = not (c.different_bases or c.different_length or c.renamed)
     if unchanged and not c.extra and not c.missing:
-        c.verdict = "exact" if header.has_md5 else "consistent"
+        c.verdict = "exact" if header.has_digests else "consistent"
     elif unchanged and c.extra and not c.missing:
         c.verdict = "contains"
     elif unchanged and c.missing and not c.extra:
@@ -140,11 +149,12 @@ class Result:
     header: Header
     best: list[Comparison]            # exact or consistent matches, else the closest
     ranked: list[Comparison]
-    sequences: dict[str, str]         # header name -> SQ. digest, for each known MD5
-    unknown: list[str]                # header names whose MD5 the store doesn't know
-    seqcol_digest: str | None         # the header's collection, if every MD5 is known
+    sequences: dict[str, str]         # header name -> SQ. digest, for each known digest
+    unknown: list[str]                # header names whose digest the store doesn't know
+    seqcol_digest: str | None         # the header's collection, if every digest is known
     seqcol_matches: list[str]         # stored collections (flavors, targets) with that digest
     ambiguity: list[str]              # how indistinguishable candidates differ
+    identities: list[dict] = field(default_factory=list, repr=False)
 
 
 def _base_differences(a: str, b: str, cat: Catalog) -> str | None:
@@ -158,7 +168,9 @@ def _base_differences(a: str, b: str, cat: Catalog) -> str | None:
 
 
 def identify(header: Header, cat: Catalog) -> Result:
-    ranked = sorted((compare(header, f, cat) for f in cat.flavors),
+    """A header summarized against every flavor, on its per-sequence identities."""
+    ids = sequences(header, cat)
+    ranked = sorted((compare(header, f, cat, ids) for f in cat.flavors),
                     key=lambda c: (RANK[c.verdict], -c.matched if c.verdict == "contains" else 0,
                                    len(c.missing), -c.score, c.flavor))
     top = RANK[ranked[0].verdict]
@@ -166,10 +178,11 @@ def identify(header: Header, cat: Catalog) -> Result:
     if best[0].verdict == "contains":
         best = [c for c in best if c.matched == best[0].matched]
 
-    known = {e.name: cat.sq_by_md5[e.md5] for e in header.entries if e.md5 in cat.sq_by_md5}
-    unknown = [e.name for e in header.entries if e.md5 and e.md5 not in cat.sq_by_md5]
+    known = {e.name: i["sequence"] for e, i in zip(header.entries, ids) if i["evidence"] == "digest"}
+    unknown = [e.name for e, i in zip(header.entries, ids)
+               if any(n["kind"] == "unknown_digest" for n in i["notes"])]
     digest, matches = None, []
-    if header.has_md5 and len(known) == len(header.entries):
+    if header.has_digests and len(known) == len(header.entries):
         digest, _ = seqcol.digests([e.name for e in header.entries], [e.length for e in header.entries],
                                    [known[e.name] for e in header.entries])
         matches = sorted(n for d, n in cat.named.items() if d == digest)
@@ -182,11 +195,12 @@ def identify(header: Header, cat: Catalog) -> Result:
         d = _base_differences(consistent[0], other, cat)
         if d:
             ambiguity.append(f"{other} vs {consistent[0]}: {d}")
-    return Result(header, best, ranked, known, unknown, digest, matches, ambiguity)
+    return Result(header, best, ranked, known, unknown, digest, matches, ambiguity, ids)
 
 
 def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
     """Plain-language differences between the header and one flavor."""
+    identity = {id(e): i for e, i in zip(c.entries, c.identities)}
     out = []
     if c.renamed:
         ex = ", ".join(f"{h} = {f}" for h, f in c.renamed[:limit])
@@ -197,26 +211,25 @@ def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
     if c.extra:
         known = defaultdict(list)
         for e in c.extra:
-            sq = cat.sq_by_md5.get(e.md5) if e.md5 else None
-            root = cat.sequence[sq]["root_id"] if sq else None
-            if root is None:
-                hits = cat.by_alias.get(e.name, set())
-                root = next(iter(hits)) if len(hits) == 1 else None
-                if root and cat.root_length.get(root) != e.length:
-                    known["named like cataloged sequences, but other lengths"].append(e.name)
-                    continue
+            i = identity.get(id(e))
+            root = i["root_id"] if i else None
+            if root is None and i and any(n["kind"] == "no_root_of_this_length" for n in i["notes"]):
+                known["named like cataloged sequences, but other lengths"].append(e.name)
+                continue
             known[cat.kind(root) if root else "unknown to the catalog"].append(e.name)
         out.append("only in header: " + ", ".join(
             f"{len(v)} {k} ({', '.join(v[:limit])}{', ...' if len(v) > limit else ''})" for k, v in known.items()))
     for e, s in c.different_bases[:limit]:
-        sq = cat.sq_by_md5.get(e.md5)
-        if sq is not None and cat.sequence[sq]["root_id"] == s.root_id:
+        i = identity.get(id(e))
+        sq = i["sequence"] if i else None
+        if sq is not None and i["root_id"] == s.root_id:
             seen = cat.flavors_with(sq)
             where = f"; as in {', '.join(seen[:2])}" if seen else ""
             out.append(f"{e.name}: a different version of the same sequence: header has it {cat.how(sq)}, "
                        f"{c.flavor} has it {cat.how(s.sha512t24u)}{where}")
         else:
-            out.append(f"{e.name}: different bases (header MD5 {e.md5} is not a version of {s.root_id} we know)")
+            out.append(f"{e.name}: different bases (header digest {e.md5 or e.sq} is not a version of "
+                       f"{s.root_id} we know)")
     if len(c.different_bases) > limit:
         out.append(f"... {len(c.different_bases) - limit} more sequences with different bases")
     for e, s in c.different_length[:limit]:

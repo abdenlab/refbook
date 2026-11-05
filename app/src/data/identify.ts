@@ -12,12 +12,14 @@ const SAM_SQ = /^@SQ\t/;
 const CONTIG = /^##contig=<(.*)>\s*$/;
 
 /**
- * A sequence list from pasted text: SAM header (@SQ SN/LN/M5, as in a .dict or
- * `samtools view -H`), VCF ##contig lines, FASTA (digested here), or
+ * A sequence list from pasted text: a level-2 seqcol collection (JSON), SAM
+ * header (@SQ SN/LN/M5, as in a .dict or `samtools view -H`), VCF ##contig
+ * lines, FASTA (digested here), or
  * whitespace-separated name and length (.fai, chrom.sizes). Lines it doesn't
  * know are skipped.
  */
 export function parseHeader(text: string): Header {
+  if (text.trimStart().startsWith("{")) return { format: "seqcol (level 2)", entries: seqcolEntries(JSON.parse(text)) };
   const lines = text.split(/\r?\n/);
   if (lines.some((l) => l.startsWith(">"))) return { format: "FASTA", entries: fasta(lines) };
   if (lines.some((l) => SAM_SQ.test(l))) {
@@ -41,6 +43,20 @@ export function parseHeader(text: string): Header {
   const entries = lines.map((l) => l.trim().split(/\s+/)).filter((c) => c.length >= 2 && /^\d+$/.test(c[1]) && !c[0].startsWith("#"))
     .map(([name, length]) => ({ name, length: Number(length) }));
   return { format: entries.length ? "names and lengths" : "nothing recognized", entries };
+}
+
+/** The entries of a level-2 seqcol collection; level 1 (array digests only) names no sequences. */
+function seqcolEntries(doc: Record<string, unknown>): rb.Entry[] {
+  const { names, lengths, sequences } = doc;
+  if ([names, lengths, sequences].some((a) => typeof a === "string")) {
+    throw new Error("a level-1 seqcol collection has array digests only; identify needs level 2");
+  }
+  if (!Array.isArray(names) || !Array.isArray(sequences)) throw new Error("a seqcol collection needs names and sequences");
+  const ls = Array.isArray(lengths) ? lengths : [];
+  if (names.length !== sequences.length || (ls.length && ls.length !== names.length)) {
+    throw new Error("names, lengths and sequences differ in length");
+  }
+  return names.map((name, i) => ({ name: String(name), length: ls.length ? Number(ls[i]) : null, sq: String(sequences[i]) }));
 }
 
 function fasta(lines: string[]): rb.Entry[] {

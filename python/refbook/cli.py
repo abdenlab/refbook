@@ -20,7 +20,7 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
     res = identify(header, cat)
     out = {
         "file": path, "format": header.format, "sequences": len(header.entries),
-        "has_md5": header.has_md5,
+        "has_md5": header.has_md5, "has_digests": header.has_digests,
         "matches": [{"flavor": c.flavor, "verdict": c.verdict, "score": round(c.score, 4),
                      "in_order_of": [{"target": t, "publisher": cat.targets[t]["publisher"],
                                       "alias": cat.targets[t]["alias"],
@@ -37,13 +37,13 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
     if as_json:
         return out
     print(f"{path}\n  {header.format}, {len(header.entries)} sequences, "
-          f"{'with' if header.has_md5 else 'without'} MD5s")
+          f"{'with' if header.has_digests else 'without'} digests")
     verdict = res.best[0].verdict if res.best else "none"
     if verdict == "exact":
         print(f"  EXACT: {', '.join(c.flavor for c in res.best)}")
         _orders(res, cat)
     elif verdict == "consistent":
-        print(f"  CONSISTENT (names and lengths; no MD5s to check bases): "
+        print(f"  CONSISTENT (names and lengths; no digests to check bases): "
               f"{', '.join(c.flavor for c in res.best)}")
         for a in res.ambiguity:
             print(f"    {a}")
@@ -60,15 +60,15 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
         print(f"  SUBSET of {len(names)} flavors (every sequence unchanged): {shown}")
         print(f"    smallest: {names[0]}, which also has: "
               + "; ".join(d for d in describe(res.best[0], cat) if d.startswith("not in header"))[15:])
-        if not header.has_md5:
-            print("    (no MD5s: sequences are matched by name and length only)")
+        if not header.has_digests:
+            print("    (no digests: sequences are matched by name and length only)")
     else:
         c = res.best[0]
         label = "CLOSEST" if c.matched * 2 >= len(header.entries) else "NO GOOD MATCH; closest"
         print(f"  {label}: {c.flavor} ({c.matched} of {len(header.entries)} sequences match, "
               f"score {c.score:.3f})")
-        if not header.has_md5:
-            print("    (no MD5s: sequences are matched by name and length only)")
+        if not header.has_digests:
+            print("    (no digests: sequences are matched by name and length only)")
         for d in describe(c, cat):
             print(f"    - {d}")
     if res.unknown:

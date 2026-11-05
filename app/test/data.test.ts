@@ -96,6 +96,10 @@ test("pasted headers parse in every format", () => {
   assert.deepEqual(fa.entries.map((e) => [e.name, e.length, e.md5, e.sq]),
     [["a", 6, ...rb.digests(new TextEncoder().encode("ACGTNN"))], ["b", 2, ...rb.digests(new TextEncoder().encode("RY"))]]);
   assert.equal(parseHeader("nothing here").format, "nothing recognized");
+  const l2 = rb.seqcolLevel2(["chr1", "chr2"], [10, 5], ["SQ.a", "SQ.b"]);
+  assert.deepEqual(parseHeader(JSON.stringify(l2)),
+    { format: "seqcol (level 2)", entries: [{ name: "chr1", length: 10, sq: "SQ.a" }, { name: "chr2", length: 5, sq: "SQ.b" }] });
+  assert.throws(() => parseHeader(JSON.stringify(rb.seqcolLevel1(["chr1"], [10], ["SQ.a"]))), /level-1/);
 });
 
 test("identify in the browser, like the catalog says", { skip }, async () => {

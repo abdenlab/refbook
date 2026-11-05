@@ -2,13 +2,14 @@
 
 Every format becomes the same thing: an ordered list of (name, length, md5,
 sq), where md5 is the refget MD5 (uppercase, A-Z only) if the format carries
-it, and sq the SQ. digest (only a FASTA's, which are computed here).
+it, and sq the SQ. digest (a FASTA's, computed here, or a seqcol document's).
 
 - .fai, chrom.sizes         names and lengths
 - .dict / SAM header text   @SQ SN, LN and M5 (also `samtools view -H` output)
 - BAM                       its header text, or its binary reference list
 - VCF (plain or bgzipped)   ##contig ID, length and md5
 - FASTA (plain or gzipped)  digested here: names, lengths, MD5s and SQ. digests
+- seqcol JSON (level 2)     names, lengths and SQ. digests
 - CRAM 2.x/3.x               the SAM header in the first container (raw,
                             gzip, bzip2 or lzma; rANS-compressed headers are
                             not supported, run `samtools view -H` then)
@@ -18,6 +19,7 @@ import base64
 import bz2
 import gzip
 import hashlib
+import json
 import lzma
 import re
 import struct
@@ -45,6 +47,11 @@ class Header:
     @property
     def has_md5(self) -> bool:
         return bool(self.entries) and all(e.md5 for e in self.entries)
+
+    @property
+    def has_digests(self) -> bool:
+        """Every entry has a digest (an MD5 or an SQ. digest)."""
+        return bool(self.entries) and all(e.md5 or e.sq for e in self.entries)
 
 
 def _open_text(path: Path):
@@ -188,6 +195,22 @@ def _fasta_entries(path: Path) -> list[Entry]:
     return out
 
 
+def seqcol_entries(doc: dict, source: str = "seqcol") -> list[Entry]:
+    """The entries of a level-2 seqcol collection (names, lengths, sequences as
+    SQ. digests). A level-1 representation has digests of the arrays only, so it
+    names no sequences: an error."""
+    arrays = [doc.get(k) for k in ("names", "lengths", "sequences")]
+    if any(isinstance(a, str) for a in arrays):
+        raise ValueError(f"{source}: a level-1 seqcol collection (array digests only); "
+                         "identify needs level 2 (?level=2)")
+    if arrays[0] is None or arrays[2] is None:
+        raise ValueError(f"{source}: a seqcol collection needs names and sequences")
+    names, lengths, sqs = arrays[0], arrays[1] or [None] * len(arrays[0]), arrays[2]
+    if not len(names) == len(lengths) == len(sqs):
+        raise ValueError(f"{source}: names, lengths and sequences differ in length")
+    return [Entry(n, ln, None, sq) for n, ln, sq in zip(names, lengths, sqs)]
+
+
 def read_header(path: str | Path) -> Header:
     path = Path(path)
     name = path.name.lower()
@@ -210,6 +233,9 @@ def read_header(path: str | Path) -> Header:
         return Header(str(path), "fai" if name.endswith(".fai") else "sizes", entries)
     with _open_text(path) as f:
         first = f.readline()
+    if first.lstrip().startswith("{"):
+        with _open_text(path) as f:
+            return Header(str(path), "seqcol", seqcol_entries(json.load(f), str(path)))
     if first.startswith("@"):
         with _open_text(path) as f:
             return Header(str(path), "dict" if name.endswith(".dict") else "sam", _sam_entries(f))
@@ -218,4 +244,4 @@ def read_header(path: str | Path) -> Header:
             return Header(str(path), "vcf", _vcf_entries(f))
     if first.startswith(">"):
         return Header(str(path), "fasta", _fasta_entries(path))
-    raise ValueError(f"{path}: not a .fai, .dict/SAM header, BAM, VCF or FASTA")
+    raise ValueError(f"{path}: not a .fai, .dict/SAM header, BAM, VCF, FASTA or seqcol JSON")

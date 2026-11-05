@@ -78,7 +78,7 @@ $ curl localhost:8000/comparison/B-rB7OjNDYYfvB8O1yO2mVQjYziwvppI/Q_Qsamo09hQ5Kd
 ```
 
 `identify` accepts `.fai`, `chrom.sizes`, `.dict`, SAM header text, BAM, CRAM
-(2.x/3.x), VCF and FASTA. It compares the header with each cataloged
+(2.x/3.x), VCF, FASTA and seqcol collections (level 2 JSON). It compares the header with each cataloged
 **flavor**, a set of named sequences whatever their order. Its verdicts are
 **exact**, **consistent**, **contains** (the whole flavor plus extra sequences,
 such as spike-ins), **subset**, or the **closest** match with an itemized

@@ -129,6 +129,28 @@ def test_identify_sequences_of_a_fasta(cat, tmp_path):
 
 
 @needs_catalog
+def test_a_seqcol_document_identifies(cat, tmp_path):
+    import json
+
+    from refbook import resolve
+    from refbook.identify import identify
+    from refbook.parse import seqcol_entries
+    target = "UCSC_hg38.analysisSet"
+    (tmp_path / "l2.json").write_text(json.dumps(resolve(cat, target, 2)))
+    h = read_header(tmp_path / "l2.json")
+    assert h.format == "seqcol" and h.has_digests and not h.has_md5
+    res = identify(h, cat)
+    assert [c.flavor for c in res.best] == ["hg38-analysis-set"] and res.best[0].verdict == "exact"
+    assert target in res.best[0].in_order_of
+    assert res.seqcol_digest == cat.targets[target]["seqcol_digest"]
+    (tmp_path / "l1.json").write_text(json.dumps(resolve(cat, target, 1)))
+    with pytest.raises(ValueError, match="level-1"):
+        read_header(tmp_path / "l1.json")
+    with pytest.raises(ValueError, match="names and sequences"):
+        seqcol_entries({"lengths": [1]})
+
+
+@needs_catalog
 def test_exact_dict_and_seqcol(cat, tmp_path):
     res = run(write_dict(tmp_path / "broad.dict", rows(cat, "Broad_Homo_sapiens_assembly38")), cat)
     assert res.best[0].verdict == "exact"

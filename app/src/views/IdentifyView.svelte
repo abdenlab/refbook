@@ -67,7 +67,7 @@
   <h1>Identify sequences</h1>
   <p class="lede">
     Paste a <code>.fai</code>, a chrom.sizes, a <code>.dict</code> or SAM header (<code>samtools view -H</code>), VCF
-    <code>##contig</code> lines or a small FASTA. Each sequence is identified on its own evidence: a digest pins the
+    <code>##contig</code> lines, a small FASTA, or a seqcol collection (level 2 JSON). Each sequence is identified on its own evidence: a digest pins the
     sequence; a name and length give the root, and the versions of it the catalog has. Nothing leaves your browser.
   </p>
   <textarea class="paste" rows="8" spellcheck="false" aria-label="Sequence list" bind:value={text}
