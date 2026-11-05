@@ -1,0 +1,11 @@
+[workspace]
+members = ["crates/refbook-core", "crates/refbook-py"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.88"
+
+[profile.release]
+lto = "thin"

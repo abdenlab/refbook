@@ -27,7 +27,9 @@ answers practical questions:
 
 ## Install
 
-From a clone of this repository, with [uv](https://docs.astral.sh/uv/):
+From a clone of this repository, with [uv](https://docs.astral.sh/uv/) and a
+Rust toolchain ([rustup](https://rustup.rs/); the core in `crates/` is built
+into the package by maturin):
 
 ```bash
 uv sync                      # the library and the `refbook` command
@@ -213,6 +215,7 @@ Each script's docstring says what it reads, writes and checks.
 | Path | Contents |
 | --- | --- |
 | `src/refbook/` | The library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
+| `crates/` | The Rust core (`refbook-core`: refget digests, canonicalization) and its Python bindings (`refbook-py`, as `refbook._core`) |
 | `pipeline/` | The numbered steps that build, check and export the catalog, and their shared modules (`layout`, `engine`, `observe`) |
 | `assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
 | `tests/` | Tests, with real ENCODE, gnomAD and GIAB headers as fixtures |

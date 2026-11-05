@@ -1,0 +1,12 @@
+[package]
+name = "refbook-core"
+version = "0.0.0"
+description = "refbook's core: refget and seqcol digests, nucleotide operations, the recipe compiler"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = "0.23"
+md-5 = "0.11"
+sha2 = "0.11"

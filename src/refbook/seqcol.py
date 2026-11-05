@@ -5,9 +5,9 @@ each attribute with RFC-8785, digest it with sha512t24u; the top-level digest
 covers the inherent attributes, names and sequences.
 """
 
-import base64
-import hashlib
 import json
+
+from refbook import _core
 
 INHERENT = ("names", "sequences")
 
@@ -19,7 +19,7 @@ def canonical(item) -> bytes:
 
 
 def sha512t24u(data: bytes) -> str:
-    return base64.urlsafe_b64encode(hashlib.sha512(data).digest()[:24]).decode("ascii")
+    return _core.sha512t24u(data)
 
 
 def level1(value) -> str:

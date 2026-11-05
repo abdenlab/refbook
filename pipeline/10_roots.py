@@ -21,7 +21,6 @@ Usage: uv run python -I pipeline/10_roots.py [--assembly A] [--raw DIR] [--build
 
 import argparse
 import gzip
-import re
 import sys
 from pathlib import Path
 
@@ -42,9 +41,6 @@ EBV = "AJ507799.2"
 STEP = "10_roots"
 EFETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
-LOWER = re.compile(rb"[a-z]+")
-N_RUN = re.compile(rb"N+")
-IUPAC = re.compile(rb"[^ACGTN]")
 
 
 def genbank_length(path: Path) -> int:
@@ -71,15 +67,12 @@ def read_fasta(path: Path):
 def scan(seq: bytes) -> dict:
     """Everything this step records about one sequence (whitespace already removed):
     canonical bases, digests, lowercase runs, N-runs and IUPAC positions (0-based,
-    half-open runs), and their counts. Raises refget.NonCanonicalBase."""
-    lower = [(m.start(), m.end()) for m in LOWER.finditer(seq)]
-    up = refget.canonical_bases(seq)
-    n_runs = [(m.start(), m.end()) for m in N_RUN.finditer(up)]
-    md5, sq = refget.digests(up)
-    return {"bases": up, "md5": md5, "sha512t24u": sq,
-            "lower": lower, "n_lower": sum(e - s for s, e in lower),
-            "n_runs": n_runs, "n_N": sum(e - s for s, e in n_runs),
-            "iupac": [(m.start(), m.group().decode()) for m in IUPAC.finditer(up)]}
+    half-open runs; refbook.refget.scan, in the Rust core), and their counts.
+    Raises refget.NonCanonicalBase."""
+    sc = refget.scan(seq)
+    sc["n_lower"] = sum(e - s for s, e in sc["lower"])
+    sc["n_N"] = sum(e - s for s, e in sc["n_runs"])
+    return sc
 
 
 def parse_report(path: Path) -> tuple[dict, list[dict]]:

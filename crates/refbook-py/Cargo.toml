@@ -1,0 +1,15 @@
+[package]
+name = "refbook-py"
+version = "0.0.0"
+description = "Python bindings of refbook-core (refbook._core)"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+refbook-core = { path = "../refbook-core" }
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py313"] }
