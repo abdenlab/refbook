@@ -127,8 +127,14 @@ Collections are served with refbook's seqcol schema: the spec's extended
 schema plus `named_sequences` and `sorted_named_sequences`. Against the seqcol
 compliance suite in the `refget` package it passes 52 of 65 checks. The rest
 are `named_sequences` appearing in comparisons (the suite expects exactly its
-own attributes) and `/list/attributes` (not in the spec). The API is described
-at `/openapi.json`.
+own attributes) and `/list/attributes` (not in the spec). Against the refget
+Sequences compliance suite (ga4gh/refget-compliance-suite 2.0.0, from GitHub;
+PyPI has only the v1 suite), on its test sequences (`--sequences`), every
+check passes except range edge cases where the suite departs from the spec:
+it expects a Range past the end to be truncated (the spec: 400), a start or
+Range beyond the end to be 416 (the spec: 400), and `start` equal to the
+length to be 416 (the spec allows it). Circular and TRUNC512 checks are
+skipped (not supported). The API is described at `/openapi.json`.
 
 Every sequence is built from the catalog's sequence store (a root and the
 nucleotide operations applied to it) and checked against its MD5 and `SQ.`

@@ -20,8 +20,15 @@ Sequence Collections v1 (docs/seqcols/README.md)
 
 :id is any identifier `refbook.store.find` accepts. The collections are the
 catalog's stored ones (every flavor and target), plus any level-2 collections
-passed as `extra` (for instance the compliance suite's test collections). Circular
+passed as `extra` (for instance the compliance suite's test collections). The
+sequences are the catalog's, plus any passed as `sequences`, test sequences
+outside the catalog: (bases, [(naming_authority, alias)]) each. Circular
 sequences are not supported (501, as the spec allows).
+
+Where the spec and the refget compliance suite disagree, this follows the
+spec: a Range past the sequence's end and a `start` beyond it are 400 (the
+suite expects RFC 7233's truncation, and 416). refget v1's media types are
+accepted, since a v1 plain-text response is the same bytes.
 """
 
 import json
@@ -29,7 +36,7 @@ import re
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 
-from refbook import seqcol, store
+from refbook import refget, seqcol, store
 from refbook.catalog import Catalog
 from refbook.materialize import Bases
 from refbook.resolve import collection
@@ -37,8 +44,10 @@ from refbook.resolve import collection
 REFGET_JSON = "application/vnd.ga4gh.refget.v2.0.0+json; charset=us-ascii"
 REFGET_TEXT = "text/vnd.ga4gh.refget.v2.0.0+plain; charset=us-ascii"
 SEQCOL_JSON = "application/json"
-TEXT_TYPES = ("text/vnd.ga4gh.refget.v2.0.0+plain", "text/plain", "text/*", "*/*")
-JSON_TYPES = ("application/vnd.ga4gh.refget.v2.0.0+json", "application/json", "application/*", "*/*")
+TEXT_TYPES = ("text/vnd.ga4gh.refget.v2.0.0+plain", "text/vnd.ga4gh.refget.v1.0.0+plain",
+              "text/plain", "text/*", "*/*")
+JSON_TYPES = ("application/vnd.ga4gh.refget.v2.0.0+json", "application/vnd.ga4gh.refget.v1.0.0+json",
+              "application/json", "application/*", "*/*")
 UINT32 = re.compile(r"\d{1,10}")
 RANGE = re.compile(r"bytes=(\d+)-(\d+)")
 ORGANIZATION = {"name": "abdenlab", "url": "https://github.com/abdenlab/refbook"}
@@ -76,8 +85,15 @@ def _accepts(headers: dict[str, str], allowed: tuple[str, ...]) -> bool:
 
 class Service:
     def __init__(self, cat: Catalog, extra: list[dict] = (), bases: Bases | None = None,
-                 subsequence_limit: int | None = None):
+                 subsequence_limit: int | None = None,
+                 sequences: list[tuple[bytes, list[tuple[str, str]]]] = ()):
         self.cat = cat
+        # SQ. digest -> {md5, length, bases, aliases} of the sequences outside the catalog.
+        self.test_sequences: dict[str, dict] = {}
+        for raw, aliases in sequences:
+            b = refget.canonical_bases(raw)
+            md5, sq = refget.digests(b)
+            self.test_sequences[sq] = {"md5": md5, "length": len(b), "bases": b, "aliases": sorted(aliases)}
         self._bases = bases
         self.subsequence_limit = subsequence_limit
         # digest -> (names, lengths, sequences) of every collection served.
@@ -143,7 +159,8 @@ class Service:
     def sequence_service_info(self, headers) -> Response:
         if not _accepts(headers, JSON_TYPES):
             raise Error(406, "service-info is JSON")
-        authorities = sorted({a for pairs in self.cat.sequence_aliases().values() for a, _ in pairs})
+        authorities = sorted({a for pairs in self.cat.sequence_aliases().values() for a, _ in pairs} |
+                             {a for x in self.test_sequences.values() for a, _ in x["aliases"]})
         return _json({
             "id": "io.github.abdenlab.refbook.refget",
             "name": "refbook refget sequences",
@@ -159,8 +176,34 @@ class Service:
             },
         }, content_type=REFGET_JSON)
 
-    def _sequence_id(self, ident: str) -> str:
+    def _find(self, ident: str) -> list[str]:
         found = store.find(self.cat, ident)
+        ns, sep, rest = ident.partition(":")
+        if not sep:
+            ns, rest = None, ident
+        for sq, x in self.test_sequences.items():
+            if (ns in (None, "md5") and rest.lower() == x["md5"]) or (ns in (None, "ga4gh") and rest == sq) \
+                    or (ns, rest) in x["aliases"]:
+                found.append(sq)
+        return sorted(set(found))
+
+    def _length(self, sq: str) -> int:
+        x = self.test_sequences.get(sq)
+        return x["length"] if x else self.cat.sequence[sq]["length"]
+
+    def _metadata(self, sq: str) -> dict:
+        x = self.test_sequences.get(sq)
+        if x is None:
+            return store.metadata(self.cat, sq)
+        return {"metadata": {"md5": x["md5"], "ga4gh": sq, "length": x["length"],
+                             "aliases": [{"alias": a, "naming_authority": auth} for auth, a in x["aliases"]]}}
+
+    def _bases_of(self, sq: str, start: int, end: int) -> bytes:
+        x = self.test_sequences.get(sq)
+        return x["bases"][start:end] if x else store.subsequence(self.cat, sq, start, end, self.bases)
+
+    def _sequence_id(self, ident: str) -> str:
+        found = self._find(ident)
         if not found:
             raise Error(404, f"{ident}: not a known sequence")
         if len(found) > 1:
@@ -174,7 +217,7 @@ class Service:
             sq = self._sequence_id(ident)
         except _MultipleChoices as m:
             return m.response()
-        return _json(store.metadata(self.cat, sq), content_type=REFGET_JSON)
+        return _json(self._metadata(sq), content_type=REFGET_JSON)
 
     def sequence(self, ident, query, headers) -> Response:
         if not _accepts(headers, TEXT_TYPES):
@@ -190,7 +233,7 @@ class Service:
             sq = self._sequence_id(ident)
         except _MultipleChoices as m:
             return m.response()
-        length = self.cat.sequence[sq]["length"]
+        length = self._length(sq)
         status, extra = 200, {}
         if rng:
             m = RANGE.fullmatch(rng.strip())
@@ -215,7 +258,7 @@ class Service:
         if self.subsequence_limit and (start is not None or end is not None or rng) \
                 and e - s > self.subsequence_limit:
             raise Error(416, f"more than {self.subsequence_limit} bases requested")
-        bases = store.subsequence(self.cat, sq, s, e, self.bases)
+        bases = self._bases_of(sq, s, e)
         return Response(status, bases, {"Content-Type": REFGET_TEXT, **extra})
 
     # Sequence Collections

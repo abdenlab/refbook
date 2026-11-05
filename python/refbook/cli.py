@@ -105,12 +105,22 @@ def main() -> None:
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--collections", nargs="*", default=[], metavar="JSON",
                    help="extra level-2 collections to serve (seqcol endpoints only), e.g. test data")
+    s.add_argument("--sequences", metavar="JSON",
+                   help='extra sequences to serve, e.g. test data: a JSON list of {"fasta": path, '
+                        '"aliases": ["insdc:ACC", ...]}, one sequence per FASTA (relative to the JSON)')
     args = ap.parse_args()
     cat = Catalog(args.catalog)
     if args.cmd == "serve":
         from refbook.service import Service, serve
         extra = [json.loads(Path(f).read_text()) for f in args.collections]
-        server = serve(Service(cat, extra), args.host, args.port)
+        sequences = []
+        if args.sequences:
+            manifest = Path(args.sequences)
+            for x in json.loads(manifest.read_text()):
+                lines = (manifest.parent / x["fasta"]).read_bytes().splitlines()
+                bases = b"".join(line for line in lines if not line.startswith(b">"))
+                sequences.append((bases, [tuple(a.split(":", 1)) for a in x.get("aliases", [])]))
+        server = serve(Service(cat, extra, sequences=sequences), args.host, args.port)
         print(f"serving {args.catalog} on http://{args.host}:{server.server_port}/", file=sys.stderr)
         server.serve_forever()
         return

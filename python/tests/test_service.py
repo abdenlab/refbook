@@ -180,3 +180,21 @@ def test_unknown_sequences(svc):
     assert get(svc, "/sequence/" + "0" * 32)[0].status == 404
     assert get(svc, "/sequence/SQ.nope/metadata")[0].status == 404
     assert get(svc, "/sequence/insdc:nope")[0].status == 404
+
+
+def test_test_sequences_outside_the_catalog():
+    from refbook import Catalog
+    from refbook.service import Service
+    t = Service(Catalog(CATALOG), sequences=[(b"acgtn\nACGTRY", [("insdc", "X00001.1")]),
+                                             (b"GATTACA", [("insdc", "X00002.1")])])
+    md5 = hashlib.md5(b"ACGTNACGTRY").hexdigest()
+    _, m = get(t, "/sequence/insdc:X00001.1/metadata")
+    assert m["metadata"]["md5"] == md5 and m["metadata"]["length"] == 11
+    assert m["metadata"]["aliases"] == [{"alias": "X00001.1", "naming_authority": "insdc"}]
+    assert get(t, f"/sequence/md5:{md5.upper()}", start=3, end=7)[1] == b"TNAC"
+    r = t.handle("GET", f"/sequence/{m['metadata']['ga4gh']}",
+                 headers={"Accept": "text/vnd.ga4gh.refget.v1.0.0+plain", "Range": "bytes=0-0"})
+    assert (r.status, r.body) == (206, b"A")
+    assert get(t, "/sequence/insdc:X00002.1")[1] == b"GATTACA"
+    assert get(t, f"/sequence/{CHR1_MD5}", start=10000, end=10010)[1] == b"TAACCCTAAC"   # the catalog still
+    assert "insdc" in get(t, "/sequence/service-info")[1]["refget"]["identifier_types"]
