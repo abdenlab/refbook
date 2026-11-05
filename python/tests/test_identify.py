@@ -1,7 +1,9 @@
-"""Tests for seqcol digests, header parsing and identify.
+"""Tests for seqcol digests, header parsing, identify, resolve, materialize,
+fetch and the reference cache.
 
-Identify tests need the catalog (build/grch38); they are skipped
-when it is not there. Set REFBOOK_CATALOG to point elsewhere.
+Most need a catalog: REFBOOK_CATALOG, by default the repository's build
+(catalog/output/build/grch38); they are skipped without one. Reading a
+release over HTTP is tested with the export, in catalog/tests.
 """
 
 import gzip
@@ -10,14 +12,14 @@ import os
 import struct
 from pathlib import Path
 
-import layout
 import pytest
 
 from refbook import seqcol
 from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CATALOG = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
+CATALOG = Path(os.environ.get("REFBOOK_CATALOG",
+                              Path(__file__).resolve().parents[2] / "catalog" / "output" / "build" / "grch38"))
 needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 
@@ -310,56 +312,6 @@ def test_cram_round_trip_through_ref_cache(cat, tmp_path):
     out = subprocess.run(["samtools", "view", "x.cram"], cwd=tmp_path, env=env, check=True,
                          capture_output=True, text=True).stdout
     assert out.split("\t")[9] == read
-
-
-def release_from_build(out: Path) -> Path:
-    """A format-2 release of the build, by symlink: 70_export's file list and
-    a catalog.json with real hashes, without copying the bases."""
-    import json
-
-    import layout
-    from layout import step_module as step
-    export_catalog = step("70_export")
-    files = {}
-    for name, role in export_catalog.FILES.items():
-        src = layout.path(CATALOG, name)
-        for f in ([src] if src.is_file() else sorted(src.glob("*"))):
-            rel = f"{name}/{f.name}" if src.is_dir() else name
-            (out / rel).parent.mkdir(parents=True, exist_ok=True)
-            (out / rel).symlink_to(f)
-            files[rel] = {"bytes": f.stat().st_size, "sha256": export_catalog.sha256(f), "role": role}
-    (out / "catalog.json").write_text(json.dumps({"name": "refbook", "format": export_catalog.FORMAT,
-                                                  "version": "test", "files": files}))
-    return out
-
-
-@needs_catalog
-def test_remote_catalog_over_http(tmp_path):
-    """Open a release by URL from a local Range-honoring server; compare with local."""
-    import threading
-
-    import pyarrow as pa
-
-    from refbook import Catalog, fetch, identify
-    from refbook._serve import serve
-    release = release_from_build(tmp_path / "release")
-    server = serve(str(release), port=0)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    try:
-        url = f"http://127.0.0.1:{server.server_address[1]}/"
-        remote, local = Catalog(url, cache=tmp_path / "cache"), Catalog(release)
-        assert remote.manifest["version"] == local.manifest["version"] == "test"
-        assert not (tmp_path / "cache" / "catalog" / "test" / "root_blocks.parquet").exists()
-        res = identify(read_header(FIXTURES / "giab_HG002_GRCh38_v4.2.1.vcf"), remote)
-        assert res.best[0].verdict == "consistent"
-        iv = pa.table({"chrom": ["chr1", "chrY", "chrM"], "start": [1_000_000, 10_000, 0],
-                       "end": [1_000_100, 10_050, 16569]})
-        got = fetch(remote, "grch38-no-alt", iv)  # auto -> pyarrow over plain http
-        want = fetch(local, "grch38-no-alt", iv, engine="pyarrow")
-        assert got["sequence"].to_pylist() == want["sequence"].to_pylist()
-        assert 0 < remote.blocks_http.requests < 20
-    finally:
-        server.shutdown()
 
 
 def test_catalog_refuses_another_format(tmp_path):

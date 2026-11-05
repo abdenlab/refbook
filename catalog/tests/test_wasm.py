@@ -17,7 +17,7 @@ import pytest
 
 from refbook import _core
 
-JS = Path(__file__).resolve().parent.parent / "js"
+JS = layout.REPO / "js"
 BUILD = layout.build_dir("grch38")
 pytestmark = pytest.mark.skipif(
     shutil.which("node") is None or not (JS / "pkg" / "refbook_wasm_bg.wasm").exists(),

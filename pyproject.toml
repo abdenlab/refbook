@@ -10,10 +10,10 @@ dev = [
     "ruff>=0.17.3",
 ]
 
-# tests/ holds the tests that span components (the library and the wasm build
-# against a build); python/tests and catalog/tests each test their own.
+# Each member tests itself: python/tests the library (against a catalog when
+# there is one), catalog/tests the pipeline and everything it produces.
 [tool.pytest.ini_options]
-testpaths = ["tests", "python/tests", "catalog/tests"]
+testpaths = ["python/tests", "catalog/tests"]
 pythonpath = ["catalog"]
 
 [tool.ruff.lint.isort]

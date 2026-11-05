@@ -219,24 +219,25 @@ Each script's docstring says what it reads, writes and checks.
 | Path | Contents |
 | --- | --- |
 | `crates/` | The Rust crates: `refbook-core` (refget digests and canonicalization, seqcol, nucleotide operations, the recipe compiler; no I/O), and its bindings, `refbook-py` (pyo3, built by maturin as `refbook._core`) and `refbook-wasm` (wasm-bindgen, for `js/`) |
-| `python/` | The Python package (`pyproject.toml`, `README.md`, `tests/` for the library alone) |
+| `python/` | The Python package (`pyproject.toml`, `README.md`, and `tests/`, with real ENCODE, gnomAD and GIAB headers as fixtures) |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
 | `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
 | `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
 | `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
-| `tests/` | Tests that span components: the library and the wasm build against a build, with real ENCODE, gnomAD and GIAB headers as fixtures |
 | `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 
 ## Development
 
 ```bash
-uv sync --extra datafusion
-uv run pytest
+uv sync
+uv run pytest                       # python/tests (the library) and catalog/tests (the pipeline)
+(cd js && npm install && npm run build && npm test)   # the npm package
 ```
 
-Tests that need the catalog look for it at `$REFBOOK_CATALOG` (default: the lab
-server's build directory) and are skipped when it is absent.
+Tests that need a catalog read `$REFBOOK_CATALOG` (default: the build in
+`catalog/output/build/grch38`) and are skipped without one. The wasm
+cross-check (`catalog/tests/test_wasm.py`) is skipped until `js/` is built.
 
 ## License
 
