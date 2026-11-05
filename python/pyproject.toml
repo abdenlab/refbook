@@ -1,0 +1,40 @@
+[project]
+name = "refbook"
+version = "0.0.0"
+description = "Catalog of human reference genome sequences: identify, resolve and materialize reference sequence sets"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    "pyarrow>=25",
+]
+
+[project.optional-dependencies]
+# Faster fetch: page-index pruning and parallel reads (the engine under polars-bio).
+datafusion = ["datafusion>=55"]
+
+[project.scripts]
+refbook = "refbook.cli:main"
+
+# The library (refbook/), with the Rust core (../crates/refbook-core) and its
+# pyo3 bindings (rust/) built by maturin into refbook._core.
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+python-source = "."
+module-name = "refbook._core"
+
+[tool.uv]
+# Rebuild the extension when the Rust sources change.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "rust/Cargo.toml" },
+    { file = "rust/src/**/*.rs" },
+    { file = "../Cargo.toml" },
+    { file = "../crates/**/*.rs" },
+    { file = "../crates/**/Cargo.toml" },
+]

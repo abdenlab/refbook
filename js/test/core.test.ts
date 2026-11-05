@@ -28,7 +28,7 @@ test("seqcol: the spec's example", () => {
 });
 
 test("seqcol: the refget package's compliance data", () => {
-  const fixtures = JSON.parse(readFileSync(new URL("../../tests/fixtures/refget_compliance/test_fasta_digests.json", import.meta.url), "utf8"));
+  const fixtures = JSON.parse(readFileSync(new URL("../../python/tests/fixtures/refget_compliance/test_fasta_digests.json", import.meta.url), "utf8"));
   for (const [file, f] of Object.entries<any>(fixtures)) {
     const { names, lengths, sequences } = f.level2;
     const d = rb.seqcolDigests(names, lengths, sequences);

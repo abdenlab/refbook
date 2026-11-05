@@ -1,7 +1,6 @@
 """Refget digests and the canonicalization policy."""
 
 import pytest
-
 from refbook.refget import NonCanonicalBase, canonical_bases, digests
 
 

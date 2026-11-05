@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from refbook import seqcol
 
 BUNDLES = json.loads((Path(__file__).parent / "fixtures" / "refget_compliance"
