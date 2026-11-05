@@ -130,3 +130,23 @@ def record_check(build: Path, out: Path, check: str, passed: bool, inputs: list[
     result = {"check": check, "passed": passed, "details": details or {},
               "inputs": {name: sha256(path(build, name)) for name in inputs}}
     (out / f"{check}.json").write_text(json.dumps(result, indent=1) + "\n")
+
+
+# Locks (see lock.py): the exact bytes the build reads from raw/.
+LOCKS = Path(__file__).resolve().parent.parent / "locks"
+INPUTS_LOCK = LOCKS / "inputs.lock"     # 00_fetch_inputs.sh: NCBI, efetch, IMGT/HLA
+TARGETS_LOCK = LOCKS / "targets.lock"   # 01_fetch_targets.sh: the published files
+
+
+def read_lock(lock: Path) -> dict[str, dict]:
+    """path under raw/ -> its lock entry (bytes, sha256, last_modified, url)."""
+    lines = lock.read_text().splitlines()
+    fields = lines[0].split("\t")
+    return {r[0]: dict(zip(fields, r)) for r in (line.split("\t") for line in lines[1:])}
+
+
+def record_inputs(out: Path, step: str, *locks: Path) -> None:
+    """out/<step>.inputs.json: the sha256 of each lock a step read raw/ through,
+    so a release can require that the build matches the current locks."""
+    (out / f"{step}.inputs.json").write_text(
+        json.dumps({lock.name: sha256(lock) for lock in locks}, indent=1) + "\n")

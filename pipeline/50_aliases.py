@@ -34,6 +34,7 @@ def main() -> None:
     build = layout.build_dir(args.registry, args.assembly)
     with layout.step_output(build, STEP) as out:
         run(layout.raw_dir(args.registry), build, out)
+        layout.record_inputs(out, STEP, layout.TARGETS_LOCK)  # chromAlias.txt
 
 
 def run(raw: Path, build: Path, out: Path) -> None:

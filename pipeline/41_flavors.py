@@ -18,9 +18,11 @@ writes to REGISTRY/build/grch38/41_flavors/:
                       nucleotide operations applied to the root), length, MD5,
                       SQ. digest
 - targets.parquet     one row per target: its flavor, publisher, alias (the
-                      publisher's name for the file), URLs, evidence (FASTA
-                      content or .dict), and the seqcol digests of the target's
-                      own collection (its order)
+                      publisher's name for the file), URLs, the exact file it
+                      was checked against (sha256, size and Last-Modified from
+                      locks/targets.lock) and the evidence (FASTA content or
+                      .dict), and the seqcol digests of the target's own
+                      collection (its order)
 - target_sequences.parquet   each target's order: target, position, name
 - sequences.parquet   the sequence store: one row per distinct sequence (every
                       root, and every derivative a manifest uses), keyed by
@@ -55,6 +57,7 @@ from refbook import seqcol
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
 import engine
 import layout
+from observe import read_provenance
 
 GRCH38 = layout.GRCH38
 STEP = "41_flavors"
@@ -216,11 +219,12 @@ def run(args, build: Path, out: Path) -> None:
             v = rows[t]
             t_top, t_level1 = collection_files([x["name"] for x in v], [x["length"] for x in v],
                                                [x["sha512t24u"] for x in v], out_dir)
-            checked = r.get("observed_from", r["published"])
+            prov = read_provenance(layout.path(build, f"observed/{t}.parquet"))
             targets.append({
                 "target": t, "flavor": label, **target_meta[t],
-                "published": r["published"], "checked_against": checked,
-                "evidence": "dict" if checked.endswith(".dict") else "content",
+                "published": r["published"], "checked_against": prov["url"],
+                "evidence": prov["evidence"], "checked_sha256": prov["sha256"],
+                "checked_bytes": int(prov["bytes"]), "checked_last_modified": prov["last_modified"],
                 "n_sequences": len(v), "seqcol_digest": t_top,
                 "seqcol_names": t_level1["names"], "seqcol_lengths": t_level1["lengths"],
                 "seqcol_sequences": t_level1["sequences"],

@@ -162,8 +162,8 @@ runs on the lab server and needs about 15 GB.
 
 ```bash
 R=/path/to/registry
-pipeline/00_fetch_inputs.sh $R      # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA
-pipeline/01_fetch_targets.sh $R     # published files used as reproduction targets
+pipeline/00_fetch_inputs.sh $R      # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks locks/inputs.lock
+pipeline/01_fetch_targets.sh $R     # published files used as reproduction targets; checks locks/targets.lock
 uv run python -I pipeline/10_roots.py $R
 uv run python -I pipeline/11_external_roots.py $R
 uv run python -I pipeline/20_layers.py $R
@@ -182,7 +182,18 @@ temporary name and renamed into place when it finishes, so a rerun replaces
 exactly that step's outputs. A step finds earlier steps' tables by name, and
 `build/grch38/catalog.json` indexes them all, so `Catalog("build/grch38")` opens
 a build directly. The checks (60-62) record their results with the hashes of
-the tables they read. Every step takes `--assembly` (only `grch38` is defined
+the tables they read, and the export refuses unless every check passed on
+exactly the files it ships.
+
+The fetch steps pin their downloads with **locks** (`locks/inputs.lock`,
+`locks/targets.lock`): every file's size, sha256, Last-Modified and URL. A
+fetch checks each file against its publisher's checksum list where there is
+one, and against the lock; anything new or changed fails until you accept it
+with `--update`. On the first run there is no lock, so the files are trusted
+and the lock is written. Publisher checksums that disagree with what the
+publisher actually serves are listed, with the reason, in
+`locks/checksum_exceptions.tsv`. Each observation records the exact target
+file it was made from, and a release records the hash of each lock. Every step takes `--assembly` (only `grch38` is defined
 so far); `pipeline/layout.py` holds the layout and the GRCh38 releases, and
 `pipeline/engine.py` the recipe engine.
 

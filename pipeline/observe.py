@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 from refbook import refget
 
@@ -90,3 +91,24 @@ def observe_dict(path: Path) -> pa.Table:
 def observe(path: Path) -> pa.Table:
     """A FASTA's or a .dict's observation, by file name."""
     return observe_dict(path) if path.name.endswith(".dict") else observe_fasta(path)
+
+
+# Provenance, kept in an observation's schema metadata (30_observe.py).
+PREFIX = "refbook:target_"
+
+
+def provenance(entry: dict) -> dict[bytes, bytes]:
+    """Schema metadata for an observation of the file a lock entry describes: its
+    path, URL, size, sha256 and Last-Modified, and the evidence, `content`
+    (digests computed from the bases) or `dict` (MD5s as the publisher claims)."""
+    meta = {f"{PREFIX}{k}": str(entry[k]) for k in ("path", "url", "bytes", "sha256", "last_modified")}
+    meta["refbook:evidence"] = "dict" if entry["path"].endswith(".dict") else "content"
+    return {k.encode(): v.encode() for k, v in meta.items()}
+
+
+def read_provenance(path: Path) -> dict[str, str]:
+    """An observation's provenance: path, url, bytes, sha256, last_modified, evidence."""
+    meta = pq.read_schema(path).metadata or {}
+    return {k.decode().removeprefix("refbook:").removeprefix("target_"): v.decode()
+            for k, v in meta.items() if k.startswith(b"refbook:")}
+

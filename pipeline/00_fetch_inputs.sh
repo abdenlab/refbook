@@ -3,12 +3,16 @@
 #
 # Files land at raw/<host>/<url path>, so every file's source URL is its path.
 # wget -N keeps the server's Last-Modified time as the file's mtime and skips
-# files that haven't changed, so the script is safe to re-run.
+# files that haven't changed, so the script is safe to re-run. At the end,
+# lock.py checks every file against its publisher's checksums and against
+# locks/inputs.lock (written on first use; pass --update to accept changes).
 #
-# Usage: 00_fetch_inputs.sh REGISTRY_DIR
+# Usage: 00_fetch_inputs.sh REGISTRY_DIR [--update]
 set -euo pipefail
 
-REGISTRY=${1:?usage: 00_fetch_inputs.sh REGISTRY_DIR}
+mkdir -p "${1:?usage: 00_fetch_inputs.sh REGISTRY_DIR [--update]}"
+REGISTRY=$(cd "$1" && pwd)
+HERE=$(cd "$(dirname "$0")" && pwd)
 RAW="$REGISTRY/raw"
 NCBI=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405
 mkdir -p "$RAW"
@@ -109,3 +113,6 @@ for x in json.load(sys.stdin)["tree"]:
         print(x["path"])' \
     | while read -r path; do wget_mirror "$IMGT/$path"; done
 echo "fetch complete" >&2
+
+uv run --project "$HERE/.." python -I "$HERE/lock.py" "$REGISTRY" "$HERE/../locks/inputs.lock" \
+    ftp.ncbi.nlm.nih.gov eutils.ncbi.nlm.nih.gov raw.githubusercontent.com "${@:2}"

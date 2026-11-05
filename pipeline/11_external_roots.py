@@ -72,6 +72,7 @@ def main() -> None:
     args = ap.parse_args()
     with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
         run(layout.raw_dir(args.registry), out)
+        layout.record_inputs(out, STEP, layout.INPUTS_LOCK)
 
 
 def run(raw: Path, out_dir: Path) -> None:

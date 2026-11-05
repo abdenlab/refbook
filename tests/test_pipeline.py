@@ -4,7 +4,7 @@ import gzip
 from pathlib import Path
 
 import engine
-import manifest
+import lock
 import observe
 import pytest
 from conftest import step
@@ -170,12 +170,12 @@ def test_parse_dict():
         (0, "chr1", 248956422, "6aef897c3d6ff0c78aff06ac189178dd"), (1, "chrM", 16569, None)]
 
 
-# manifest
+# lock
 
 def test_source_url():
-    assert manifest.source_url(Path("ftp.ncbi.nlm.nih.gov/genomes/all/x.txt")) == \
+    assert lock.source_url(Path("ftp.ncbi.nlm.nih.gov/genomes/all/x.txt")) == \
         "https://ftp.ncbi.nlm.nih.gov/genomes/all/x.txt"
-    assert manifest.source_url(Path("eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.gb")) == (
+    assert lock.source_url(Path("eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.gb")) == (
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
         "?db=nuccore&id=AJ507799.2&rettype=gb&retmode=text")
 
@@ -328,3 +328,39 @@ def test_export_gate(tmp_path):
     record("check_gaps")
     (build / "10_roots" / "roots.parquet").write_bytes(b"rebuilt")
     assert all("roots.parquet has changed" in p for p in export.gate(build)[1])
+
+
+def test_export_gate_on_locks(tmp_path):
+    export = step("70_export")
+    build = tmp_path / "build"
+    (build / "10_roots").mkdir(parents=True)
+    (build / "10_roots" / "10_roots.inputs.json").write_text('{"inputs.lock": "not the current lock"}')
+    assert "10_roots: built from another inputs.lock; rerun it" in export.gate(build)[1]
+    layout.record_inputs(build / "10_roots", "10_roots", layout.INPUTS_LOCK)
+    assert not any("built from another" in p for p in export.gate(build)[1])
+
+
+def test_lock_publisher_checks(tmp_path, monkeypatch):
+    import hashlib
+    raw = tmp_path / "raw"
+    (raw / "h/d").mkdir(parents=True)
+    (raw / "h/d/a.txt").write_text("a")
+    (raw / "h/d/b.txt").write_text("b")
+    md5 = {n: hashlib.md5(n.encode()).hexdigest() for n in "ab"}
+    (raw / "h/d/md5checksums.txt").write_text(f"{md5['a']}  ./a.txt\n{'0' * 32}  ./b.txt\n{'1' * 32}  ./absent.txt\n")
+    files = {}
+    for p in sorted(q for q in raw.rglob("*") if q.is_file()):
+        sha, m = lock.digests(p)
+        files[p.relative_to(raw).as_posix()] = {"md5": m, "sha256": sha}
+    monkeypatch.setattr(lock, "known_mismatches", lambda: set())
+    checked, errors = lock.publisher_checks(raw, files)
+    assert checked == 2 and errors == ["h/d/b.txt: does not match h/d/md5checksums.txt"]
+    monkeypatch.setattr(lock, "known_mismatches", lambda: {("h/d/b.txt", "0" * 32, md5["b"])})
+    assert lock.publisher_checks(raw, files) == (2, [])          # a documented mismatch
+
+
+def test_lock_round_trip(tmp_path):
+    entries = {"h/x": {"path": "h/x", "bytes": 3, "sha256": "s", "last_modified": "t", "url": "https://h/x"}}
+    lock.write_lock(tmp_path / "t.lock", entries)
+    assert lock.read_lock(tmp_path / "t.lock") == {"h/x": {k: str(v) for k, v in entries["h/x"].items()}}
+    assert layout.read_lock(tmp_path / "t.lock") == lock.read_lock(tmp_path / "t.lock")

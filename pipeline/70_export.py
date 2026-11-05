@@ -16,7 +16,10 @@ The export is gated on the checks (60-62): each must have recorded a pass, and
 the tables it read must still have the hashes it recorded, so a release ships
 only files that passed every check as they are. The root check must have
 consulted ENA; --development accepts a run with --skip-ena, for exports that
-are not releases. catalog.json records each check's result.
+are not releases. Every step that read raw/ must have read it through the
+current locks (locks/inputs.lock, locks/targets.lock). catalog.json records
+each check's result and the hash of each lock, and the locks ship under
+evidence/locks/.
 
 Usage: uv run python -I pipeline/70_export.py REGISTRY_DIR OUT_DIR VERSION [--development] [--assembly grch38]
 """
@@ -109,6 +112,13 @@ def gate(build: Path, development: bool = False) -> tuple[dict, list[str]]:
                 problems.append(f"{check}: {name} has changed since the check ran; rerun it")
         if r["details"].get("ena") == "skipped" and not development:
             problems.append(f"{check}: ran without ENA (--skip-ena); rerun it, or export --development")
+    # Every step that read raw/ must have read it through the current locks.
+    locks = {lock.name: layout.sha256(lock) for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK)}
+    for d in layout.step_dirs(build):
+        for f in d.glob("*.inputs.json"):
+            for name, digest in json.loads(f.read_text()).items():
+                if locks.get(name) != digest:
+                    problems.append(f"{d.name}: built from another {name}; rerun it")
     return results, problems
 
 
@@ -139,6 +149,8 @@ def main() -> None:
         src = layout.path(build, name)
         entries += [(p, f"evidence/{name}" + (f"/{p.name}" if src.is_dir() else ""), "evidence")
                     for p in ([src] if src.is_file() else sorted(src.glob("*")))]
+    for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK, layout.LOCKS / "checksum_exceptions.tsv"):
+        entries.append((lock, f"evidence/locks/{lock.name}", "evidence"))
     files = {}
     for src, rel, role in entries:
         dst = staging / rel
@@ -147,6 +159,7 @@ def main() -> None:
         print(f"{rel}\t{dst.stat().st_size}", file=sys.stderr)
     manifest = {
         "name": "refbook", "format": FORMAT, "version": version,
+        "locks": {lock.name: layout.sha256(lock) for lock in (layout.INPUTS_LOCK, layout.TARGETS_LOCK)},
         "checks": {c: {"passed": r["passed"], **({"ena": r["details"]["ena"]} if "ena" in r["details"] else {})}
                    for c, r in results.items()},
         "created": datetime.date.today().isoformat(),

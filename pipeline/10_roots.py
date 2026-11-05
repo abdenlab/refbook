@@ -133,6 +133,7 @@ def main() -> None:
         sys.exit(f"{args.assembly}: only grch38's sources are defined (see layout.py)")
     with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
         run(layout.raw_dir(args.registry), out, args.block_size)
+        layout.record_inputs(out, STEP, layout.INPUTS_LOCK)
 
 
 def run(raw: Path, out: Path, block_size: int) -> None:
