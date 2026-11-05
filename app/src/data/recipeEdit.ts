@@ -52,12 +52,27 @@ export function setRole(r: Recipe, role: string, on: boolean): Recipe {
   return out;
 }
 
-/** Only alts and patches placed on chromosomes (Ensembl's toplevel), or all. */
-export function setPlacedOnChromosomes(r: Recipe, on: boolean): Recipe {
+/** Parent types an alt or patch can be placed on (layer_placements.parent_type). */
+export const PARENT_TYPES = ["chromosome", "scaffold"];
+
+/** The parent types the GRCh38 entry keeps alts and patches placed on (all, without `placed_on`). */
+export function placedOn(r: Recipe): string[] {
+  return primary(r)?.placed_on ?? PARENT_TYPES;
+}
+
+/** Keep, or leave out, alts and patches placed on a parent type. Every alt and
+ * patch is placed; in p14 all are on chromosomes but 3 fix patches, placed on
+ * the alt scaffolds they fix (Ensembl and GENCODE leave those out). An empty
+ * `placed_on` would mean no filter, so the last type can't be left out. */
+export function setPlacedOn(r: Recipe, type: string, on: boolean): Recipe {
   const out = clone(r);
   const p = primary(out);
   if (!p) return out;
-  if (on) p.placed_on = ["chromosome"]; else delete p.placed_on;
+  const kept = new Set(placedOn(out));
+  if (on) kept.add(type); else kept.delete(type);
+  if (!kept.size) return out;
+  if (PARENT_TYPES.every((t) => kept.has(t))) delete p.placed_on;
+  else p.placed_on = PARENT_TYPES.filter((t) => kept.has(t));
   return out;
 }
 

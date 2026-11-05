@@ -129,13 +129,25 @@
                 <label class="check"><input type="checkbox" checked={p.roles.includes(r)}
                   onchange={(e) => set(edit.setRole(recipe!, r, e.currentTarget.checked))} /> {role(r)}</label>
               {/each}
-              <label class="check"><input type="checkbox" checked={!!p.placed_on}
-                onchange={(e) => set(edit.setPlacedOnChromosomes(recipe!, e.currentTarget.checked))} />
-                only alts and patches placed on chromosomes</label>
             {:else}
               <p class="muted">No GRCh38 entry. <button type="button" onclick={() => set(edit.setRelease(recipe!, `${edit.GRCH38}.15`))}>Add one</button></p>
             {/if}
           </fieldset>
+          {#if p && p.roles.some((r) => ["alt-scaffold", "fix-patch", "novel-patch"].includes(r))}
+            {@const kept = edit.placedOn(recipe)}
+            <fieldset>
+              <legend>Filters</legend>
+              <p class="small">Alts and patches placed on</p>
+              {#each edit.PARENT_TYPES as type (type)}
+                <label class="check"><input type="checkbox" checked={kept.includes(type)}
+                  disabled={kept.length === 1 && kept.includes(type)}
+                  onchange={(e) => set(edit.setPlacedOn(recipe!, type, e.currentTarget.checked))} />
+                  {type === "chromosome" ? "chromosomes" : "other scaffolds"}</label>
+              {/each}
+              <p class="muted small">Every alt and patch is placed on the sequence it is an alternative to or fixes. In GRCh38.p14 all
+                are placed on chromosomes but 3 fix patches, which fix alt scaffolds; Ensembl and GENCODE leave those out.</p>
+            </fieldset>
+          {/if}
           <fieldset>
             <legend>Other sequences</legend>
             <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} /> EBV (<code>{edit.EBV}</code>)</label>

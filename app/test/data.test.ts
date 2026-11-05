@@ -195,4 +195,12 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, all))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
   const hg38p14 = JSON.parse(fs.find((f) => f.flavor === "hg38-p14")!.recipe);
   assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
+  // Filters: leaving out patches placed on scaffolds is Ensembl's toplevel recipe; on again, back to all.
+  const top = JSON.parse(fs.find((f) => f.flavor === "ensembl-grch38-toplevel")!.recipe);
+  assert.deepEqual(edit.placedOn(top), ["chromosome"]);
+  const all2 = edit.setPlacedOn(top, "scaffold", true);
+  assert.equal(edit.primary(all2)!.placed_on, undefined);
+  assert.equal(design(all2, t, fs).rows.length, design(top, t, fs).rows.length + 3);
+  assert.equal(is(edit.setPlacedOn(all2, "scaffold", false)), "ensembl-grch38-toplevel");
+  assert.deepEqual(edit.placedOn(edit.setPlacedOn(top, "chromosome", false)), ["chromosome"]);   // never none
 });
