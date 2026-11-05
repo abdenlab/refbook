@@ -4,17 +4,17 @@
 # Same conventions as 00_fetch_inputs.sh: files land at raw/<host>/<url path>,
 # wget -N keeps the server's Last-Modified time and skips unchanged files.
 # Each source's own checksum list is fetched too, and lock.py checks every
-# file against it and against assemblies/grch38/locks/targets.lock at the end (written on first
+# file against it and against catalog/assemblies/grch38/locks/targets.lock at the end (written on first
 # use; pass --update to accept changes).
 #
 # Usage: 01_fetch_targets.sh [--update]   (downloads to raw/, or $REFBOOK_RAW)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-RAW=${REFBOOK_RAW:-$HERE/../raw}
+RAW=${REFBOOK_RAW:-$HERE/output/raw}
 mkdir -p "$RAW"
 RAW=$(cd "$RAW" && pwd)
-LOCKS=$HERE/../assemblies/grch38/locks
+LOCKS=$HERE/assemblies/grch38/locks
 cd "$RAW"
 
 wget_mirror() {

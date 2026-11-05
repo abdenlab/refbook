@@ -1,12 +1,14 @@
 """Where everything is, and the GRCh38 releases, defined once for every step.
 
-- raw/: the downloads, at raw/<host>/<url path> (a symlink to a shared mirror
-  is fine). Override with --raw or REFBOOK_RAW.
-- build/<assembly>/: the steps' outputs. Override with --build or REFBOOK_BUILD.
-- assemblies/<assembly>/: the declarative inputs: recipes/*.json,
+- raw/: the downloads, at raw/<host>/<url path>; by default catalog/output/raw
+  (a symlink to a shared mirror is fine). Override with --raw or REFBOOK_RAW.
+- build/<assembly>/: the steps' outputs; by default catalog/output/build.
+  Override with --build or REFBOOK_BUILD.
+- catalog/assemblies/<assembly>/: the declarative inputs: recipes/*.json,
   flavors.json, and locks/ (written by lock.py).
 
-Every path defaults to the repository, so a step needs no arguments.
+catalog/output/ is gitignored. Every path has a default, so a step needs no
+arguments.
 """
 
 import hashlib
@@ -29,7 +31,9 @@ RELEASES = [(n, f"{GRCH38}{15 + n}", "GRCh38" if n == 0 else f"GRCh38.p{n}") for
 LATEST = RELEASES[-1]
 
 
-REPO = Path(__file__).resolve().parent.parent
+CATALOG = Path(__file__).resolve().parent
+REPO = CATALOG.parent
+OUTPUT = CATALOG / "output"
 
 
 def step_module(name: str):
@@ -37,7 +41,7 @@ def step_module(name: str):
     module, so its functions can be tested."""
     if name in sys.modules:
         return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(name, CATALOG / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
@@ -45,15 +49,15 @@ def step_module(name: str):
 
 
 def raw_dir(raw: Path | None = None) -> Path:
-    return Path(raw or os.environ.get("REFBOOK_RAW") or REPO / "raw")
+    return Path(raw or os.environ.get("REFBOOK_RAW") or OUTPUT / "raw")
 
 
 def build_dir(assembly: str = ASSEMBLY, build: Path | None = None) -> Path:
-    return Path(build or os.environ.get("REFBOOK_BUILD") or REPO / "build") / assembly
+    return Path(build or os.environ.get("REFBOOK_BUILD") or OUTPUT / "build") / assembly
 
 
 def assembly_dir(assembly: str = ASSEMBLY) -> Path:
-    return REPO / "assemblies" / assembly
+    return CATALOG / "assemblies" / assembly
 
 
 def recipe_files(assembly: str = ASSEMBLY) -> list[Path]:
@@ -61,7 +65,7 @@ def recipe_files(assembly: str = ASSEMBLY) -> list[Path]:
 
 
 def recipes(assembly: str = ASSEMBLY) -> list[dict]:
-    """Every recipe of an assembly, from assemblies/<assembly>/recipes/*.json."""
+    """Every recipe of an assembly, from catalog/assemblies/<assembly>/recipes/*.json."""
     return [r for p in recipe_files(assembly) for r in json.loads(p.read_text())["recipes"]]
 
 

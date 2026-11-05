@@ -5,7 +5,7 @@ into OUT_DIR, in the flat layout a release has (copies,
 not links, so a later rebuild can't change a release) and writes
 OUT_DIR/catalog.json: the
 version, the date, and for every file its size, sha256 and role. Also writes
-OUT_DIR/README.md, the dataset card, from pipeline/catalog_card.md with the
+OUT_DIR/README.md, the dataset card, from catalog/catalog_card.md with the
 release's version and counts filled in. Pipeline
 intermediates stay behind. OUT_DIR is what gets hosted; a client opens it by
 URL (`Catalog("https://.../catalog/")`) or by path. A release is never
@@ -17,11 +17,11 @@ the tables it read must still have the hashes it recorded, so a release ships
 only files that passed every check as they are. The root check must have
 consulted ENA; --development accepts a run with --skip-ena, for exports that
 are not releases. Every step that read raw/ must have read it through the
-current locks (assemblies/<assembly>/locks/). catalog.json records
+current locks (catalog/assemblies/<assembly>/locks/). catalog.json records
 each check's result and the hash of each lock, and the locks ship under
 evidence/locks/.
 
-Usage: uv run python -I pipeline/70_export.py OUT_DIR VERSION [--development] [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/70_export.py OUT_DIR VERSION [--development] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

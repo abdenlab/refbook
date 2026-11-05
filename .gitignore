@@ -5,8 +5,7 @@ _scratch/
 .ruff_cache/
 __pycache__/
 .nfs*
-build/
-/raw
+/catalog/output/
 /target
 python/refbook/*.so
 js/node_modules/

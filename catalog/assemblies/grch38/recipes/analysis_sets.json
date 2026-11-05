@@ -1,5 +1,5 @@
 {
-  "_doc": "The four GRC analysis sets (GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids). Applied by pipeline/run_recipes.py; see its docstring for the operations.",
+  "_doc": "The four GRC analysis sets (GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids). Applied by catalog/40_recipes.py; see its docstring for the operations.",
   "recipes": [
     {
       "flavor": "GRCh38_no_alt_analysis_set",

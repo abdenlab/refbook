@@ -8,7 +8,7 @@ GRC analysis sets; IMGT allele names for HLA.
 
 (Flavors, targets and seqcol documents are built by 41_flavors.py.)
 
-Usage: uv run python -I pipeline/50_aliases.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/50_aliases.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

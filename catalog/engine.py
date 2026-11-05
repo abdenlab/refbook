@@ -4,9 +4,9 @@ A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it.
 Compiling a recipe is the Rust core's (crates/refbook-core/src/recipe.rs);
 this module loads the catalog tables it reads, fills in lengths and digests,
 and compares the result with a target's observation. The Python compiler it
-replaced is frozen in pipeline/tests/reference_engine.py, as the core's oracle.
+replaced is frozen in catalog/tests/reference_engine.py, as the core's oracle.
 
-A recipe (see assemblies/<assembly>/recipes/*.json) is data:
+A recipe (see catalog/assemblies/<assembly>/recipes/*.json) is data:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
            accession.version>, "roles": [...], "accessions": [...]?} (rows of

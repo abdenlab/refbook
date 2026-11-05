@@ -16,7 +16,7 @@ import pytest
 
 from refbook import _core
 
-BUILD = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))
+BUILD = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
 needs_build = pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
 
 

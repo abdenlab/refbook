@@ -8,8 +8,8 @@ facets) and targets (the files that reproduce them) are curated entries on top;
 see docs/GLOSSARY.md.
 
 A catalog is a directory of the pipeline's outputs: a release made by
-pipeline/70_export.py (with a catalog.json manifest), or the build
-directory itself (build/grch38, whose catalog.json indexes the step
+catalog/70_export.py (with a catalog.json manifest), or the build
+directory itself (catalog/output/build/grch38, whose catalog.json indexes the step
 directories the pipeline wrote). Open it by path or by URL. Remotely,
 each table is downloaded once into a cache keyed by the release version and
 checked against the manifest's sha256; root_blocks is never downloaded, only

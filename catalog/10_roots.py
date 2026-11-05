@@ -16,7 +16,7 @@ writes Parquet to build/grch38/10_roots/:
 Fails if a report lists a sequence that is missing or has the wrong length
 (EBV's length comes from its GenBank record).
 
-Usage: uv run python -I pipeline/10_roots.py [--assembly A] [--raw DIR] [--build DIR] [--block-size N]
+Usage: uv run python -I catalog/10_roots.py [--assembly A] [--raw DIR] [--build DIR] [--block-size N]
 """
 
 import argparse

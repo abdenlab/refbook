@@ -19,7 +19,7 @@ writes Parquet to build/grch38/20_layers/:
 A root's AGP is the same in every release (checked by 60_check_gaps.py and again
 here), so each root appears once.
 
-Usage: uv run python -I pipeline/20_layers.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/20_layers.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

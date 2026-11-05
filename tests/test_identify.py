@@ -10,13 +10,14 @@ import os
 import struct
 from pathlib import Path
 
+import layout
 import pytest
 
 from refbook import seqcol
 from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CATALOG = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))
+CATALOG = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
 needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 

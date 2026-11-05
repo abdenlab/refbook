@@ -4,7 +4,7 @@ For every recipe, the target is the file it is checked against (its
 `observed_from`, else `published`), found in raw/ at the path its URL
 gives (01_fetch_targets.sh, or 00_fetch_inputs.sh for the GRC analysis sets,
 which are inputs too). The file must match its entry in its lock
-(assemblies/<assembly>/locks/targets.lock or inputs.lock: size and sha256). A FASTA is observed from its bases, a
+(catalog/assemblies/<assembly>/locks/targets.lock or inputs.lock: size and sha256). A FASTA is observed from its bases, a
 .dict from its @SQ lines (see observe.py). Writes
 build/grch38/30_observe/observed/<target>.parquet, whose schema
 metadata records the target's provenance: its path, URL, size, sha256 and
@@ -14,7 +14,7 @@ from the bases) or `dict` (MD5s as the publisher claims them).
 Observing every FASTA takes a while; --reuse keeps an observation from the
 step's last run when it was made from the same bytes (the same sha256).
 
-Usage: uv run python -I pipeline/30_observe.py [--reuse] [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/30_observe.py [--reuse] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

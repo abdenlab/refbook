@@ -1,5 +1,5 @@
 {
-  "_doc": "Illumina iGenomes (ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens), checked against each genome.dict (observe_dict.py). Each is an existing flavor: NCBI/GRCh38 = GRC no_alt analysis set (its genome.fa.fai is byte-identical to NCBI's); NCBI/GRCh38Decoy = no_alt_plus_hs38d1 with the decoys named by bare accession; UCSC/hg38 = UCSC hg38.analysisSet; GATK/GRCh38 = Broad Homo_sapiens_assembly38 (.dict and .fai byte-identical by MD5). Applied by pipeline/run_recipes.py.",
+  "_doc": "Illumina iGenomes (ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens), checked against each genome.dict (observe_dict.py). Each is an existing flavor: NCBI/GRCh38 = GRC no_alt analysis set (its genome.fa.fai is byte-identical to NCBI's); NCBI/GRCh38Decoy = no_alt_plus_hs38d1 with the decoys named by bare accession; UCSC/hg38 = UCSC hg38.analysisSet; GATK/GRCh38 = Broad Homo_sapiens_assembly38 (.dict and .fai byte-identical by MD5). Applied by catalog/40_recipes.py.",
   "recipes": [
     {
       "flavor": "iGenomes_NCBI_GRCh38",

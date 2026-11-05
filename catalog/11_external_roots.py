@@ -19,7 +19,7 @@ writes build/grch38/11_external_roots/roots_external.parquet:
 - length, md5, sha512t24u, n_N, n_iupac, n_lower   as in roots.parquet
 - source       URL of the gene FASTA
 
-Usage: uv run python -I pipeline/11_external_roots.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/11_external_roots.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

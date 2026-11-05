@@ -9,7 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "refbook",
-    "refbook-pipeline",
+    "refbook-catalog",
 ]
 
 [manifest.dependency-groups]
@@ -174,9 +174,9 @@ requires-dist = [
 provides-extras = ["datafusion"]
 
 [[package]]
-name = "refbook-pipeline"
+name = "refbook-catalog"
 version = "0.0.0"
-source = { virtual = "pipeline" }
+source = { virtual = "catalog" }
 dependencies = [
     { name = "pyarrow" },
     { name = "refbook", extra = ["datafusion"] },

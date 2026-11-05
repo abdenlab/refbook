@@ -1,8 +1,8 @@
 # The pipeline that builds, checks and exports the catalog: numbered steps run
-# directly (`uv run python -I pipeline/<step>.py`, from the repository root),
+# directly (`uv run python -I catalog/<step>.py`, from the repository root),
 # with their shared modules and tests (tests/). Not a package.
 [project]
-name = "refbook-pipeline"
+name = "refbook-catalog"
 version = "0.0.0"
 requires-python = ">=3.13"
 dependencies = [

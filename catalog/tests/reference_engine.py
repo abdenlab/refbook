@@ -1,6 +1,6 @@
 """The Python recipe compiler the Rust core replaced, frozen as its oracle.
 
-select and name_of are pipeline/engine.py's as of the switch-over; compile
+select and name_of are catalog/engine.py's as of the switch-over; compile
 gives the operations as 41_flavors.py derived them. test_golden.py checks
 the core against compile, row for row, on every recipe.
 """

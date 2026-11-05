@@ -22,7 +22,7 @@ Writes build/grch38/62_check_materialize/check_materialize.json (the
 result, with the sha256 of each input) and exits nonzero, after recording it,
 on any failure.
 
-Usage: uv run python -I pipeline/62_check_materialize.py [--stream NAME] [--stream-all] [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/62_check_materialize.py [--stream NAME] [--stream-all] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

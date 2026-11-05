@@ -17,7 +17,7 @@ or gap that is not an exact match) and check_gaps.json (the result, with the
 sha256 of each input table), and prints a summary. Exits nonzero on a hard
 failure, after recording it.
 
-Usage: uv run python -I pipeline/60_check_gaps.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/60_check_gaps.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

@@ -4,7 +4,7 @@ A flavor is a named sequence set that refbook catalogs; a target is a file
 that reproduces one (see docs/GLOSSARY.md). Reads the reproduced targets
 (flavor_sequences.parquet, from 40_recipes.py), the
 recipes, the catalog tables, and the curated labels in
-assemblies/<assembly>/flavors.json, and
+catalog/assemblies/<assembly>/flavors.json, and
 writes to build/grch38/41_flavors/:
 
 - flavors.parquet     one row per flavor: label, id (the named-sequence-set
@@ -41,7 +41,7 @@ Fails unless the targets that share a named-sequence-set digest are exactly
 the targets flavors.json lists under one label, and unless rebuilding each
 manifest row from its root and operations gives its digests.
 
-Usage: uv run python -I pipeline/41_flavors.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/41_flavors.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

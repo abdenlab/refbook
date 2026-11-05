@@ -12,11 +12,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import layout
 import pytest
 
 from refbook import _core
 
 JS = Path(__file__).resolve().parent.parent / "js"
+BUILD = layout.build_dir("grch38")
 pytestmark = pytest.mark.skipif(
     shutil.which("node") is None or not (JS / "pkg" / "refbook_wasm_bg.wasm").exists(),
     reason="no node or no wasm build")
@@ -40,7 +42,7 @@ def random_sequences(n: int, seed: int = 13):
 def test_wasm_agrees_on_sequences_and_collections(tmp_path):
     seqs = [_core.remove_whitespace(s) for s in random_sequences(1000)]
     collections = [json.loads(p.read_text()) for p in sorted(
-        (Path(__file__).parent.parent / "build" / "grch38" / "41_flavors" / "collections").glob("*.json"))]
+        (BUILD / "41_flavors" / "collections").glob("*.json"))]
     collections = [{k: c[k] for k in ("names", "lengths", "sequences")} for c in collections]
     collections.append({"names": ["chr1", "é\"x"], "lengths": [1, 2], "sequences": ["SQ.a", "SQ.b"]})
     got = run_wasm(tmp_path, {"sequences": [base64.b64encode(s).decode() for s in seqs],
@@ -64,12 +66,10 @@ def test_wasm_agrees_on_sequences_and_collections(tmp_path):
         assert w["named_set"] == _core.named_set_digest(c["names"], c["sequences"])
 
 
-@pytest.mark.skipif(not (Path(__file__).parent.parent / "build" / "grch38" / "catalog.json").exists(),
-                    reason="no build")
+@pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
 def test_wasm_compiles_every_recipe_like_python(tmp_path):
     import engine
-    import layout
-    build = layout.build_dir("grch38")
+    build = BUILD
     recipes = layout.recipes("grch38")
     t = engine.load_tables(build, recipes)
     tables = {

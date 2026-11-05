@@ -16,7 +16,7 @@ or has another length there, or if any GRC M5 is unexpected.
 With --skip-ena, only the GRC comparison runs, and the result says so (a
 release can require the full check).
 
-Usage: uv run python -I pipeline/61_check_roots.py [--analysis-set FNA_GZ] [--skip-ena] [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/61_check_roots.py [--analysis-set FNA_GZ] [--skip-ena] [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

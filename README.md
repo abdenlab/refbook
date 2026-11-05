@@ -31,7 +31,8 @@ From a clone of this repository, with [uv](https://docs.astral.sh/uv/) and a
 Rust toolchain ([rustup](https://rustup.rs/); the core in `crates/` and its bindings
 in `python/rust/` are built into the package by maturin). The root
 `pyproject.toml` is a uv workspace of the library (`python/`, its own package,
-with its own [README](python/README.md)) and the pipeline (`pipeline/`):
+with its own [README](python/README.md)) and the pipeline that builds the catalog
+(`catalog/`):
 
 ```bash
 uv sync    # the library (with DataFusion), the `refbook` command, the pipeline and dev tools
@@ -148,7 +149,7 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
   and checked against ENA's refget server.
 - **Layers** annotate roots in their own coordinates.
 - **Recipes** turn roots into a published file: select, mask, change the
-  alphabet (IUPAC→N) and rename. They are data, in `assemblies/grch38/recipes/*.json`. Order
+  alphabet (IUPAC→N) and rename. They are data, in `catalog/assemblies/grch38/recipes/*.json`. Order
   isn't part of a recipe: each published file's order is recorded as observed.
 - **Reconstruction is the verification.** A file counts as cataloged only when
   its recipe reproduces it, sequence by sequence: names, lengths, MD5 and `SQ.`
@@ -161,45 +162,47 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
 
 ## Building the catalog
 
-The pipeline in `pipeline/` builds a catalog from the original downloads; it
+The pipeline in `catalog/` builds a catalog from the original downloads; it
 runs on the lab server and needs about 15 GB.
 
 ```bash
-ln -s /path/to/a/mirror raw          # optional: share raw/ between checkouts (gitignored)
-pipeline/00_fetch_inputs.sh          # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks the inputs lock
-pipeline/01_fetch_targets.sh         # published files used as reproduction targets; checks the targets lock
-uv run python -I pipeline/10_roots.py
-uv run python -I pipeline/11_external_roots.py
-uv run python -I pipeline/20_layers.py
-uv run python -I pipeline/30_observe.py
-uv run python -I pipeline/40_recipes.py
-uv run python -I pipeline/41_flavors.py
-uv run python -I pipeline/50_aliases.py
-uv run python -I pipeline/60_check_gaps.py
-uv run python -I pipeline/61_check_roots.py
-uv run python -I pipeline/62_check_materialize.py
-uv run python -I pipeline/70_export.py build/releases/<version> <version>
+mkdir -p catalog/output && ln -s /path/to/a/mirror catalog/output/raw   # optional: share the downloads between checkouts
+catalog/00_fetch_inputs.sh           # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks the inputs lock
+catalog/01_fetch_targets.sh          # published files used as reproduction targets; checks the targets lock
+uv run python -I catalog/10_roots.py
+uv run python -I catalog/11_external_roots.py
+uv run python -I catalog/20_layers.py
+uv run python -I catalog/30_observe.py
+uv run python -I catalog/40_recipes.py
+uv run python -I catalog/41_flavors.py
+uv run python -I catalog/50_aliases.py
+uv run python -I catalog/60_check_gaps.py
+uv run python -I catalog/61_check_roots.py
+uv run python -I catalog/62_check_materialize.py
+uv run python -I catalog/70_export.py catalog/output/releases/<version> <version>
 ```
 
-Steps read `raw/` and write `build/<assembly>/` in the repository (both
-gitignored; override with `--raw`/`--build` or `REFBOOK_RAW`/`REFBOOK_BUILD`).
-Their declarative inputs are in `assemblies/<assembly>/`: the recipes, the
+Steps read the downloads in `catalog/output/raw/` and write
+`catalog/output/build/<assembly>/` (`catalog/output/` is gitignored; override
+with `--raw`/`--build` or `REFBOOK_RAW`/`REFBOOK_BUILD`).
+Their declarative inputs are in `catalog/assemblies/<assembly>/`: the recipes, the
 cataloged flavors, and the locks.
 
-Each step writes its own directory, `build/grch38/<NN_step>/`, assembled under
+Each step writes its own directory, `catalog/output/build/grch38/<NN_step>/`,
+assembled under
 a temporary name and renamed into place when it finishes, so a rerun replaces
 exactly that step's outputs. A step finds earlier steps' tables by name, and
-`build/grch38/catalog.json` indexes them all, so `Catalog("build/grch38")` opens
-a build directly. Every step takes `--assembly` (only `grch38` is defined so
-far). `pipeline/layout.py` holds the layout and the GRCh38 releases, and
-`pipeline/engine.py` the recipe engine.
+`catalog/output/build/grch38/catalog.json` indexes them all, so
+`Catalog("catalog/output/build/grch38")` opens a build directly. Every step takes `--assembly` (only `grch38` is defined so
+far). `catalog/layout.py` holds the layout and the GRCh38 releases, and
+`catalog/engine.py` the recipe engine.
 
 The checks (60-62) record their results with the hashes of the tables they
 read, and the export refuses unless every check passed on exactly the files it
 ships.
 
 The fetch steps pin their downloads with **locks**
-(`assemblies/grch38/locks/inputs.lock` and `targets.lock`): every file's size,
+(`catalog/assemblies/grch38/locks/inputs.lock` and `targets.lock`): every file's size,
 sha256, Last-Modified and URL. A fetch checks each file against its publisher's
 checksum list where there is one, and against the lock; anything new or
 changed fails until you accept it with `--update`. On the first run there is no
@@ -220,8 +223,9 @@ Each script's docstring says what it reads, writes and checks.
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `python/rust/` | The core's Python bindings (`refbook-py`, built by maturin as `refbook._core`) |
 | `js/` | The npm package `@abdenlab/refbook`: the core's wasm bindings (`js/rust/`, `refbook-wasm`) and their TypeScript front end (`js/src/`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
-| `pipeline/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
-| `assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
+| `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
+| `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
+| `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
 | `tests/` | Tests that span components: the library and the wasm build against a build, with real ENCODE, gnomAD and GIAB headers as fixtures |
 | `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 

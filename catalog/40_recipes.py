@@ -15,7 +15,7 @@ flavors.) Exits nonzero, writing nothing, if any target does not reproduce.
 
 The output holds exactly the recipes given, so pass every recipe file.
 
-Usage: uv run python -I pipeline/40_recipes.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/40_recipes.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse

@@ -1,6 +1,6 @@
 """Lock the raw downloads: check them against their publishers' checksums and a lock.
 
-A lock (assemblies/<assembly>/locks/inputs.lock and targets.lock) lists every
+A lock (catalog/assemblies/<assembly>/locks/inputs.lock and targets.lock) lists every
 file the build uses from some hosts under raw/: path, size, sha256, the server's
 Last-Modified (wget -N keeps it as the file's mtime) and source URL. It is
 committed, so a build is pinned to exact bytes, and a release records the
@@ -24,7 +24,7 @@ Every run:
 
 Exits nonzero on any error. Run by 00_fetch_inputs.sh and 01_fetch_targets.sh.
 
-Usage: uv run python -I pipeline/lock.py LOCK HOST... [--raw DIR] [--update]
+Usage: uv run python -I catalog/lock.py LOCK HOST... [--raw DIR] [--update]
 """
 
 import argparse
@@ -34,6 +34,9 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+import layout
 
 FIELDS = ["path", "bytes", "sha256", "last_modified", "url"]
 MD5_LISTS = {"md5checksums.txt", "md5sum.txt", "MD5SUMS"}   # "<md5>  <path>" lines
@@ -122,9 +125,9 @@ def main() -> None:
     ap.add_argument("lock", type=Path)
     ap.add_argument("hosts", nargs="+")
     ap.add_argument("--update", action="store_true", help="accept changes and rewrite the lock")
-    ap.add_argument("--raw", type=Path, help="the downloads (default: raw/ in the repository, or $REFBOOK_RAW)")
+    ap.add_argument("--raw", type=Path, help="the downloads (default: catalog/output/raw, or $REFBOOK_RAW)")
     args = ap.parse_args()
-    raw = args.raw or Path(os.environ.get("REFBOOK_RAW") or Path(__file__).resolve().parent.parent / "raw")
+    raw = layout.raw_dir(args.raw)
 
     missing = [h for h in args.hosts if not (raw / h).is_dir()]
     if missing:

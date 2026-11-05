@@ -5,16 +5,16 @@
 # wget -N keeps the server's Last-Modified time as the file's mtime and skips
 # files that haven't changed, so the script is safe to re-run. At the end,
 # lock.py checks every file against its publisher's checksums and against
-# assemblies/grch38/locks/inputs.lock (written on first use; pass --update to accept changes).
+# catalog/assemblies/grch38/locks/inputs.lock (written on first use; pass --update to accept changes).
 #
 # Usage: 00_fetch_inputs.sh [--update]   (downloads to raw/, or $REFBOOK_RAW)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-RAW=${REFBOOK_RAW:-$HERE/../raw}
+RAW=${REFBOOK_RAW:-$HERE/output/raw}
 mkdir -p "$RAW"
 RAW=$(cd "$RAW" && pwd)
-LOCKS=$HERE/../assemblies/grch38/locks
+LOCKS=$HERE/assemblies/grch38/locks
 NCBI=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405
 mkdir -p "$RAW"
 cd "$RAW"

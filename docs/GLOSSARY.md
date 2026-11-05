@@ -138,7 +138,7 @@ The terms refbook uses, grouped from the genome outward.
 **recipe**
 : How a flavor is generated from root sequences: **select** (which roots are
   used), nucleotide operations, and **rename** (what each is called). Recipes
-  are data, in `assemblies/<assembly>/recipes/`.
+  are data, in `catalog/assemblies/<assembly>/recipes/`.
 
 **manifest**
 : A recipe's resolved result: one row per sequence with its name, root

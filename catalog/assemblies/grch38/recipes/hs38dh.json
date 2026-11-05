@@ -1,5 +1,5 @@
 {
-  "_doc": "bwakit-0.7.12 hs38DH as published by Broad (Homo_sapiens_assembly38) and 1000 Genomes (GRCh38_full_analysis_set_plus_decoy_hla): the GRC full_plus_hs38d1 analysis set, then every genomic allele of HLA-A, B, C, DQA1, DQB1 and DRB1 from IPD-IMGT/HLA 3.18.0 (gene files A, B, C, DQA, DQB, DRB1), in release order. The HLA alleles are external roots (not hosted). Broad is checked against its FASTA content (observe_fasta.py): uppercase except the hs38d1 decoys, which keep NCBI's soft-mask; 1000G against its .dict M5s (observe_dict.py). Applied by pipeline/run_recipes.py.",
+  "_doc": "bwakit-0.7.12 hs38DH as published by Broad (Homo_sapiens_assembly38) and 1000 Genomes (GRCh38_full_analysis_set_plus_decoy_hla): the GRC full_plus_hs38d1 analysis set, then every genomic allele of HLA-A, B, C, DQA1, DQB1 and DRB1 from IPD-IMGT/HLA 3.18.0 (gene files A, B, C, DQA, DQB, DRB1), in release order. The HLA alleles are external roots (not hosted). Broad is checked against its FASTA content (observe_fasta.py): uppercase except the hs38d1 decoys, which keep NCBI's soft-mask; 1000G against its .dict M5s (observe_dict.py). Applied by catalog/40_recipes.py.",
   "recipes": [
     {
       "flavor": "Broad_Homo_sapiens_assembly38",
