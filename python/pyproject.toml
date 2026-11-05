@@ -18,13 +18,13 @@ datafusion = ["datafusion>=55"]
 refbook = "refbook.cli:main"
 
 # The library (refbook/), with the Rust core (../crates/refbook-core) and its
-# pyo3 bindings (rust/) built by maturin into refbook._core.
+# pyo3 bindings (../crates/refbook-py) built by maturin into refbook._core.
 [build-system]
 requires = ["maturin>=1.16,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-manifest-path = "rust/Cargo.toml"
+manifest-path = "../crates/refbook-py/Cargo.toml"
 python-source = "."
 module-name = "refbook._core"
 
@@ -32,8 +32,6 @@ module-name = "refbook._core"
 # Rebuild the extension when the Rust sources change.
 cache-keys = [
     { file = "pyproject.toml" },
-    { file = "rust/Cargo.toml" },
-    { file = "rust/src/**/*.rs" },
     { file = "../Cargo.toml" },
     { file = "../crates/**/*.rs" },
     { file = "../crates/**/Cargo.toml" },

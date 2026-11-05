@@ -28,8 +28,8 @@ answers practical questions:
 ## Install
 
 From a clone of this repository, with [uv](https://docs.astral.sh/uv/) and a
-Rust toolchain ([rustup](https://rustup.rs/); the core in `crates/` and its bindings
-in `python/rust/` are built into the package by maturin). The root
+Rust toolchain ([rustup](https://rustup.rs/); the core and its bindings in `crates/`
+are built into the package by maturin). The root
 `pyproject.toml` is a uv workspace of the library (`python/`, its own package,
 with its own [README](python/README.md)) and the pipeline that builds the catalog
 (`catalog/`):
@@ -218,11 +218,10 @@ Each script's docstring says what it reads, writes and checks.
 
 | Path | Contents |
 | --- | --- |
-| `crates/refbook-core/` | The Rust core: refget digests and canonicalization, seqcol, nucleotide operations, the recipe compiler. No I/O |
+| `crates/` | The Rust crates: `refbook-core` (refget digests and canonicalization, seqcol, nucleotide operations, the recipe compiler; no I/O), and its bindings, `refbook-py` (pyo3, built by maturin as `refbook._core`) and `refbook-wasm` (wasm-bindgen, for `js/`) |
 | `python/` | The Python package (`pyproject.toml`, `README.md`, `tests/` for the library alone) |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
-| `python/rust/` | The core's Python bindings (`refbook-py`, built by maturin as `refbook._core`) |
-| `js/` | The npm package `@abdenlab/refbook`: the core's wasm bindings (`js/rust/`, `refbook-wasm`) and their TypeScript front end (`js/src/`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
+| `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
 | `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
 | `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
 | `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
