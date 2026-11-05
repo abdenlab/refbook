@@ -1,6 +1,8 @@
 .DS_Store
 _scratch/
 .venv/
+.pytest_cache/
+.ruff_cache/
 __pycache__/
 .nfs*
 build/
