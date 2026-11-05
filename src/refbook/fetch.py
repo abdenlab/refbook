@@ -145,9 +145,9 @@ def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: s
                 bases.prefetch(needed[batch * 64:(batch + 1) * 64])
                 fetched = batch
         if blocks is not None and root in bases.row_groups:
-            b = bytearray(_from_blocks(blocks, root, lo[i], hi[i]))
+            b = _from_blocks(blocks, root, lo[i], hi[i])
         else:
-            b = bytearray(bases.slice(root, lo[i], hi[i]))
+            b = bases.slice(root, lo[i], hi[i])
         b = apply_operations(cat, root, seqs[names[i]]["operations"], b, lo[i])
         if strands[i] == "-":
             b = b.translate(COMPLEMENT)[::-1]

@@ -4,6 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString, PyTuple};
+use refbook_core::operations;
 use refbook_core::refget;
 use refbook_core::seqcol::{self, Json};
 
@@ -146,6 +147,26 @@ fn named_set_digest(py: Python<'_>, names: Vec<String>, sequences: Vec<String>) 
     py.detach(|| seqcol::named_set_digest(&names, &sequences))
 }
 
+/// A root's bases (root positions start..start + len) with nucleotide
+/// operations applied: the spans (0-based half-open, root coordinates) set to
+/// N, then, if to_n, every base other than A, C, G, T and N set to N.
+#[pyfunction]
+#[pyo3(signature = (bases, start, spans, to_n))]
+fn apply_operations<'py>(
+    py: Python<'py>,
+    bases: &[u8],
+    start: usize,
+    spans: Vec<(usize, usize)>,
+    to_n: bool,
+) -> Bound<'py, PyBytes> {
+    let out = py.detach(|| {
+        let mut b = bases.to_vec();
+        operations::apply(&mut b, start, &spans, to_n);
+        b
+    });
+    PyBytes::new(py, &out)
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(canonical_bases, m)?)?;
@@ -159,6 +180,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(seqcol_digests, m)?,
         wrap_pyfunction!(seqcol_ancillary, m)?,
         wrap_pyfunction!(named_set_digest, m)?,
+        wrap_pyfunction!(apply_operations, m)?,
     ] {
         m.add_function(f)?;
     }

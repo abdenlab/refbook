@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pyarrow as pa
 
+from refbook import _core
 from refbook.blocks import BLOCK_SIZE, row_groups_by_root
 from refbook.catalog import Catalog
 from refbook.resolve import collection
@@ -34,8 +35,6 @@ SCHEMA = pa.schema([
     pa.field("description", pa.string(), nullable=True),
     pa.field("sequence", pa.large_string(), nullable=False),
 ])
-# Uppercase IUPAC codes other than N, to N: the recipe alphabet step iupac -> N.
-IUPAC_TO_N = bytes.maketrans(b"BDHKMRSVWY", b"N" * 10)
 USER_AGENT = "refbook (reference genome catalog)"
 
 
@@ -158,20 +157,14 @@ def _read_imgt_fasta(path: Path) -> dict[tuple[str, str], bytes]:
     return out
 
 
-def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytearray,
+def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytes,
                      start: int = 0) -> bytes:
     """Bases b of a root, starting at `start`, with nucleotide operations applied:
-    a mask layer's spans set to N, or iupac_to_n."""
-    end = start + len(b)
-    for op in operations:
-        if op == "iupac_to_n":
-            b = bytearray(bytes(b).translate(IUPAC_TO_N))
-        else:
-            for s, e in cat.spans(op).get(root, ()):
-                if s < end and e > start:
-                    a, z = max(s, start) - start, min(e, end) - start
-                    b[a:z] = b"N" * (z - a)
-    return bytes(b)
+    a mask layer's spans set to N, and iupac_to_n. Both write N, so their order
+    doesn't matter. Implemented in the Rust core (crates/refbook-core/src/operations.rs)."""
+    spans = [span for op in operations if op != "iupac_to_n"
+             for span in cat.spans(op).get(root, ())]
+    return _core.apply_operations(bytes(b), start, spans, "iupac_to_n" in operations)
 
 
 def sequence_bases(cat: Catalog, sq: str, bases: "Bases", verify: bool = True) -> bytes:

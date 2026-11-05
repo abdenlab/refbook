@@ -54,7 +54,7 @@ def check_derivations(cat: Catalog, bases: Bases) -> list[str]:
     for root, ways in sorted(by_root.items()):
         raw = bytes(bases.get(root))
         for sq, ops in ways:
-            b = apply_operations(cat, root, ops, bytearray(raw))
+            b = apply_operations(cat, root, ops, raw)
             rec = cat.sequence[sq]
             if (hashlib.md5(b).hexdigest(), "SQ." + sha512t24u(b), len(b)) != (rec["md5"], sq, rec["length"]):
                 errors.append(f"{root} {ops}: does not give {sq}")

@@ -128,3 +128,51 @@ def test_every_stored_collection():
         assert top == f.stem
         anc = _core.seqcol_ancillary(names, lengths, sqs)
         assert anc == {k: doc[k] for k in anc}, f.name
+
+
+# nucleotide operations
+
+def reference_apply(bases: bytes, start: int, spans, to_n: bool) -> bytes:
+    """Mask the whole root, then cut the slice: no slice arithmetic to get wrong."""
+    end = start + len(bases)
+    whole = bytearray(b"?" * start + bases + b"?" * max(0, max((e for _, e in spans), default=0) - end))
+    for s, e in spans:
+        whole[s:e] = b"N" * (e - s)
+    out = bytes(whole[start:end])
+    return re.sub(rb"[^ACGTN]", b"N", out) if to_n else out
+
+
+def test_operations_agree_with_the_reference():
+    rng = random.Random(5)
+    for _ in range(3000):
+        n = rng.randrange(0, 200)
+        bases = bytes(rng.choice(b"ACGTNRYKMSWBDHV") for _ in range(n))
+        start = rng.randrange(0, 50)
+        spans = [(s, s + rng.randrange(0, 40)) for s in (rng.randrange(0, n + 100) for _ in range(rng.randrange(0, 6)))]
+        to_n = rng.random() < 0.5
+        assert _core.apply_operations(bases, start, spans, to_n) == reference_apply(bases, start, spans, to_n)
+
+
+@needs_build
+def test_every_derivation():
+    """Every known derivation, rebuilt by the core from its root, gives its digest,
+    and slices of it agree with the whole."""
+    from refbook import Catalog
+    from refbook.materialize import Bases, apply_operations
+    cat = Catalog(BUILD)
+    bases = Bases(cat)
+    by_root = {}
+    for sq, ways in cat.derivations.items():
+        for d in ways:
+            by_root.setdefault(d["root_id"], []).append((sq, d["operations"]))
+    assert sum(map(len, by_root.values())) == 3846
+    rng = random.Random(7)
+    for root, ways in by_root.items():
+        raw = bytes(bases.get(root))
+        for sq, ops in ways:
+            b = apply_operations(cat, root, ops, raw)
+            assert _core.digests(b) == (cat.sequence[sq]["md5"], sq), (root, ops)
+            for _ in range(3):
+                lo = rng.randrange(0, len(raw) + 1)
+                hi = min(len(raw), lo + rng.randrange(0, 100_000))
+                assert apply_operations(cat, root, ops, raw[lo:hi], lo) == b[lo:hi], (root, ops, lo)
