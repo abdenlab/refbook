@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 
+import layout
 import pyarrow.parquet as pq
 import pytest
 
@@ -22,7 +23,7 @@ BUILD = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/bui
 RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
 RECIPES = sorted((Path(__file__).resolve().parent.parent / "recipes").glob("*.json"))
 pytestmark = pytest.mark.skipif(
-    not (BUILD / "roots.parquet").exists() or not (RELEASE / "catalog.json").exists(),
+    not (BUILD / "catalog.json").exists() or not (RELEASE / "catalog.json").exists(),
     reason="no build or release")
 
 
@@ -56,7 +57,7 @@ def reproduced():
 
 
 def observed(target: str) -> list[dict]:
-    return pq.read_table(BUILD / "observed" / f"{target}.parquet").to_pylist()
+    return pq.read_table(layout.path(BUILD, f"observed/{target}.parquet")).to_pylist()
 
 
 def test_recipes_give_the_release_flavor_sequences(reproduced):
@@ -104,16 +105,14 @@ def test_root_bases_match_their_digests(root):
     assert refget.digests(bases) == (want["md5"], want["sha512t24u"])
 
 
-# The flavor model (build_flavors.py) against the release's targets.
+# The flavor model (41_flavors.py) against the release's targets.
 
 def table(name: str) -> list[dict]:
-    return pq.read_table(BUILD / name).to_pylist()
+    return pq.read_table(layout.path(BUILD, name)).to_pylist()
 
 
-needs_flavors = pytest.mark.skipif(not (BUILD / "flavors.parquet").exists(), reason="no flavors.parquet")
 
 
-@needs_flavors
 def test_targets_are_their_flavors_in_some_order():
     """Each release target, as a named sequence set, is its flavor's manifest."""
     from refbook import seqcol
@@ -134,7 +133,6 @@ def test_targets_are_their_flavors_in_some_order():
         assert f["n_targets"] == sum(t["flavor"] == f["flavor"] for t in targets.values())
 
 
-@needs_flavors
 def test_target_orders_rebuild_the_release_collections():
     """A target's collection is its flavor's manifest in the target's order, with
     the release's seqcol digest."""

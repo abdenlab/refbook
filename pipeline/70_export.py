@@ -1,6 +1,7 @@
 """Export a catalog release: the published tables plus a manifest.
 
-Copies the published files from REGISTRY/build/grch38 into OUT_DIR (copies,
+Copies the published files from the step directories of REGISTRY/build/grch38
+into OUT_DIR, in the flat layout a release has (copies,
 not links, so a later rebuild can't change a release) and writes
 OUT_DIR/catalog.json: the
 version, the date, and for every file its size, sha256 and role. Also writes
@@ -11,9 +12,10 @@ URL (`Catalog("https://.../catalog/")`) or by path. A release is never
 overwritten: OUT_DIR must not exist. It is assembled in OUT_DIR.partial and
 renamed into place when complete.
 
-Usage: uv run python -I pipeline/export_catalog.py REGISTRY_DIR OUT_DIR VERSION
+Usage: uv run python -I pipeline/70_export.py REGISTRY_DIR OUT_DIR VERSION [--assembly grch38]
 """
 
+import argparse
 import datetime
 import hashlib
 import json
@@ -39,9 +41,9 @@ FILES = {
     "targets.parquet": "targets", "target_sequences.parquet": "targets",
     "collections": "collections",
 }
-FORMAT = 2  # catalog format; refbook.catalog.FORMAT reads it
-EVIDENCE = {"observed": "observed", "verify_roots.tsv": "verify_roots.tsv",
-            "check_gaps.tsv": "check_gaps.tsv"}   # build path -> path under evidence/
+FORMAT = layout.CATALOG_FORMAT
+EVIDENCE = ["observed", "verify_roots.tsv", "check_gaps.tsv",   # shipped under evidence/
+            "check_gaps.json", "check_roots.json", "check_materialize.json"]
 
 
 def sha256(path: Path) -> str:
@@ -59,26 +61,32 @@ def place(src: Path, dst: Path) -> None:
 
 def card(build: Path, version: str) -> str:
     import pyarrow.parquet as pq
-    flavors = pq.read_table(build / "flavors.parquet", columns=["flavor"]).to_pylist()
-    targets = pq.read_table(build / "targets.parquet", columns=["flavor", "publisher", "alias"]).to_pylist()
+    flavors = pq.read_table(layout.path(build, "flavors.parquet"), columns=["flavor"]).to_pylist()
+    targets = pq.read_table(layout.path(build, "targets.parquet"), columns=["flavor", "publisher", "alias"]).to_pylist()
     by_flavor = defaultdict(list)
     for t in targets:
         by_flavor[t["flavor"]].append(f"{t['publisher']} `{t['alias']}`")
     rows = ["| Flavor | Published as |", "| --- | --- |"]
     rows += [f"| `{f}` | {'; '.join(sorted(ts))} |" for f, ts in sorted(by_flavor.items())]
-    members = pq.read_table(build / "assembly_members.parquet",
+    members = pq.read_table(layout.path(build, "assembly_members.parquet"),
                             columns=["assembly_name", "genbank_accession"]).to_pylist()
     grch38 = {m["genbank_accession"] for m in members if m["assembly_name"].startswith("GRCh38")}
     decoys = {m["genbank_accession"] for m in members if m["assembly_name"] == "hs38d1"}
     template = (Path(__file__).parent / "catalog_card.md").read_text()
     return template.format(version=version, n_flavors=len(targets), n_sets=len(flavors),
                            flavor_table="\n".join(rows),
-                           n_roots=pq.read_metadata(build / "roots.parquet").num_rows,
+                           n_roots=pq.read_metadata(layout.path(build, "roots.parquet")).num_rows,
                            n_grch38=len(grch38), n_decoys=len(decoys))
 
 
 def main() -> None:
-    build, out, version = layout.build_dir(Path(sys.argv[1])), Path(sys.argv[2]), sys.argv[3]
+    ap = argparse.ArgumentParser()
+    ap.add_argument("registry", type=Path)
+    ap.add_argument("out", type=Path)
+    ap.add_argument("version")
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
+    args = ap.parse_args()
+    build, out, version = layout.build_dir(args.registry, args.assembly), args.out, args.version
     if out.exists():
         sys.exit(f"{out} exists: a release is never overwritten")
     staging = out.with_name(out.name + ".partial")
@@ -86,11 +94,12 @@ def main() -> None:
         shutil.rmtree(staging)  # left by an interrupted export
     entries = []
     for name, role in FILES.items():
-        entries += [(p, p.relative_to(build).as_posix(), role)
-                    for p in ([build / name] if (build / name).is_file() else sorted((build / name).glob("*")))]
-    for name, rel in EVIDENCE.items():
-        src = build / name
-        entries += [(p, f"evidence/{rel}" + (f"/{p.name}" if src.is_dir() else ""), "evidence")
+        src = layout.path(build, name)
+        entries += [(p, f"{name}/{p.name}" if src.is_dir() else name, role)
+                    for p in ([src] if src.is_file() else sorted(src.glob("*")))]
+    for name in EVIDENCE:
+        src = layout.path(build, name)
+        entries += [(p, f"evidence/{name}" + (f"/{p.name}" if src.is_dir() else ""), "evidence")
                     for p in ([src] if src.is_file() else sorted(src.glob("*")))]
     files = {}
     for src, rel, role in entries:

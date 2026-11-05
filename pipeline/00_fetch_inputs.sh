@@ -5,10 +5,10 @@
 # wget -N keeps the server's Last-Modified time as the file's mtime and skips
 # files that haven't changed, so the script is safe to re-run.
 #
-# Usage: fetch_grch38.sh REGISTRY_DIR
+# Usage: 00_fetch_inputs.sh REGISTRY_DIR
 set -euo pipefail
 
-REGISTRY=${1:?usage: fetch_grch38.sh REGISTRY_DIR}
+REGISTRY=${1:?usage: 00_fetch_inputs.sh REGISTRY_DIR}
 RAW="$REGISTRY/raw"
 NCBI=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405
 mkdir -p "$RAW"

@@ -162,21 +162,29 @@ runs on the lab server and needs about 15 GB.
 
 ```bash
 R=/path/to/registry
-pipeline/fetch_grch38.sh $R          # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA
-pipeline/fetch_flavors.sh $R         # published files used as reproduction targets
-uv run python -I pipeline/build_roots.py $R
-uv run python -I pipeline/build_external_roots.py $R
-uv run python -I pipeline/build_layers.py $R
-uv run python -I pipeline/check_gaps.py $R
-uv run python -I pipeline/verify_roots.py $R <GRC full_plus_hs38d1 analysis set .fna.gz>
-uv run python -I pipeline/observe_fasta.py <published FASTA> $R/build/grch38/observed/<flavor>.parquet  # per file
-uv run python -I pipeline/run_recipes.py $R recipes/*.json
-uv run python -I pipeline/build_flavors.py $R flavors.json recipes/*.json
-uv run python -I pipeline/build_catalog.py $R
-uv run python -I pipeline/family_tree.py $R recipes/*.json
-uv run python -I pipeline/check_materialize.py $R
-uv run python -I pipeline/export_catalog.py $R $R/catalog/<version> <version>
+pipeline/00_fetch_inputs.sh $R      # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA
+pipeline/01_fetch_targets.sh $R     # published files used as reproduction targets
+uv run python -I pipeline/10_roots.py $R
+uv run python -I pipeline/11_external_roots.py $R
+uv run python -I pipeline/20_layers.py $R
+uv run python -I pipeline/30_observe.py $R recipes/*.json
+uv run python -I pipeline/40_recipes.py $R recipes/*.json
+uv run python -I pipeline/41_flavors.py $R flavors.json recipes/*.json
+uv run python -I pipeline/50_aliases.py $R
+uv run python -I pipeline/60_check_gaps.py $R
+uv run python -I pipeline/61_check_roots.py $R
+uv run python -I pipeline/62_check_materialize.py $R
+uv run python -I pipeline/70_export.py $R $R/catalog/<version> <version>
 ```
+
+Each step writes its own directory, `build/grch38/<NN_step>/`, assembled under a
+temporary name and renamed into place when it finishes, so a rerun replaces
+exactly that step's outputs. A step finds earlier steps' tables by name, and
+`build/grch38/catalog.json` indexes them all, so `Catalog("build/grch38")` opens
+a build directly. The checks (60-62) record their results with the hashes of
+the tables they read. Every step takes `--assembly` (only `grch38` is defined
+so far); `pipeline/layout.py` holds the layout and the GRCh38 releases, and
+`pipeline/engine.py` the recipe engine.
 
 Each script's docstring says what it reads, writes and checks.
 
@@ -184,12 +192,13 @@ Each script's docstring says what it reads, writes and checks.
 
 | Path | Contents |
 | --- | --- |
-| `src/refbook/` | The library: `catalog`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `seqcol`, `blocks`, `remote` |
-| `pipeline/` | Scripts that build, check and export the catalog |
+| `src/refbook/` | The library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
+| `pipeline/` | The numbered steps that build, check and export the catalog, and their shared modules (`layout`, `engine`, `observe`) |
 | `recipes/` | The recipes, one JSON file per publisher |
+| `flavors.json` | The cataloged flavors: labels, and the targets (published files) that reproduce each |
 | `tests/` | Tests, with real ENCODE, gnomAD and GIAB headers as fixtures |
 | `experiments/` | Measurements behind design decisions, e.g. the Parquet layout |
-| `pages/` | The family tree page template |
+| `pages/` | The family tree page and the scripts that build it |
 
 ## Development
 

@@ -1,6 +1,6 @@
 """The recipe engine: compile a recipe into its sequences.
 
-A component, not a pipeline step: run_recipes.py and build_flavors.py use it,
+A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it,
 and it is the reference the Rust core must agree with (tests/test_golden.py).
 A recipe (see recipes/*.json) is data. The operations, in the order applied:
 
@@ -32,6 +32,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import layout
 import pyarrow.parquet as pq
 
 from refbook import refget
@@ -40,7 +41,7 @@ from refbook.blocks import row_groups_by_root
 
 @functools.cache
 def _blocks(build: Path) -> tuple[pq.ParquetFile, dict[str, list[int]]]:
-    f = pq.ParquetFile(build / "root_blocks.parquet")
+    f = pq.ParquetFile(layout.path(build, "root_blocks.parquet"))
     return f, row_groups_by_root(f)
 
 
@@ -199,24 +200,26 @@ def in_observed_order(got: list[dict], observed: list[dict]) -> list[dict]:
 
 def load_tables(build: Path, recipes: list[dict]) -> dict:
     """The catalog tables run() needs, by name."""
-    members = pq.read_table(build / "assembly_members.parquet").to_pylist()
+    members = pq.read_table(layout.path(build, "assembly_members.parquet")).to_pylist()
     cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
-    roots = {r["root_id"]: r for r in pq.read_table(build / "roots.parquet", columns=cols).to_pylist()}
-    ext_path = build / "roots_external.parquet"
-    external = pq.read_table(ext_path).to_pylist() if ext_path.exists() else []
+    roots = {r["root_id"]: r for r in pq.read_table(layout.path(build, "roots.parquet"), columns=cols).to_pylist()}
+    try:
+        external = pq.read_table(layout.path(build, "roots_external.parquet")).to_pylist()
+    except FileNotFoundError:
+        external = []
     roots.update({e["root_id"]: {k: e[k] for k in cols} for e in external})
     masks = {}
     for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
-        t = pq.read_table(build / f"layer_{name}.parquet", columns=["root_id", "start", "end"])
+        t = pq.read_table(layout.path(build, f"layer_{name}.parquet"), columns=["root_id", "start", "end"])
         masks[name] = list(zip(*(t[c].to_pylist() for c in ("root_id", "start", "end"))))
 
     iupac = defaultdict(list)
-    t = pq.read_table(build / "layer_iupac.parquet", columns=["root_id", "pos"])
+    t = pq.read_table(layout.path(build, "layer_iupac.parquet"), columns=["root_id", "pos"])
     for acc, p in zip(t["root_id"].to_pylist(), t["pos"].to_pylist()):
         iupac[acc].append(p)
 
     parent_types = defaultdict(set)
-    for p in pq.read_table(build / "layer_placements.parquet",
+    for p in pq.read_table(layout.path(build, "layer_placements.parquet"),
                            columns=["root_id", "parent_type"]).to_pylist():
         parent_types[p["root_id"]].add(p["parent_type"])
     return {"members": members, "roots": roots, "masks": masks, "iupac": iupac,

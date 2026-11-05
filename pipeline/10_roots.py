@@ -1,8 +1,8 @@
 """Build the GRCh38 root tables from the raw NCBI downloads.
 
 The roots are every GRCh38 sequence (p0-p14) plus the roots its flavors add:
-the hs38d1 decoys and EBV. Reads REGISTRY/raw (see fetch_grch38.sh) and
-writes Parquet to REGISTRY/build/grch38:
+the hs38d1 decoys and EBV. Reads REGISTRY/raw (see 00_fetch_inputs.sh) and
+writes Parquet to REGISTRY/build/grch38/10_roots/:
 
 - roots.parquet             one row per sequence accession.version: length,
                             refget digests (MD5, SQ.), base composition counts
@@ -16,7 +16,7 @@ writes Parquet to REGISTRY/build/grch38:
 Fails if a report lists a sequence that is missing or has the wrong length
 (EBV's length comes from its GenBank record).
 
-Usage: uv run python -I pipeline/build_roots.py REGISTRY_DIR [--block-size N]
+Usage: uv run python -I pipeline/10_roots.py REGISTRY_DIR [--assembly grch38] [--block-size N]
 """
 
 import argparse
@@ -39,6 +39,7 @@ SUPERSEDED = ["KQ759759.1", "KQ759762.1"]
 # Roots outside GRCh38 that GRCh38 flavors add: the hs38d1 decoys (an
 # assembly of their own) and EBV (in no assembly).
 EBV = "AJ507799.2"
+STEP = "10_roots"
 EFETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
 LOWER = re.compile(rb"[a-z]+")
@@ -68,7 +69,7 @@ def read_fasta(path: Path):
 
 
 def scan(seq: bytes) -> dict:
-    """Everything build_roots records about one sequence (whitespace already removed):
+    """Everything this step records about one sequence (whitespace already removed):
     canonical bases, digests, lowercase runs, N-runs and IUPAC positions (0-based,
     half-open runs), and their counts. Raises refget.NonCanonicalBase."""
     lower = [(m.start(), m.end()) for m in LOWER.finditer(seq)]
@@ -125,12 +126,16 @@ def build_members(raw: Path) -> pa.Table:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     ap.add_argument("--block-size", type=int, default=root_blocks.BLOCK_SIZE)
     args = ap.parse_args()
-    raw = layout.raw_dir(args.registry)
-    out = layout.build_dir(args.registry)
-    out.mkdir(parents=True, exist_ok=True)
+    if args.assembly != "grch38":
+        sys.exit(f"{args.assembly}: only grch38's sources are defined (see layout.py)")
+    with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
+        run(layout.raw_dir(args.registry), out, args.block_size)
 
+
+def run(raw: Path, out: Path, block_size: int) -> None:
     members = build_members(raw)
     pq.write_table(members, out / "assembly_members.parquet", compression="zstd")
     expected = {}
@@ -190,11 +195,11 @@ def main() -> None:
                          ("n_iupac", len(sc["iupac"])), ("n_lower", sc["n_lower"]),
                          ("source", url)):
                 roots[k].append(v)
-            starts = range(0, len(up), args.block_size)
+            starts = range(0, len(up), block_size)
             root_blocks.write_root(blocks, pa.table({
                 "root_id": [acc] * len(starts),
                 "start": list(starts),
-                "bases": [up[s:s + args.block_size].decode() for s in starts],
+                "bases": [up[s:s + block_size].decode() for s in starts],
             }, schema=root_blocks.SCHEMA))
             print(f"{acc}\t{len(up)}\t{md5}", file=sys.stderr)
     blocks.close()

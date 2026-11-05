@@ -17,7 +17,7 @@ from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CATALOG = Path(os.environ.get("REFBOOK_CATALOG", "/net/common/genomes/registry/build/grch38"))
-needs_catalog = pytest.mark.skipif(not (CATALOG / "flavors.parquet").exists(), reason="no catalog")
+needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 
 def test_seqcol_spec_example():
@@ -312,16 +312,18 @@ def test_cram_round_trip_through_ref_cache(cat, tmp_path):
 
 
 def release_from_build(out: Path) -> Path:
-    """A format-2 release of the build, by symlink: export_catalog's file list and
+    """A format-2 release of the build, by symlink: 70_export's file list and
     a catalog.json with real hashes, without copying the bases."""
     import json
 
-    import export_catalog
+    import layout
+    from conftest import step
+    export_catalog = step("70_export")
     files = {}
     for name, role in export_catalog.FILES.items():
-        src = CATALOG / name
+        src = layout.path(CATALOG, name)
         for f in ([src] if src.is_file() else sorted(src.glob("*"))):
-            rel = f.relative_to(CATALOG).as_posix()
+            rel = f"{name}/{f.name}" if src.is_dir() else name
             (out / rel).parent.mkdir(parents=True, exist_ok=True)
             (out / rel).symlink_to(f)
             files[rel] = {"bytes": f.stat().st_size, "sha256": export_catalog.sha256(f), "role": role}

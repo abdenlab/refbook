@@ -2,7 +2,7 @@
 
 Reads the component-level AGPs (*.comp.agp.gz, *.scaf.agp.gz) of every GRCh38
 release and of hs38d1 in REGISTRY/raw, plus
-REGISTRY/build/grch38/{roots,layer_n_runs,assembly_members}.parquet, and checks:
+the roots, N-runs and assembly members (10_roots), and checks:
 
 - every root in an assembly has an AGP (EBV is in none), identical in every
   release that has it, tiling 1..length
@@ -12,10 +12,12 @@ REGISTRY/build/grch38/{roots,layer_n_runs,assembly_members}.parquet, and checks:
 - each release's genomic_gaps.txt.gz (p7, p13, p14 only) is exactly its AGP
   gaps plus the N-runs inside components of >= MIN_COMPONENT_N
 
-Writes REGISTRY/build/grch38/check_gaps.tsv (one row per N-run or gap that is
-not an exact match) and prints a summary. Exits nonzero on a hard failure.
+Writes REGISTRY/build/grch38/60_check_gaps/: check_gaps.tsv (one row per N-run
+or gap that is not an exact match) and check_gaps.json (the result, with the
+sha256 of each input table), and prints a summary. Exits nonzero on a hard
+failure, after recording it.
 
-Usage: uv run python -I pipeline/check_gaps.py REGISTRY_DIR
+Usage: uv run python -I pipeline/60_check_gaps.py REGISTRY_DIR [--assembly grch38]
 """
 
 import argparse
@@ -33,6 +35,7 @@ import layout
 # Shortest component N-run that genomic_gaps.txt lists. Observed, not documented:
 # GRCh38 has listed runs of >= 10 and unlisted runs of <= 7, nothing in between.
 MIN_COMPONENT_N = 10
+STEP = "60_check_gaps"
 
 
 def agp_files(release: Path) -> list[Path]:
@@ -113,17 +116,23 @@ def read_genomic_gaps(path: Path) -> dict[str, set[tuple[int, int]]]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    raw = layout.raw_dir(args.registry)
-    out = layout.build_dir(args.registry)
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        passed = run(layout.raw_dir(args.registry), build, out)
+    if not passed:
+        sys.exit(1)
 
-    roots = pq.read_table(out / "roots.parquet", columns=["root_id", "length"])
+
+def run(raw: Path, build: Path, out: Path) -> bool:
+    roots = pq.read_table(layout.path(build, "roots.parquet"), columns=["root_id", "length"])
     length = dict(zip(roots["root_id"].to_pylist(), roots["length"].to_pylist()))
-    runs_t = pq.read_table(out / "layer_n_runs.parquet")
+    runs_t = pq.read_table(layout.path(build, "layer_n_runs.parquet"))
     runs = defaultdict(list)
     for acc, s, e in zip(*(runs_t[c].to_pylist() for c in ("root_id", "start", "end"))):
         runs[acc].append((s, e))
-    in_assembly = set(pq.read_table(out / "assembly_members.parquet",
+    in_assembly = set(pq.read_table(layout.path(build, "assembly_members.parquet"),
                                     columns=["genbank_accession"])
                       ["genbank_accession"].to_pylist())
 
@@ -200,8 +209,11 @@ def main() -> None:
     print(f"genomic_gaps.txt checked in {len(rel_gg)} releases", file=sys.stderr)
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
-    if errors or stats["gap_not_all_N"]:
-        sys.exit(1)
+    passed = not errors and not stats["gap_not_all_N"]
+    layout.record_check(build, out, "check_gaps", passed,
+                        ["roots.parquet", "layer_n_runs.parquet", "assembly_members.parquet"],
+                        {"errors": errors[:100], "runs": dict(stats)})
+    return passed
 
 
 if __name__ == "__main__":

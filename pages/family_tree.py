@@ -19,9 +19,10 @@ removed, then fewest differing sequences. Flavors with identical names, roots,
 digests and order are one node; members that differ only in format (line
 width, case) are listed with their format.
 
-Writes REGISTRY/build/grch38/family_tree.json and prints the tree.
+Writes OUT (family_tree.json) and prints the tree. Not a pipeline step: the
+page it feeds (family_tree_page.py) is presentation.
 
-Usage: uv run python -I pipeline/family_tree.py REGISTRY_DIR recipes/*.json
+Usage: uv run python -I pages/family_tree.py REGISTRY_DIR OUT.json recipes/*.json
 """
 
 import argparse
@@ -32,7 +33,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))  # for layout
 import layout
 
 BASELINES = {"INSDC_GRCh38": layout.RELEASES[0][1], "INSDC_GRCh38.p14": layout.LATEST[1]}
@@ -111,6 +112,7 @@ def observed_format(path: Path) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("out", type=Path, help="family_tree.json to write")
     ap.add_argument("recipes", type=Path, nargs="+")
     args = ap.parse_args()
     build = layout.build_dir(args.registry)
@@ -121,22 +123,22 @@ def main() -> None:
             recipes[r["flavor"]] = {
                 "mask_layers": [m["layer"] for m in r.get("mask", [])],
                 "alphabet": r.get("alphabet") or None,
-                "format": observed_format(build / "observed" / f"{r['flavor']}.parquet"),
+                "format": observed_format(layout.path(build, f"observed/{r['flavor']}.parquet")),
                 "published": r["published"],
                 "checked_against": r.get("observed_from", r["published"]),
                 "file": path.name,
             }
     flavors = defaultdict(list)
-    for s in pq.read_table(build / "flavor_sequences.parquet").to_pylist():
+    for s in pq.read_table(layout.path(build, "flavor_sequences.parquet")).to_pylist():
         if s["flavor"] in recipes:
             flavors[s["flavor"]].append(s)
     missing = set(recipes) - set(flavors)
     if missing:
-        sys.exit(f"recipes without reproduced sequences (run run_recipes.py): {sorted(missing)}")
+        sys.exit(f"recipes without reproduced sequences (run pipeline/40_recipes.py): {sorted(missing)}")
 
-    members = pq.read_table(build / "assembly_members.parquet").to_pylist()
+    members = pq.read_table(layout.path(build, "assembly_members.parquet")).to_pylist()
     roots = {r["root_id"]: r for r in pq.read_table(
-        build / "roots.parquet", columns=["root_id", "length", "md5"]).to_pylist()}
+        layout.path(build, "roots.parquet"), columns=["root_id", "length", "md5"]).to_pylist()}
     roles = {}
     for m in members:
         roles.setdefault(m["genbank_accession"], (m["assembly_name"], m["role"]))
@@ -176,10 +178,10 @@ def main() -> None:
         tree[f] = {"parent": best[1], "diff": best[2]}
 
     # Derivatives: the distinct sequences published under one root, and why.
-    masked = set(pq.read_table(build / "layer_hardmask_grc.parquet", columns=["root_id"])
+    masked = set(pq.read_table(layout.path(build, "layer_hardmask_grc.parquet"), columns=["root_id"])
                  ["root_id"].to_pylist())
     has_iupac = {r["root_id"] for r in pq.read_table(
-        build / "roots.parquet", columns=["root_id", "n_iupac"]).to_pylist() if r["n_iupac"]}
+        layout.path(build, "roots.parquet"), columns=["root_id", "n_iupac"]).to_pylist() if r["n_iupac"]}
     ucsc = {}
     for m in members:
         if m["ucsc_name"]:
@@ -215,7 +217,7 @@ def main() -> None:
                          **{k: v for k, v in nodes[f]["recipe"].items() if k != "mask_layers"}}
                      for f in order},
            "derivatives": derivatives}
-    (build / "family_tree.json").write_text(json.dumps(out, indent=2) + "\n")
+    args.out.write_text(json.dumps(out, indent=2) + "\n")
 
     children = defaultdict(list)
     for f in order:

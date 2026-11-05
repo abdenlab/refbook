@@ -8,13 +8,18 @@
    19, 21, 22, Y) it must differ. Pass a *_plus_hs38d1_analysis_set to also
    cover the decoys and EBV.
 
-Writes REGISTRY/build/grch38/verify_roots.tsv and prints a summary. Exits
-nonzero if any root is absent from ENA or has another length there, or if
-any GRC M5 is unexpected.
+Writes REGISTRY/build/grch38/61_check_roots/: verify_roots.tsv and
+check_roots.json (the result, with the sha256 of each input table), and prints
+a summary. Exits nonzero, after recording it, if any root is absent from ENA
+or has another length there, or if any GRC M5 is unexpected.
 
-Usage: uv run python -I pipeline/verify_roots.py REGISTRY_DIR ANALYSIS_SET_FNA_GZ
+With --skip-ena, only the GRC comparison runs, and the result says so (a
+release can require the full check).
+
+Usage: uv run python -I pipeline/61_check_roots.py REGISTRY_DIR [--analysis-set FNA_GZ] [--skip-ena] [--assembly grch38]
 """
 
+import argparse
 import gzip
 import json
 import re
@@ -32,6 +37,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves thi
 import layout
 
 ENA = "https://www.ebi.ac.uk/ena/cram/sequence/{}/metadata"
+STEP = "61_check_roots"
+ANALYSIS_SET = "GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set.fna.gz"
+SKIPPED = object()  # ENA not consulted (--skip-ena)
 
 
 def ena_length(md5: str) -> int | None:
@@ -66,32 +74,51 @@ def status(length: int, md5: str, ena_length: int | None, grc_md5: str | None,
     """(ENA result, GRC result, passed) for one root. ENA must hold our MD5 at
     our length; the GRC's M5 must equal ours unless the GRC masks the root, and
     then it must differ. A root not in the analysis set passes on ENA alone."""
-    ena = "absent" if ena_length is None else ("ok" if ena_length == length else f"length {ena_length}")
+    if ena_length is SKIPPED:
+        ena = "not checked"
+    else:
+        ena = "absent" if ena_length is None else ("ok" if ena_length == length else f"length {ena_length}")
     if grc_md5 is None:
         grc = "not in set"
     elif grc_md5 == md5:
         grc = "match" + (" (UNEXPECTED: masked by the GRC)" if masked else "")
     else:
         grc = "differs" + ("" if masked else " (UNEXPECTED)")
-    return ena, grc, ena == "ok" and "UNEXPECTED" not in grc
+    return ena, grc, ena in ("ok", "not checked") and "UNEXPECTED" not in grc
 
 
 def main() -> None:
-    registry, analysis = Path(sys.argv[1]), Path(sys.argv[2])
-    build = layout.build_dir(registry)
-    roots = pq.read_table(build / "roots.parquet").to_pylist()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
+    ap.add_argument("--analysis-set", type=Path, help="GRC analysis-set FASTA whose deflines carry M5 "
+                    "(default: the full_plus_hs38d1 set under raw/)")
+    ap.add_argument("--skip-ena", action="store_true",
+                    help="skip the ENA lookups (3,097 requests, minutes); recorded in the result")
+    args = ap.parse_args()
+    analysis = args.analysis_set or (layout.release_dir(layout.raw_dir(args.registry), 0)
+                                     / "seqs_for_alignment_pipelines.ucsc_ids" / ANALYSIS_SET)
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        failed = run(build, out, analysis, args.skip_ena)
+    if failed:
+        sys.exit(f"{len(failed)} roots failed verification, e.g. {failed[:5]}")
 
-    with ThreadPoolExecutor(8) as pool:
-        ena = dict(zip((r["root_id"] for r in roots),
-                       pool.map(ena_length, (r["md5"] for r in roots))))
+
+def run(build: Path, out_dir: Path, analysis: Path, skip_ena: bool = False) -> list[str]:
+    roots = pq.read_table(layout.path(build, "roots.parquet")).to_pylist()
+    if skip_ena:
+        ena = {r["root_id"]: SKIPPED for r in roots}
+    else:
+        with ThreadPoolExecutor(8) as pool:
+            ena = dict(zip((r["root_id"] for r in roots),
+                           pool.map(ena_length, (r["md5"] for r in roots))))
     grc = grc_m5(analysis)
-    masked = set(pq.read_table(build / "layer_hardmask_grc.parquet", columns=["root_id"])
+    masked = set(pq.read_table(layout.path(build, "layer_hardmask_grc.parquet"), columns=["root_id"])
                  ["root_id"].to_pylist())
 
     counts, failed = {}, []
-    tsv = build / "verify_roots.tsv"
-    tmp = tsv.with_suffix(".tmp")
-    with open(tmp, "w") as out:
+    with open(out_dir / "verify_roots.tsv", "w") as out:
         out.write("root_id\tlength\tmd5\tena\tgrc_analysis_set\n")
         for r in roots:
             acc = r["root_id"]
@@ -101,11 +128,13 @@ def main() -> None:
             out.write(f"{acc}\t{r['length']}\t{r['md5']}\t{ena_s}\t{grc_s}\n")
             if not ok:
                 failed.append(acc)
-    tmp.replace(tsv)  # a new file: never rewrites one a release links to
     for k, v in sorted(counts.items()):
         print(f"{v:5d}  {k}")
-    if failed:
-        sys.exit(f"{len(failed)} roots failed verification, e.g. {failed[:5]}")
+    layout.record_check(build, out_dir, "check_roots", not failed,
+                        ["roots.parquet", "layer_hardmask_grc.parquet"],
+                        {"counts": counts, "failed": failed[:100], "analysis_set": analysis.name,
+                         "ena": "skipped" if skip_ena else "checked"})
+    return failed
 
 
 if __name__ == "__main__":

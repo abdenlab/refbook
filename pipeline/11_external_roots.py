@@ -3,8 +3,8 @@
 An external root's bases are never hosted (no root_blocks rows), because its
 licence does not allow it; the library fetches them from the source. For now
 that is IPD-IMGT/HLA release 3.18.0 (CC BY-ND), the HLA alleles in bwakit's
-hs38DH. Reads its per-gene FASTAs from REGISTRY/raw (see fetch_grch38.sh) and
-writes REGISTRY/build/grch38/roots_external.parquet:
+hs38DH. Reads its per-gene FASTAs from REGISTRY/raw (see 00_fetch_inputs.sh) and
+writes REGISTRY/build/grch38/11_external_roots/roots_external.parquet:
 
 - root_id      IMGTHLA:<release>:<IMGT accession>, e.g. IMGTHLA:3.18.0:HLA00001.
                A release can carry one accession twice (3.18.0: HLA00664,
@@ -19,7 +19,7 @@ writes REGISTRY/build/grch38/roots_external.parquet:
 - length, md5, sha512t24u, n_N, n_iupac, n_lower   as in roots.parquet
 - source       URL of the gene FASTA
 
-Usage: uv run python -I pipeline/build_external_roots.py REGISTRY_DIR
+Usage: uv run python -I pipeline/11_external_roots.py REGISTRY_DIR [--assembly grch38]
 """
 
 import argparse
@@ -37,6 +37,7 @@ import layout
 
 IMGT = "raw.githubusercontent.com/ANHIG/IMGTHLA"
 RELEASES = {"3180": "3.18.0"}
+STEP = "11_external_roots"
 IUPAC = re.compile(rb"[^ACGTN]")
 
 
@@ -67,8 +68,13 @@ def parse_header(header: str) -> tuple[str, str, int]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    raw = layout.raw_dir(args.registry)
+    with layout.step_output(layout.build_dir(args.registry, args.assembly), STEP) as out:
+        run(layout.raw_dir(args.registry), out)
+
+
+def run(raw: Path, out_dir: Path) -> None:
     cols = {k: [] for k in ("root_id", "collection", "group", "name", "accession", "rank",
                             "length", "md5", "sha512t24u", "n_N", "n_iupac", "n_lower",
                             "source")}
@@ -104,7 +110,7 @@ def main() -> None:
                 ):
                     cols[k].append(v)
                 rank += 1
-    out = layout.build_dir(args.registry) / "roots_external.parquet"
+    out = out_dir / "roots_external.parquet"
     pq.write_table(pa.table(cols), out, compression="zstd")
     if len(set(cols["md5"])) != len(cols["md5"]):
         print("note: some external roots share an MD5", file=sys.stderr)

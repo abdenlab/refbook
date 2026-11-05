@@ -6,16 +6,16 @@ must match the target's observation by name (same names, and for each the same
 length and digests, where the observation has them). The target's order is
 taken from its observation.
 
-Writes REGISTRY/build/grch38/flavor_sequences.parquet (flavor, position, name,
+Writes REGISTRY/build/grch38/40_recipes/flavor_sequences.parquet (flavor, position, name,
 root_id, length, md5, sha512t24u): each target's sequences, in the target's
-observed order, from REGISTRY/build/grch38/observed/<target>.parquet (from
-observe_fasta.py, or observe_dict.py, which gives only name, length and M5).
-("flavor" there is still the target; build_flavors.py groups targets into
+observed order, from the observations (30_observe: a target's FASTA, or its
+.dict, which gives only name, length and M5).
+("flavor" there is still the target; 41_flavors.py groups targets into
 flavors.) Exits nonzero, writing nothing, if any target does not reproduce.
 
 The output holds exactly the recipes given, so pass every recipe file.
 
-Usage: uv run python -I pipeline/run_recipes.py REGISTRY_DIR recipes/*.json
+Usage: uv run python -I pipeline/40_recipes.py REGISTRY_DIR recipes/*.json [--assembly grch38]
 """
 
 import argparse
@@ -30,13 +30,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves thi
 import layout
 from engine import compare, in_observed_order, load_tables, run
 
+STEP = "40_recipes"
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
     ap.add_argument("recipes", type=Path, nargs="+")
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    build = layout.build_dir(args.registry)
+    build = layout.build_dir(args.registry, args.assembly)
 
     recipes = [r for path in args.recipes for r in json.loads(path.read_text())["recipes"]]
     flavors = [r["flavor"] for r in recipes]
@@ -47,7 +50,7 @@ def main() -> None:
     rows, failed = [], []
     for recipe in recipes:
         got = run(recipe, build, t)
-        observed = pq.read_table(build / "observed" / f"{recipe['flavor']}.parquet").to_pylist()
+        observed = pq.read_table(layout.path(build, f"observed/{recipe['flavor']}.parquet")).to_pylist()
         errs = compare(got, observed)
         print(f"{recipe['flavor']}: {len(got)} sequences, "
               f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES'}", file=sys.stderr)
@@ -60,10 +63,8 @@ def main() -> None:
 
     if failed:  # a flavor is cataloged only once it reproduces: write nothing
         sys.exit(f"not reproduced: {failed}")
-    out = build / "flavor_sequences.parquet"
-    tmp = out.with_suffix(".tmp")
-    pq.write_table(pa.Table.from_pylist(rows), tmp, compression="zstd")
-    tmp.replace(out)  # a new file: never rewrites one a release links to
+    with layout.step_output(build, STEP) as out:
+        pq.write_table(pa.Table.from_pylist(rows), out / "flavor_sequences.parquet", compression="zstd")
 
 
 if __name__ == "__main__":

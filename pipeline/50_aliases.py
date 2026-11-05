@@ -1,14 +1,14 @@
 """Build the aliases table: every root's names across naming conventions.
 
-Writes REGISTRY/build/grch38/aliases.parquet: root_id, namespace, alias,
+Writes REGISTRY/build/grch38/50_aliases/aliases.parquet: root_id, namespace, alias,
 source. GenBank, RefSeq, UCSC and GRC Sequence-Name from the assembly reports;
 Ensembl from UCSC's p14 chromAlias.txt, checked against the names in the
 reproduced Ensembl targets; UCSC-style names for EBV and the decoys from the
 GRC analysis sets; IMGT allele names for HLA.
 
-(Flavors, targets and seqcol documents are built by build_flavors.py.)
+(Flavors, targets and seqcol documents are built by 41_flavors.py.)
 
-Usage: uv run python -I pipeline/build_catalog.py REGISTRY_DIR
+Usage: uv run python -I pipeline/50_aliases.py REGISTRY_DIR [--assembly grch38]
 """
 
 import argparse
@@ -22,22 +22,29 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
 import layout
 
+STEP = "50_aliases"
 CHROMALIAS = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/p14/hg38.p14.chromAlias.txt"
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    build = layout.build_dir(args.registry)
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        run(layout.raw_dir(args.registry), build, out)
+
+
+def run(raw: Path, build: Path, out: Path) -> None:
 
     flavors = defaultdict(list)
-    for s in pq.read_table(build / "flavor_sequences.parquet").to_pylist():
+    for s in pq.read_table(layout.path(build, "flavor_sequences.parquet")).to_pylist():
         flavors[s["flavor"]].append(s)
 
     # Aliases.
     aliases = set()
-    for m in pq.read_table(build / "assembly_members.parquet").to_pylist():
+    for m in pq.read_table(layout.path(build, "assembly_members.parquet")).to_pylist():
         acc, src = m["genbank_accession"], f"{m['assembly_accession']} assembly report"
         aliases.add((acc, "genbank", acc, src))
         if m["refseq_accession"]:
@@ -47,7 +54,7 @@ def main() -> None:
         if m["assembly_name"].startswith("GRCh38"):
             aliases.add((acc, "grc", m["sequence_name"], src))
     ensembl = {}
-    lines = (layout.raw_dir(args.registry) / CHROMALIAS).read_text().splitlines()
+    lines = (raw / CHROMALIAS).read_text().splitlines()
     header = lines[0].lstrip("# ").split("\t")
     for line in lines[1:]:
         rec = dict(zip(header, line.split("\t")))
@@ -68,14 +75,14 @@ def main() -> None:
     for s in flavors.get("GRCh38_full_plus_hs38d1_analysis_set", []):
         if s["root_id"] == "AJ507799.2" or s["name"].endswith("_decoy"):
             aliases.add((s["root_id"], "ucsc", s["name"], "GRC analysis sets (reproduced)"))
-    ext = build / "roots_external.parquet"
+    ext = build / "11_external_roots" / "roots_external.parquet"
     if ext.exists():
         for e in pq.read_table(ext).to_pylist():
             aliases.add((e["root_id"], "imgt", e["name"], e["collection"]))
             aliases.add((e["root_id"], "imgt_accession", e["accession"], e["collection"]))
     cols = list(zip(*sorted(aliases)))
     table = pa.table(dict(zip(("root_id", "namespace", "alias", "source"), cols)))
-    pq.write_table(table, build / "aliases.parquet", compression="zstd")
+    pq.write_table(table, out / "aliases.parquet", compression="zstd")
     counts = defaultdict(int)
     for ns in table["namespace"].to_pylist():
         counts[ns] += 1

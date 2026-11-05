@@ -8,8 +8,9 @@ facets) and targets (the files that reproduce them) are curated entries on top;
 see GLOSSARY.md.
 
 A catalog is a directory of the pipeline's outputs: a release made by
-pipeline/export_catalog.py (with a catalog.json manifest), or the build
-directory itself (REGISTRY/build/grch38). Open it by path or by URL. Remotely,
+pipeline/70_export.py (with a catalog.json manifest), or the build
+directory itself (REGISTRY/build/grch38, whose catalog.json indexes the step
+directories the pipeline wrote). Open it by path or by URL. Remotely,
 each table is downloaded once into a cache keyed by the release version and
 checked against the manifest's sha256; root_blocks is never downloaded, only
 read by HTTP range requests. This version reads catalog format 2.
@@ -112,13 +113,22 @@ class Catalog:
                 self.display.setdefault(r["root_id"], r["alias"])
         self._spans = {}
 
+    def _local(self, name: str) -> Path:
+        """A file's place under self.path: a build index maps names to step directories."""
+        if self.manifest is not None and self.manifest.get("build"):
+            entry = self.manifest["files"].get(name)
+            return self.path / (entry["path"] if entry else name)
+        return self.path / name
+
     def exists(self, name: str) -> bool:
         if self.remote:
             return name in self.manifest["files"]
-        return (self.path / name).exists()
+        return self._local(name).exists()
 
     def file(self, name: str) -> Path:
         """A local path to one catalog file; downloaded (and checked) on first use if remote."""
+        if not self.remote:
+            return self._local(name)
         local = self.path / name
         if self.remote:
             entry = self.manifest["files"].get(name)
@@ -145,7 +155,7 @@ class Catalog:
 
     def blocks_location(self) -> str:
         """root_blocks.parquet as a path or URL (for engines that open it themselves)."""
-        return self.url + "root_blocks.parquet" if self.remote else str(self.path / "root_blocks.parquet")
+        return self.url + "root_blocks.parquet" if self.remote else str(self._local("root_blocks.parquet"))
 
     def open_blocks(self) -> pq.ParquetFile:
         """root_blocks.parquet: a local file, or HTTP range reads; never downloaded whole."""
@@ -153,7 +163,7 @@ class Catalog:
             size = self.manifest["files"]["root_blocks.parquet"]["bytes"]
             self.blocks_http = HttpFile(self.blocks_location(), size)
             return pq.ParquetFile(self.blocks_http)
-        return pq.ParquetFile(self.path / "root_blocks.parquet")
+        return pq.ParquetFile(self._local("root_blocks.parquet"))
 
     def how(self, sq: str) -> str:
         """How a known sequence is made from its root, in words."""

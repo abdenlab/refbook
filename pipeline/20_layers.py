@@ -1,7 +1,7 @@
 """Build the GRCh38 annotation layers from the raw NCBI downloads.
 
-Reads REGISTRY/raw (see fetch_grch38.sh) and REGISTRY/build/grch38/roots.parquet,
-and writes Parquet to REGISTRY/build/grch38:
+Reads REGISTRY/raw (see 00_fetch_inputs.sh) and the roots (10_roots), and
+writes Parquet to REGISTRY/build/grch38/20_layers/:
 
 - layer_agp.parquet   one row per AGP part of each root's component-level AGP
                       (*.comp.agp.gz, *.scaf.agp.gz of GRCh38 and hs38d1; EBV,
@@ -16,10 +16,10 @@ and writes Parquet to REGISTRY/build/grch38:
                       analysis sets (CEN/WGS duplicates on chr5, 14, 19, 21,
                       22; PAR on chrY), with each span's unmasked cognate
 
-A root's AGP is the same in every release (checked by check_gaps.py and again
+A root's AGP is the same in every release (checked by 60_check_gaps.py and again
 here), so each root appears once.
 
-Usage: uv run python -I pipeline/build_layers.py REGISTRY_DIR
+Usage: uv run python -I pipeline/20_layers.py REGISTRY_DIR [--assembly grch38]
 """
 
 import argparse
@@ -32,6 +32,8 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
 import layout
+
+STEP = "20_layers"
 
 # Known disagreements between genomic_regions_definitions.txt (authoritative
 # here) and assembly_regions.txt, as (release, region_name, root_id).
@@ -290,12 +292,19 @@ def build_hardmask_grc(raw: Path, length: dict, regions: pa.Table) -> pa.Table:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("registry", type=Path)
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    raw = layout.raw_dir(args.registry)
-    out = layout.build_dir(args.registry)
-    roots = pq.read_table(out / "roots.parquet", columns=["root_id", "length"])
+    if args.assembly != "grch38":
+        sys.exit(f"{args.assembly}: only grch38's sources are defined (see layout.py)")
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        run(layout.raw_dir(args.registry), build, out)
+
+
+def run(raw: Path, build: Path, out: Path) -> None:
+    roots = pq.read_table(layout.path(build, "roots.parquet"), columns=["root_id", "length"])
     length = dict(zip(roots["root_id"].to_pylist(), roots["length"].to_pylist()))
-    members = pq.read_table(out / "assembly_members.parquet").to_pylist()
+    members = pq.read_table(layout.path(build, "assembly_members.parquet")).to_pylist()
 
     in_assembly = {m["genbank_accession"] for m in members}
     agp = build_agp(raw, in_assembly)

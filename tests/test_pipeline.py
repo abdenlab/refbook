@@ -3,18 +3,20 @@
 import gzip
 from pathlib import Path
 
-import build_external_roots
-import build_layers
-import build_roots
-import check_gaps
 import engine
 import manifest
-import observe_dict
-import observe_fasta
+import observe
 import pytest
-import verify_roots
+from conftest import step
 
 from refbook import refget
+
+build_roots = step("10_roots")
+build_external_roots = step("11_external_roots")
+build_layers = step("20_layers")
+check_gaps = step("60_check_gaps")
+verify_roots = step("61_check_roots")
+build_flavors = step("41_flavors")
 
 
 def write(path: Path, text: str) -> Path:
@@ -153,15 +155,15 @@ def test_grc_m5_reads_deflines(tmp_path):
                                        "AJ507799.2": "6743bd63b3ff2b5b8985d8933c53290a"}
 
 
-# observe_fasta, observe_dict
+# observe
 
 def test_fasta_records(tmp_path):
     fa = write(tmp_path / "x.fa", ">a one\r\nAC\r\nGT\r\n>empty\n>b\nTT")
-    assert list(observe_fasta.records(fa)) == [("a one", [b"AC", b"GT"]), ("empty", []), ("b", [b"TT"])]
+    assert list(observe.records(fa)) == [("a one", [b"AC", b"GT"]), ("empty", []), ("b", [b"TT"])]
 
 
 def test_parse_dict():
-    rows = observe_dict.parse_dict(
+    rows = observe.parse_dict(
         "@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:248956422\tM5:6aef897c3d6ff0c78aff06ac189178dd\tUR:file:x\n"
         "@SQ\tSN:chrM\tLN:16569\n")
     assert [(r["position"], r["name"], r["length"], r["md5"]) for r in rows] == [
@@ -265,8 +267,6 @@ def test_name_of_precedence():
 
 # build_flavors
 
-import build_flavors
-
 
 def test_flavor_facets():
     latest = {"F1.1"}
@@ -295,3 +295,8 @@ def test_grch38_releases():
     assert layout.assembly_dirs(raw)[-1].name == "GCA_000786075.2_hs38d1"
     with pytest.raises(ValueError):
         layout.release_number(Path("/r/GCA_000786075.2_hs38d1"))
+
+
+def test_verify_status_without_ena():
+    assert verify_roots.status(100, "m", verify_roots.SKIPPED, "m", False) == ("not checked", "match", True)
+    assert verify_roots.status(100, "m", verify_roots.SKIPPED, "x", False)[2] is False

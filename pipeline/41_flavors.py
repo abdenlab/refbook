@@ -2,9 +2,9 @@
 
 A flavor is a named sequence set that refbook catalogs; a target is a file
 that reproduces one (see GLOSSARY.md). Reads the reproduced targets
-(REGISTRY/build/grch38/flavor_sequences.parquet, from run_recipes.py), the
+(flavor_sequences.parquet, from 40_recipes.py), the
 recipes, the catalog tables, and the curated labels in flavors.json, and
-writes to REGISTRY/build/grch38:
+writes to REGISTRY/build/grch38/41_flavors/:
 
 - flavors.parquet     one row per flavor: label, id (the named-sequence-set
                       digest, refbook.seqcol.named_set_digest), the seqcol
@@ -38,12 +38,11 @@ Fails unless the targets that share a named-sequence-set digest are exactly
 the targets flavors.json lists under one label, and unless rebuilding each
 manifest row from its root and operations gives its digests.
 
-Usage: uv run python -I pipeline/build_flavors.py REGISTRY_DIR flavors.json recipes/*.json
+Usage: uv run python -I pipeline/41_flavors.py REGISTRY_DIR flavors.json recipes/*.json [--assembly grch38]
 """
 
 import argparse
 import json
-import shutil
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -58,6 +57,7 @@ import engine
 import layout
 
 GRCH38 = layout.GRCH38
+STEP = "41_flavors"
 OPERATION_OF_ALPHABET = "iupac_to_n"
 
 
@@ -112,8 +112,14 @@ def main() -> None:
     ap.add_argument("registry", type=Path)
     ap.add_argument("labels", type=Path)
     ap.add_argument("recipes", type=Path, nargs="+")
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    build = layout.build_dir(args.registry)
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        run(args, build, out)
+
+
+def run(args, build: Path, out: Path) -> None:
 
     recipes = {r["flavor"]: r for p in args.recipes for r in json.loads(p.read_text())["recipes"]}
     curated = json.loads(args.labels.read_text())["flavors"]
@@ -123,7 +129,7 @@ def main() -> None:
         sys.exit("flavors.json: a label is used twice")
 
     rows = defaultdict(list)
-    for r in pq.read_table(build / "flavor_sequences.parquet").to_pylist():
+    for r in pq.read_table(layout.path(build, "flavor_sequences.parquet")).to_pylist():
         rows[r["flavor"]].append(r)  # "flavor" here is still the target
     for v in rows.values():
         v.sort(key=lambda r: r["position"])
@@ -142,7 +148,7 @@ def main() -> None:
     if len(by_digest) != len(curated):
         sys.exit(f"{len(curated)} labels for {len(by_digest)} named sequence sets")
 
-    members = pq.read_table(build / "assembly_members.parquet").to_pylist()
+    members = pq.read_table(layout.path(build, "assembly_members.parquet")).to_pylist()
     member_of = {}
     for m in members:
         member_of.setdefault(m["genbank_accession"], m)
@@ -156,9 +162,7 @@ def main() -> None:
         for acc, start, end in spans:
             spans_of[name][acc].append((start, end))
 
-    out_dir = build / "collections.tmp"
-    if out_dir.exists():
-        shutil.rmtree(out_dir)  # left by an interrupted run
+    out_dir = out / "collections"
     out_dir.mkdir()
     flavors, manifests, targets, orders = [], [], [], []
     for digest, ts in sorted(by_digest.items(), key=lambda kv: label_of[kv[1][0]]):
@@ -227,13 +231,7 @@ def main() -> None:
     for name, table in (("flavors", flavors), ("manifests", manifests), ("targets", targets),
                         ("target_sequences", orders), ("sequences", sequences),
                         ("derivations", derivations)):
-        path = build / f"{name}.parquet"
-        tmp = path.with_suffix(".tmp")
-        pq.write_table(pa.Table.from_pylist(table), tmp, compression="zstd")
-        tmp.replace(path)
-    if (build / "collections").exists():
-        shutil.rmtree(build / "collections")
-    out_dir.rename(build / "collections")
+        pq.write_table(pa.Table.from_pylist(table), out / f"{name}.parquet", compression="zstd")
     print(f"{len(flavors)} flavors, {len(targets)} targets, {len(manifests)} manifest rows",
           file=sys.stderr)
     for f in flavors:

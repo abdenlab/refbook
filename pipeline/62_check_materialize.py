@@ -1,6 +1,6 @@
 """Check, from the bases, that the library builds every sequence and collection.
 
-run_recipes.py reuses a root's stored digest when a recipe leaves its bases
+40_recipes.py reuses a root's stored digest when a recipe leaves its bases
 unchanged, so this rebuilds from root_blocks (and the IMGT/HLA release for
 external roots) through the library, independently of the recipe engine:
 
@@ -18,7 +18,11 @@ external roots) through the library, independently of the recipe engine:
 Step 1 covers every sequence of every collection, since collections are made
 of the store's sequences; step 3 covers the stream.
 
-Usage: uv run python -I pipeline/check_materialize.py REGISTRY_DIR [--stream NAME] [--stream-all]
+Writes REGISTRY/build/grch38/62_check_materialize/check_materialize.json (the
+result, with the sha256 of each input) and exits nonzero, after recording it,
+on any failure.
+
+Usage: uv run python -I pipeline/62_check_materialize.py REGISTRY_DIR [--stream NAME] [--stream-all] [--assembly grch38]
 """
 
 import argparse
@@ -31,6 +35,11 @@ from pathlib import Path
 from refbook import Catalog, collection, materialize
 from refbook.materialize import SCHEMA, Bases, apply_operations
 from refbook.seqcol import digests, sha512t24u
+
+STEP = "62_check_materialize"
+INPUTS = ["sequences.parquet", "derivations.parquet", "flavors.parquet", "manifests.parquet",
+          "targets.parquet", "target_sequences.parquet", "roots.parquet", "roots_external.parquet",
+          "root_blocks.parquet", "layer_hardmask_grc.parquet", "collections"]
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this directory out
 import layout
@@ -87,8 +96,17 @@ def main() -> None:
     ap.add_argument("registry", type=Path)
     ap.add_argument("--stream", default="grch38-no-alt")
     ap.add_argument("--stream-all", action="store_true")
+    ap.add_argument("--assembly", default=layout.ASSEMBLY)
     args = ap.parse_args()
-    cat = Catalog(layout.build_dir(args.registry))
+    build = layout.build_dir(args.registry, args.assembly)
+    with layout.step_output(build, STEP) as out:
+        errors = run(build, out, args.stream, args.stream_all)
+    if errors:
+        sys.exit(f"{len(errors)} failures")
+
+
+def run(build: Path, out: Path, stream_one: str, stream_all: bool) -> list[str]:
+    cat = Catalog(build)
     bases = Bases(cat)
     want = {**{f: r["seqcol_digest"] for f, r in cat.flavors.items()},
             **{t: r["seqcol_digest"] for t, r in cat.targets.items()}}
@@ -103,7 +121,7 @@ def main() -> None:
     print(f"{'OK  ' if not bad else 'FAIL'} {len(want)} collections (flavors and targets) resolve to "
           f"their seqcol digests, {time.time() - t0:.0f} s", flush=True)
     errors += bad
-    for name in (sorted(want) if args.stream_all else [args.stream]):
+    for name in (sorted(want) if stream_all else [stream_one]):
         t0 = time.time()
         try:
             print(f"OK   streamed {name}: {stream(cat, name, want[name], bases)}, "
@@ -113,8 +131,10 @@ def main() -> None:
             print(f"FAIL streamed {name}: {e}", flush=True)
     for e in errors:
         print(f"  {e}", file=sys.stderr)
-    if errors:
-        sys.exit(f"{len(errors)} failures")
+    layout.record_check(build, out, "check_materialize", not errors, INPUTS,
+                        {"errors": errors[:100], "derivations": n, "collections": len(want),
+                         "streamed": sorted(want) if stream_all else [stream_one]})
+    return errors
 
 
 if __name__ == "__main__":

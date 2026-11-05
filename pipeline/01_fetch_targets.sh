@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Fetch published GRCh38 flavor files (the recipe targets) into $REGISTRY/raw.
 #
-# Same conventions as fetch_grch38.sh: files land at raw/<host>/<url path>,
+# Same conventions as 00_fetch_inputs.sh: files land at raw/<host>/<url path>,
 # wget -N keeps the server's Last-Modified time and skips unchanged files.
 # Each source's own checksum list is fetched too; check against it after.
 #
-# Usage: fetch_flavors.sh REGISTRY_DIR
+# Usage: 01_fetch_targets.sh REGISTRY_DIR
 set -euo pipefail
 
-REGISTRY=${1:?usage: fetch_flavors.sh REGISTRY_DIR}
+REGISTRY=${1:?usage: 01_fetch_targets.sh REGISTRY_DIR}
 mkdir -p "$REGISTRY/raw"
 cd "$REGISTRY/raw"
 
