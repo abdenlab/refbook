@@ -50,7 +50,8 @@
         {f.assembly}{f.patch_release !== null ? `, patch release ${f.patch_release}` : ""}:
         {n(f.n_sequences)} sequences, {bp(f.total_length)}. Published as {n(mine.length)} file{mine.length === 1 ? "" : "s"}.
       </p>
-      <p><a href={`#/compare?${new URLSearchParams({ a: label, b: "" })}`}>Compare with another flavor or file →</a></p>
+      <p><a href={`#/compare?${new URLSearchParams({ a: label, b: "" })}`}>Compare with another flavor or file →</a>
+        &nbsp; <a href={`#/design?${new URLSearchParams({ from: label })}`}>Design a variant →</a></p>
 
       <h2>Identity</h2>
       <dl class="ids">

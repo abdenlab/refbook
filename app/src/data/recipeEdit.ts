@@ -1,0 +1,156 @@
+// Edits to a recipe, one part at a time, for the design form. Each takes a
+// recipe and returns a new one; whatever an edit doesn't touch (other select
+// entries, maps, templates) is kept, so the form never loses what the JSON
+// says.
+import type { Recipe, SelectEntry } from "./design.ts";
+
+export const GRCH38 = "GCA_000001405";
+export const HS38D1 = "GCA_000786075.2";
+export const EBV = "AJ507799.2";
+export const HLA = "IMGT/HLA 3.18.0";
+export const HLA_TYPING_GROUPS = ["A", "B", "C", "DQA", "DQB", "DRB1"];   // hs38DH's
+export const ROLES = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "fix-patch", "novel-patch"];
+export const NAMESPACES = ["ucsc", "sequence", "genbank", "refseq"];
+
+type Assembly = Extract<SelectEntry, { assembly: string }>;
+const isAssembly = (e: SelectEntry): e is Assembly => "assembly" in e;
+const clone = (r: Recipe): Recipe => structuredClone($raw(r));
+// Svelte's $state proxies can't be structuredCloned; JSON is enough for recipes.
+function $raw<T>(x: T): T { return JSON.parse(JSON.stringify(x)); }
+
+/** The GRCh38 entry: the first select entry of a GRCh38 release. */
+export function primary(r: Recipe): Assembly | undefined {
+  return r.select.find((e): e is Assembly => isAssembly(e) && e.assembly.startsWith(GRCH38) && !e.accessions);
+}
+
+/** Select entries the form doesn't edit (shown, edited as JSON). */
+export function others(r: Recipe): SelectEntry[] {
+  const p = primary(r);
+  return r.select.filter((e) => e !== p && !(isAssembly(e) && e.assembly === HS38D1)
+    && !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV) && !("collection" in e && e.collection === HLA));
+}
+
+export function fromScratch(): Recipe {
+  return { select: [{ assembly: `${GRCH38}.15`, roles: ["assembled-molecule"] }], rename: { namespace: "ucsc" } };
+}
+
+export function setRelease(r: Recipe, accession: string): Recipe {
+  const out = clone(r);
+  const p = primary(out);
+  if (p) p.assembly = accession;
+  else out.select.unshift({ assembly: accession, roles: ["assembled-molecule"] });
+  return out;
+}
+
+export function setRole(r: Recipe, role: string, on: boolean): Recipe {
+  const out = clone(r);
+  const p = primary(out);
+  if (!p) return out;
+  const roles = new Set(p.roles);
+  if (on) roles.add(role); else roles.delete(role);
+  p.roles = ROLES.filter((x) => roles.has(x));
+  return out;
+}
+
+/** Only alts and patches placed on chromosomes (Ensembl's toplevel), or all. */
+export function setPlacedOnChromosomes(r: Recipe, on: boolean): Recipe {
+  const out = clone(r);
+  const p = primary(out);
+  if (!p) return out;
+  if (on) p.placed_on = ["chromosome"]; else delete p.placed_on;
+  return out;
+}
+
+export const hasEbv = (r: Recipe) => r.select.some((e) => "roots" in e && e.roots.includes(EBV));
+export const hasDecoys = (r: Recipe) => r.select.some((e) => isAssembly(e) && e.assembly === HS38D1);
+export const hlaGroups = (r: Recipe) =>
+  (r.select.find((e): e is Extract<SelectEntry, { collection: string }> => "collection" in e && e.collection === HLA)?.groups) ?? [];
+
+export function setEbv(r: Recipe, on: boolean): Recipe {
+  const out = clone(r);
+  out.select = out.select.filter((e) => !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV));
+  if (out.rename.map) delete out.rename.map[EBV];
+  if (on) {
+    out.select.push({ roots: [EBV] });
+    if (out.rename.namespace === "ucsc") out.rename.map = { ...out.rename.map, [EBV]: "chrEBV" };
+  }
+  if (out.rename.map && !Object.keys(out.rename.map).length) delete out.rename.map;
+  return out;
+}
+
+export function setDecoys(r: Recipe, on: boolean): Recipe {
+  const out = clone(r);
+  out.select = out.select.filter((e) => !(isAssembly(e) && e.assembly === HS38D1));
+  if (out.rename.template) delete out.rename.template[HS38D1];
+  if (on) {
+    out.select.push({ assembly: HS38D1, roles: ["unplaced-scaffold"] });
+    if (out.rename.namespace === "ucsc") out.rename.template = { ...out.rename.template, [HS38D1]: "chrUn_{accession_v}_decoy" };
+  }
+  if (out.rename.template && !Object.keys(out.rename.template).length) delete out.rename.template;
+  return out;
+}
+
+/** HLA alleles of these groups (none: no HLA). */
+export function setHla(r: Recipe, groups: string[], all: string[]): Recipe {
+  const out = clone(r);
+  out.select = out.select.filter((e) => !("collection" in e && e.collection === HLA));
+  if (out.rename.template) delete out.rename.template[HLA];
+  if (groups.length) {
+    out.select.push({ collection: HLA, groups: all.filter((g) => groups.includes(g)) });
+    out.rename.template = { ...out.rename.template, [HLA]: "HLA-{name}" };
+  }
+  if (out.rename.template && !Object.keys(out.rename.template).length) delete out.rename.template;
+  return out;
+}
+
+export const hasMask = (r: Recipe, layer: string) => !!r.mask?.some((m) => m.layer === layer);
+
+export function setMask(r: Recipe, layer: string, on: boolean): Recipe {
+  const out = clone(r);
+  const mask = (out.mask ?? []).filter((m) => m.layer !== layer);
+  if (on) mask.push({ layer, with: "N" });
+  if (mask.length) out.mask = mask; else delete out.mask;
+  return out;
+}
+
+export function setIupacToN(r: Recipe, on: boolean): Recipe {
+  const out = clone(r);
+  if (on) out.alphabet = { iupac: "N" }; else delete out.alphabet;
+  return out;
+}
+
+export function setNamespace(r: Recipe, namespace: string): Recipe {
+  const out = clone(r);
+  out.rename.namespace = namespace;
+  return out;
+}
+
+/** The chromosomes' names, if not the default namespace's (Ensembl names them "1", GENCODE "chr1"). */
+export function setChromosomeNames(r: Recipe, namespace: string | null): Recipe {
+  const out = clone(r);
+  const by = { ...out.rename.by_role };
+  if (namespace && namespace !== out.rename.namespace) by["assembled-molecule"] = namespace;
+  else delete by["assembled-molecule"];
+  if (Object.keys(by).length) out.rename.by_role = by; else delete out.rename.by_role;
+  return out;
+}
+
+/** The guide: analysis goals, and the choices commonly made for them. */
+export interface Goal { goal: string; choice: string; apply: (r: Recipe, all: { hla: string[] }) => Recipe }
+
+export const GUIDE: Goal[] = [
+  { goal: "Alt-aware alignment", choice: "include the alt scaffolds (an aligner also needs their alignments, e.g. bwakit's .alt file)",
+    apply: (r) => setRole(r, "alt-scaffold", true) },
+  { goal: "Germline calling on chrX and chrY", choice: "the GRC hard-mask: chrY's PARs (chrX keeps them), and duplicate copies of centromeric and acrocentric arrays on chr5, 14, 19, 21 and 22",
+    apply: (r) => setMask(r, "hardmask_grc", true) },
+  { goal: "Fewer false positives from reads of unassembled sequence", choice: "the hs38d1 decoys",
+    apply: (r) => setDecoys(r, true) },
+  { goal: "HLA typing", choice: `HLA alleles (${HLA_TYPING_GROUPS.join(", ")}, as hs38DH)`,
+    apply: (r, all) => setHla(r, HLA_TYPING_GROUPS, all.hla) },
+  { goal: "Catch EBV contamination", choice: "an EBV sequence for its reads to align to",
+    apply: (r) => setEbv(r, true) },
+  { goal: "Tools that reject IUPAC codes", choice: "IUPAC → N",
+    apply: (r) => setIupacToN(r, true) },
+  { goal: "The latest GRCh38", choice: "patch release p14, with its fix and novel patches",
+    apply: (r) => setRole(setRole(setRelease(r, `${GRCH38}.29`), "fix-patch", true), "novel-patch", true) },
+];

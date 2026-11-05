@@ -12,7 +12,9 @@ import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, sequenceDictionary } from "../src/data/exports.ts";
 import { flavors, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/flavors.ts";
+import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
 import { identifyTables, level2, pairs, parseHeader } from "../src/data/identify.ts";
+import * as edit from "../src/data/recipeEdit.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
 
 const dir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../../catalog/output/build/grch38", import.meta.url));
@@ -126,4 +128,54 @@ test("two flavors compared: seqcol's counts and refbook's pairs", { skip }, asyn
   assert.deepEqual([count("same"), count("operations"), count("different"), count("a_only"), count("b_only")], [181, 14, 0, 0, 0]);
   const renamed = pairs([{ ...a[0], name: "one" }], [a[0]]);
   assert.deepEqual(renamed.map((x) => x.kind), ["renamed"]);
+});
+
+
+test("every flavor's recipe, compiled in the browser, is that flavor", { skip }, async () => {
+  const t = await designTables(cat);
+  assert.ok(measured["design tables"].bytes < 1e6, `${measured["design tables"].bytes} bytes`);
+  const fs = await flavors(cat);
+  for (const f of fs) {
+    const d = design(plainRecipe(JSON.parse(f.recipe)), t, fs);
+    assert.deepEqual(d.novel, [], f.flavor);
+    assert.equal(d.id, f.id, f.flavor);
+    assert.equal(d.seqcolDigest, f.seqcol_digest, f.flavor);
+    assert.equal(d.equals, f.flavor);
+    const m = await manifest(cat, f.flavor);
+    assert.deepEqual(d.rows.map((r) => [r.name, r.root_id, r.operations, r.length, r.md5, r.sha512t24u]),
+                     m.map((r) => [r.name, r.root_id, [...r.operations], r.length, r.md5, r.sha512t24u]), f.flavor);
+  }
+  const r = plainRecipe(JSON.parse(fs[0].recipe));
+  assert.deepEqual(decodeRecipe(encodeRecipe(r)), r);
+  assert.throws(() => design({ ...r, mask: [{ layer: "nope", with: "N" }] }, t, fs), /nope/);
+});
+
+
+test("the form's edits rebuild published flavors from scratch", { skip }, async () => {
+  const t = await designTables(cat);
+  const fs = await flavors(cat);
+  const all = { hla: t.collections.get(edit.HLA)! };
+  const is = (r: ReturnType<typeof edit.fromScratch>) => design(r, t, fs).equals;
+  let r = edit.fromScratch();
+  for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) r = edit.setRole(r, role, true);
+  r = edit.setMask(edit.setEbv(r, true), "hardmask_grc", true);
+  assert.equal(is(r), "grch38-no-alt");
+  assert.equal(is(edit.setIupacToN(r, true)), "hg38-analysis-set");
+  r = edit.setRole(r, "alt-scaffold", true);
+  assert.equal(is(r), "grch38-full");
+  r = edit.setDecoys(r, true);
+  assert.equal(is(r), "grch38-full-hs38d1");
+  const dh = edit.GUIDE.find((g) => g.goal === "HLA typing")!.apply(r, all);
+  assert.equal(is(dh), "hs38dh");
+  // And back: each edit undoes, keeping the rest.
+  assert.equal(is(edit.setHla(edit.setDecoys(dh, false), [], all.hla)), "grch38-full");
+  assert.deepEqual(edit.hlaGroups(dh), edit.HLA_TYPING_GROUPS);
+  // Ensembl's names: GenBank by default, its own for chromosomes; IUPAC -> N.
+  let e = edit.setNamespace(edit.setRelease(edit.fromScratch(), "GCA_000001405.29"), "genbank");
+  for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) e = edit.setRole(e, role, true);
+  e = edit.setChromosomeNames(edit.setIupacToN(e, true), "sequence");
+  assert.equal(is(e), "ensembl-grch38-primary");
+  assert.deepEqual(edit.others(dh), []);
+  const hg38p14 = JSON.parse(fs.find((f) => f.flavor === "hg38-p14")!.recipe);
+  assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
 });

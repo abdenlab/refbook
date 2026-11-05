@@ -11,6 +11,7 @@
   import ErrorBox from "./components/ErrorBox.svelte";
   import CatalogView from "./views/CatalogView.svelte";
   import CompareView from "./views/CompareView.svelte";
+  import DesignView from "./views/DesignView.svelte";
   import IdentifyView from "./views/IdentifyView.svelte";
   import FlavorView from "./views/FlavorView.svelte";
   import SequenceView from "./views/SequenceView.svelte";
@@ -47,6 +48,7 @@
     <a href="#/" class:here={!parts.length || parts[0] === "flavor"}>Catalog</a>
     <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
     <a href="#/compare" class:here={parts[0] === "compare"}>Compare</a>
+    <a href="#/design" class:here={parts[0] === "design"}>Design</a>
   </nav>
 </header>
 <main>
@@ -58,6 +60,8 @@
         <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
       {:else if parts[0] === "identify"}
         <IdentifyView {cat} />
+      {:else if parts[0] === "design"}
+        <DesignView {cat} query={route.current.query} />
       {:else if parts[0] === "compare"}
         <CompareView {cat} query={route.current.query} />
       {:else if parts[0] === "flavor" && parts[1]}

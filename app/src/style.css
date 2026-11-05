@@ -55,6 +55,16 @@ textarea.paste {
 pre.json { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.8rem; }
 table.identify tr.ev-nothing td:first-child { color: var(--bad); }
 details > summary { cursor: pointer; }
+.design { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.2rem; margin-top: 1rem; align-items: start; }
+.design fieldset { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 0.8rem; padding: 0.6rem 0.9rem 0.8rem; }
+.design legend { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0.3rem; }
+.design label { display: block; margin: 0.3rem 0; }
+.design label.check { display: flex; gap: 0.45rem; align-items: baseline; }
+.design .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); }
+.design .result { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 0.8rem 1rem; position: sticky; top: 1rem; }
+.design .verdict { font-size: 1.05rem; margin-top: 0; }
+.design .verdict.ok { color: var(--ok); }
+ul.small { font-size: 0.9rem; color: var(--muted); }
 .exports label { display: inline-flex; gap: 0.4rem; align-items: center; max-width: 100%; }
 .exports label select { min-width: 0; flex: 1; }
 
@@ -131,6 +141,8 @@ pre.bases .pos { color: var(--muted); user-select: none; }
 .meter .total { font-weight: 600; }
 
 @media (max-width: 640px) {
+  .design { grid-template-columns: 1fr; }
+  .design .result { position: static; }
   .meter ul { display: none; }
   .ids { grid-template-columns: 1fr; }
   .ids dd { margin-bottom: 0.6rem; }
