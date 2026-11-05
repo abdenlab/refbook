@@ -23,7 +23,7 @@ dev = [
     "ruff>=0.17.3",
 ]
 
-# src/refbook is the library, with its Rust core (crates/) built by maturin
+# python/refbook is the library; its Rust core (crates/) and bindings (python/rust/) are built by maturin
 # into refbook._core; pipeline/ holds the build steps, run directly with
 # `uv run python -I pipeline/<step>.py`.
 [build-system]
@@ -31,10 +31,10 @@ requires = ["maturin>=1.16,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-manifest-path = "crates/refbook-py/Cargo.toml"
-python-source = "src"
+manifest-path = "python/rust/Cargo.toml"
+python-source = "python"
 module-name = "refbook._core"
 
 [tool.uv]
 # Rebuild the extension when the Rust sources change.
-cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "crates/**/*.rs" }, { file = "crates/**/Cargo.toml" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "crates/**/*.rs" }, { file = "crates/**/Cargo.toml" }, { file = "python/rust/**/*.rs" }, { file = "python/rust/Cargo.toml" }]

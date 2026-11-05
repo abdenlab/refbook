@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/refbook-core", "crates/refbook-py"]
+members = ["crates/refbook-core", "python/rust"]
 resolver = "3"
 
 [workspace.package]

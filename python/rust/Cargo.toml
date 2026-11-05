@@ -11,5 +11,5 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-refbook-core = { path = "../refbook-core" }
+refbook-core = { path = "../../crates/refbook-core" }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py313"] }
