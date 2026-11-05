@@ -11,6 +11,7 @@ import random
 import re
 
 import pytest
+
 from refbook import _core
 
 NOT_AZ = re.compile(rb"[^A-Z]")

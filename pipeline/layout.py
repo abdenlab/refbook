@@ -10,9 +10,11 @@ Every path defaults to the repository, so a step needs no arguments.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -28,6 +30,18 @@ LATEST = RELEASES[-1]
 
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+def step_module(name: str):
+    """A numbered step (e.g. "10_roots", not a valid module name) imported as a
+    module, so its functions can be tested."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def raw_dir(raw: Path | None = None) -> Path:

@@ -30,9 +30,8 @@ answers practical questions:
 From a clone of this repository, with [uv](https://docs.astral.sh/uv/) and a
 Rust toolchain ([rustup](https://rustup.rs/); the core in `crates/` and its bindings
 in `python/rust/` are built into the package by maturin). The root
-`pyproject.toml` is the repository's environment (pipeline, tests, tools); the
-library is its own package in `python/`, with its own
-[README](python/README.md):
+`pyproject.toml` is a uv workspace of the library (`python/`, its own package,
+with its own [README](python/README.md)) and the pipeline (`pipeline/`):
 
 ```bash
 uv sync    # the library (with DataFusion), the `refbook` command, the pipeline and dev tools
@@ -221,9 +220,9 @@ Each script's docstring says what it reads, writes and checks.
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `blocks`, `remote` |
 | `python/rust/` | The core's Python bindings (`refbook-py`, built by maturin as `refbook._core`) |
 | `js/` | The npm package `@abdenlab/refbook`: the core's wasm bindings (`js/rust/`, `refbook-wasm`) and their TypeScript front end (`js/src/`). Build with `cd js && npm install && npm run build` (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130); test with `npm test` |
-| `pipeline/` | The numbered steps that build, check and export the catalog, and their shared modules (`layout`, `engine`, `observe`) |
+| `pipeline/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
 | `assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
-| `tests/` | Tests of the pipeline, and of the library against a build, with real ENCODE, gnomAD and GIAB headers as fixtures |
+| `tests/` | Tests that span components: the library and the wasm build against a build, with real ENCODE, gnomAD and GIAB headers as fixtures |
 | `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 
 ## Development

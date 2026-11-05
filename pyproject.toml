@@ -1,15 +1,8 @@
-# The repository's environment: the pipeline that builds the catalog, and the
-# tests and tools. Not a package. The library is python/ (the refbook package,
-# a workspace member); pipeline/ holds the build steps, run directly with
-# `uv run python -I pipeline/<step>.py`.
-[project]
-name = "refbook-pipeline"
-version = "0.0.0"
-requires-python = ">=3.13"
-dependencies = [
-    "refbook[datafusion]",
-    "pyarrow>=25",
-]
+# The repository's uv workspace: the library (python/, the refbook package)
+# and the pipeline (pipeline/). One uv.lock and .venv here; `uv sync` installs
+# both members and the dev tools. Not a project itself.
+[tool.uv.workspace]
+members = ["python", "pipeline"]
 
 [dependency-groups]
 dev = [
@@ -17,14 +10,11 @@ dev = [
     "ruff>=0.17.3",
 ]
 
-[tool.uv]
-package = false
-
-[tool.uv.workspace]
-members = ["python"]
-
-[tool.uv.sources]
-refbook = { workspace = true }
-
+# tests/ holds the tests that span components (the library and the wasm build
+# against a build); python/tests and pipeline/tests each test their own.
 [tool.pytest.ini_options]
-testpaths = ["tests", "python/tests"]
+testpaths = ["tests", "python/tests", "pipeline/tests"]
+pythonpath = ["pipeline"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["refbook"]

@@ -8,7 +8,7 @@ import lock
 import observe
 import pytest
 import reference_engine
-from conftest import step
+from layout import step_module as step
 
 from refbook import refget
 

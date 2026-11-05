@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from refbook import _core
 
 JS = Path(__file__).resolve().parent.parent / "js"

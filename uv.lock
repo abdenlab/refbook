@@ -12,6 +12,12 @@ members = [
     "refbook-pipeline",
 ]
 
+[manifest.dependency-groups]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.17.3" },
+]
+
 [[package]]
 name = "cloudpickle"
 version = "3.1.2"
@@ -170,28 +176,16 @@ provides-extras = ["datafusion"]
 [[package]]
 name = "refbook-pipeline"
 version = "0.0.0"
-source = { virtual = "." }
+source = { virtual = "pipeline" }
 dependencies = [
     { name = "pyarrow" },
     { name = "refbook", extra = ["datafusion"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pyarrow", specifier = ">=25" },
     { name = "refbook", extras = ["datafusion"], editable = "python" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.17.3" },
 ]
 
 [[package]]

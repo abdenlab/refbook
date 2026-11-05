@@ -13,6 +13,7 @@ from pathlib import Path
 import layout
 import pyarrow.parquet as pq
 import pytest
+
 from refbook import _core
 
 BUILD = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))

@@ -19,7 +19,7 @@ import layout
 import pyarrow.parquet as pq
 import pytest
 
-BUILD = Path(os.environ.get("REFBOOK_CATALOG", Path(__file__).resolve().parent.parent / "build" / "grch38"))
+BUILD = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
 RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
 pytestmark = pytest.mark.skipif(
     not (BUILD / "catalog.json").exists() or not (RELEASE / "catalog.json").exists(),

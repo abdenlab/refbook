@@ -317,7 +317,7 @@ def release_from_build(out: Path) -> Path:
     import json
 
     import layout
-    from conftest import step
+    from layout import step_module as step
     export_catalog = step("70_export")
     files = {}
     for name, role in export_catalog.FILES.items():
