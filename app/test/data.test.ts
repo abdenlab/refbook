@@ -173,6 +173,10 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   // And back: each edit undoes, keeping the rest.
   assert.equal(is(edit.setHla(edit.setDecoys(dh, false), [], all.hla)), "grch38-full");
   assert.deepEqual(edit.hlaGroups(dh), edit.HLA_TYPING_GROUPS);
+  assert.equal(edit.hlaKind(dh), "typing");
+  assert.equal(edit.hlaKind(r), "none");
+  assert.equal(edit.hlaKind(edit.setHla(r, ["A", "G"], all.hla)), "custom");
+  assert.notEqual(design(edit.setHla(r, ["A", "G"], all.hla), t, fs).rows.length, 0);   // still compiles
   // Ensembl's names: GenBank by default, its own for chromosomes; IUPAC -> N.
   let e = edit.setNamespace(edit.setRelease(edit.fromScratch(), "GCA_000001405.29"), "genbank");
   for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) e = edit.setRole(e, role, true);

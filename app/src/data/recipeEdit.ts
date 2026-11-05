@@ -66,6 +66,13 @@ export const hasDecoys = (r: Recipe) => r.select.some((e) => isAssembly(e) && e.
 export const hlaGroups = (r: Recipe) =>
   (r.select.find((e): e is Extract<SelectEntry, { collection: string }> => "collection" in e && e.collection === HLA)?.groups) ?? [];
 
+/** Which HLA alleles a recipe has: none, hs38DH's six genes, or another set (edited as JSON). */
+export function hlaKind(r: Recipe): "none" | "typing" | "custom" {
+  const g = hlaGroups(r);
+  if (!g.length) return "none";
+  return g.length === HLA_TYPING_GROUPS.length && HLA_TYPING_GROUPS.every((x) => g.includes(x)) ? "typing" : "custom";
+}
+
 export function setEbv(r: Recipe, on: boolean): Recipe {
   const out = clone(r);
   out.select = out.select.filter((e) => !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV));

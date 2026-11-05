@@ -141,16 +141,11 @@
             <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} /> EBV (<code>{edit.EBV}</code>)</label>
             <label class="check"><input type="checkbox" checked={edit.hasDecoys(recipe)} onchange={(e) => set(edit.setDecoys(recipe!, e.currentTarget.checked))} /> hs38d1 decoys (<code>{edit.HS38D1}</code>)</label>
             <label class="check"><input type="checkbox" checked={groups.length > 0}
-              onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} /> HLA alleles ({edit.HLA}; not hosted)</label>
-            {#if groups.length}
-              <details><summary>{groups.length} of {hlaAll.length} genes</summary>
-                <div class="groups">
-                  {#each hlaAll as g (g)}
-                    <label class="check"><input type="checkbox" checked={groups.includes(g)}
-                      onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? [...groups, g] : groups.filter((x) => x !== g), hlaAll))} /> {g}</label>
-                  {/each}
-                </div>
-              </details>
+              onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} />
+              HLA alleles: hs38DH's six genes ({edit.HLA_TYPING_GROUPS.join(", ")}; {edit.HLA}, not hosted)</label>
+            {#if edit.hlaKind(recipe) === "custom"}
+              <p class="muted">This recipe has a custom set of {groups.length} HLA gene{groups.length === 1 ? "" : "s"}
+                ({groups.join(", ")}): edit it in the JSON below. Switching HLA off and on gives hs38DH's six.</p>
             {/if}
             {#if edit.others(recipe).length}<p class="muted">And {edit.others(recipe).length} more entries: edit them in the JSON below.</p>{/if}
           </fieldset>
