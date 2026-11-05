@@ -219,8 +219,9 @@ def build_placements(raw: Path, members: list[dict], length: dict,
             sys.exit(f"{d.name}: placements != alt/patch members of the report")
         for r in rows:
             if r["parent_acc"] == "na":
-                # Member but not placed (KI270825.1 in p14, after FCS found a
-                # bacterial tail): its placement rows end at the release before.
+                # Member but not placed (KI270825.1 in p14: withdrawn by editing
+                # p14's files in 2025, after FCS flagged a bacterial end; the
+                # cause is inferred): its placement rows end at the release before.
                 print(f"{r['alt_scaf_acc']}: no placement in {d.name}", file=sys.stderr)
                 continue
             rs = region_spans.get((r["region_name"], r["parent_acc"], layout.release_number(d)))
