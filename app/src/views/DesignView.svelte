@@ -200,34 +200,15 @@
             <div class="group">
               <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} />
                 <span>EBV <span class="muted">(<code>{edit.EBV}</code>)</span></span></label>
-              {#if edit.hasEbv(recipe)}
-                <input class="naming" list="ebv-names" aria-label="Name of EBV" value={edit.ebvName(recipe)}
-                       onchange={(e) => set(edit.setEbvName(recipe!, e.currentTarget.value))} />
-                <datalist id="ebv-names">{#each edit.EBV_NAMES as x (x)}<option value={x}></option>{/each}</datalist>
-              {/if}
             </div>
             <div class="group">
               <label class="check"><input type="checkbox" checked={edit.hasDecoys(recipe)} onchange={(e) => set(edit.setDecoys(recipe!, e.currentTarget.checked))} />
                 <span>hs38d1 decoys <span class="muted">({n(t.roleCounts.get(edit.HS38D1)?.get("unplaced-scaffold") ?? 0)})</span></span></label>
-              {#if edit.hasDecoys(recipe)}
-                {@const tpl = edit.groupTemplate(recipe, edit.HS38D1)}
-                <select class="naming" aria-label="Names of the decoys" value={tpl} onchange={(e) => set(edit.setGroupTemplate(recipe!, edit.HS38D1, e.currentTarget.value))}>
-                  {#each edit.DECOY_NAMING as x (x.template)}<option value={x.template}>{x.example}</option>{/each}
-                  {#if tpl && !edit.DECOY_NAMING.some((x) => x.template === tpl)}<option value={tpl}>{tpl} (JSON)</option>{/if}
-                </select>
-              {/if}
             </div>
             <div class="group">
               <label class="check"><input type="checkbox" checked={groups.length > 0}
                 onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} />
                 <span>HLA alleles <span class="muted">(hs38DH's six genes; not hosted)</span></span></label>
-              {#if groups.length}
-                {@const tpl = edit.groupTemplate(recipe, edit.HLA)}
-                <select class="naming" aria-label="Names of the HLA alleles" value={tpl} onchange={(e) => set(edit.setGroupTemplate(recipe!, edit.HLA, e.currentTarget.value))}>
-                  {#each edit.HLA_NAMING as x (x.template)}<option value={x.template}>{x.example}</option>{/each}
-                  {#if tpl && !edit.HLA_NAMING.some((x) => x.template === tpl)}<option value={tpl}>{tpl} (JSON)</option>{/if}
-                </select>
-              {/if}
             </div>
             {#if edit.hlaKind(recipe) === "custom"}
               <p class="muted small">A custom set of {groups.length} HLA gene{groups.length === 1 ? "" : "s"} ({groups.join(", ")}): edit it in the JSON.
