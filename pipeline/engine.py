@@ -1,8 +1,12 @@
 """The recipe engine: compile a recipe into its sequences.
 
-A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it,
-and it is the reference the Rust core must agree with (tests/test_golden.py).
-A recipe (see assemblies/<assembly>/recipes/*.json) is data. The operations, in the order applied:
+A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it.
+Compiling a recipe is the Rust core's (crates/refbook-core/src/recipe.rs);
+this module loads the catalog tables it reads, fills in lengths and digests,
+and compares the result with a target's observation. The Python compiler it
+replaced is frozen in tests/reference_engine.py, as the core's oracle.
+
+A recipe (see assemblies/<assembly>/recipes/*.json) is data:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly
            accession.version>, "roles": [...], "accessions": [...]?} (rows of
@@ -28,6 +32,7 @@ A recipe defines a named sequence set: it has no order and no formatting.
 """
 
 import functools
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -35,8 +40,10 @@ from pathlib import Path
 import layout
 import pyarrow.parquet as pq
 
-from refbook import refget
+from refbook import _core, refget
 from refbook.blocks import row_groups_by_root
+
+IUPAC_TO_N = "iupac_to_n"
 
 
 @functools.cache
@@ -66,100 +73,36 @@ def apply_operations(bases: bytes, spans: list[tuple[int, int]], positions: list
 
 @functools.cache
 def derivative_digests(build: Path, acc: str, spans: tuple, positions: tuple) -> tuple[str, str]:
-    """Digests of a root after operations; cached, since targets share derivatives."""
+    """Digests of a root after operations, by the Python apply_operations: 41_flavors
+    checks the core's manifest rows with it. Cached, since flavors share derivatives."""
     return refget.digests(apply_operations(root_bases(build, acc), spans, positions))
 
 
-def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
-           parent_types: dict) -> list[dict]:
-    """The selected roots: each with the entry's assembly (or collection) and the
-    report row or external record it was selected through, which rename uses."""
-    out = []
-    for entry in recipe["select"]:
-        if "collection" in entry:
-            rows = [e for e in external if e["collection"] == entry["collection"]
-                    and e["group"] in entry["groups"]]
-            if not rows:
-                sys.exit(f"{recipe['flavor']}: nothing in {entry['collection']} {entry['groups']}")
-            for e in rows:
-                out.append({"root_id": e["root_id"], "assembly": entry["collection"],
-                            "member": None, "external": e})
-            continue
-        if "roots" in entry:
-            for acc in entry["roots"]:
-                if acc not in roots:
-                    sys.exit(f"{recipe['flavor']}: no root {acc}")
-                out.append({"root_id": acc, "assembly": None, "member": None})
-            continue
-        rows = [m for m in members if m["assembly_accession"] == entry["assembly"]]
-        if not rows:
-            sys.exit(f"{recipe['flavor']}: no assembly {entry['assembly']}")
-        only = set(entry.get("accessions", [])) or None
-        placed_on = set(entry.get("placed_on", [])) or None
-        for m in rows:
-            acc = m["genbank_accession"]
-            if placed_on and parent_types.get(acc, placed_on) - placed_on:
-                continue  # placed on a parent type the flavor leaves out
-            if m["role"] in entry["roles"] and (only is None or acc in only):
-                out.append({"root_id": acc, "assembly": entry["assembly"], "member": m})
-    ids = [s["root_id"] for s in out]
-    if len(ids) != len(set(ids)):
-        sys.exit(f"{recipe['flavor']}: a root is selected twice")
-    return out
+def compile(recipe: dict, t: dict) -> list[tuple[str, str, list[str]]]:
+    """A recipe's manifest rows (name, root_id, operations), in canonical order
+    (by name, code point), from the Rust core's recipe compiler."""
+    try:
+        return _core.compile_recipe(json.dumps(recipe), t["compiler"])
+    except _core.RecipeError as e:
+        sys.exit(f"{recipe['flavor']}: {e}")
 
 
-def name_of(s: dict, rename: dict) -> str:
-    acc = s["root_id"]
-    if acc in rename.get("map", {}):
-        return rename["map"][acc]
-    template = rename.get("template", {}).get(s["assembly"])
-    if template:
-        ext = s.get("external") or {}
-        return template.format(accession=acc, accession_v=acc.replace(".", "v"),
-                               name=ext.get("name"))
-    m = s["member"]
-    ns = rename.get("by_role", {}).get(m and m["role"], rename["namespace"])
-    name = m and m.get(NAMESPACES[ns])
-    if not name:
-        sys.exit(f"{acc}: no {ns} name and no rule to make one")
-    return name
-
-
-# Recipe namespace -> assembly_members column.
-NAMESPACES = {"ucsc": "ucsc_name", "sequence": "sequence_name",
-              "genbank": "genbank_accession", "refseq": "refseq_accession"}
+@functools.cache
+def _derived(build: Path, acc: str, spans: tuple, to_n: bool) -> tuple[str, str]:
+    return refget.digests(_core.apply_operations(root_bases(build, acc), 0, list(spans), to_n))
 
 
 def run(recipe: dict, build: Path, t: dict) -> list[dict]:
-    """A recipe's sequences, in canonical order (by name, code point)."""
-    sel = select(recipe, t["members"], t["roots"], t["external"], t["parent_types"])
-    roots, masks, iupac = t["roots"], t["masks"], t["iupac"]
-    for s in sel:
-        s["name"] = name_of(s, recipe["rename"])
-    names = [s["name"] for s in sel]
-    if len(names) != len(set(names)):
-        sys.exit(f"{recipe['flavor']}: a name is used twice")
-    sel.sort(key=lambda s: s["name"].encode())
-    spans = defaultdict(list)
-    for m in recipe.get("mask", []):
-        if m["with"] != "N":
-            sys.exit(f"{recipe['flavor']}: only N masks are implemented")
-        for acc, start, end in masks[m["layer"]]:
-            spans[acc].append((start, end))
-    alphabet = recipe.get("alphabet", {})
-    if alphabet not in ({}, {"iupac": "N"}):
-        sys.exit(f"{recipe['flavor']}: only the alphabet change iupac -> N is implemented")
+    """A recipe's sequences, in canonical order (by name, code point), with
+    their operations and the digests those give (built by the core)."""
     out = []
-    for s in sel:
-        acc = s["root_id"]
-        r = roots[acc]
+    for name, acc, ops in compile(recipe, t):
+        r = t["roots"][acc]
         md5, sq = r["md5"], r["sha512t24u"]
-        to_n = iupac.get(acc, []) if alphabet else []
-        if s.get("external") and (spans.get(acc) or r["n_iupac"] and alphabet):
-            sys.exit(f"{acc}: external root (bases not hosted) would need materializing")
-        if spans.get(acc) or to_n:
-            md5, sq = derivative_digests(build, acc, tuple(spans.get(acc, [])), tuple(to_n))
-        out.append({"flavor": recipe["flavor"], "name": s["name"], "root_id": acc,
+        if ops:
+            spans = tuple(s for op in ops if op != IUPAC_TO_N for s in t["spans"][op].get(acc, ()))
+            md5, sq = _derived(build, acc, spans, IUPAC_TO_N in ops)
+        out.append({"flavor": recipe["flavor"], "name": name, "root_id": acc, "operations": ops,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
     return out
 
@@ -222,5 +165,16 @@ def load_tables(build: Path, recipes: list[dict]) -> dict:
     for p in pq.read_table(layout.path(build, "layer_placements.parquet"),
                            columns=["root_id", "parent_type"]).to_pylist():
         parent_types[p["root_id"]].add(p["parent_type"])
-    return {"members": members, "roots": roots, "masks": masks, "iupac": iupac,
-            "external": external, "parent_types": parent_types}
+    spans = {name: defaultdict(list) for name in masks}
+    for name, rows in masks.items():
+        for acc, start, end in rows:
+            spans[name][acc].append((start, end))
+    compiler = _core.RecipeTables(
+        members=[(m["assembly_accession"], m["genbank_accession"], m["role"], m["ucsc_name"],
+                  m["sequence_name"], m["refseq_accession"]) for m in members],
+        roots=list(roots), iupac=[acc for acc, r in roots.items() if r["n_iupac"]],
+        layers={name: list(by_root) for name, by_root in spans.items()},
+        external=[(e["root_id"], e["collection"], e["group"], e["name"]) for e in external],
+        placements=[(acc, p) for acc, ps in parent_types.items() for p in sorted(ps)])
+    return {"members": members, "roots": roots, "masks": masks, "spans": spans, "iupac": iupac,
+            "external": external, "parent_types": parent_types, "compiler": compiler}

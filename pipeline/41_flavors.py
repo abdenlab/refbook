@@ -156,11 +156,7 @@ def run(args, build: Path, out: Path) -> None:
     latest = {m["genbank_accession"] for m in members
               if m["assembly_accession"].startswith(GRCH38) and m["release"] == latest_release}
     tables = engine.load_tables(build, list(recipes.values()))
-    masks = {name: {acc for acc, _, _ in spans} for name, spans in tables["masks"].items()}
-    spans_of = defaultdict(lambda: defaultdict(list))
-    for name, spans in tables["masks"].items():
-        for acc, start, end in spans:
-            spans_of[name][acc].append((start, end))
+    spans_of = tables["spans"]
 
     out_dir = out / "collections"
     out_dir.mkdir()
@@ -172,15 +168,16 @@ def run(args, build: Path, out: Path) -> None:
         mask_layers = [m["layer"] for m in recipe.get("mask", [])]
         alphabet = bool(recipe.get("alphabet"))
 
+        compiled = {name: (root, ops) for name, root, ops in engine.compile(recipe, tables)}
         manifest = []
         for r in sorted(rows[first], key=lambda r: r["name"].encode()):
             acc = r["root_id"]
-            ops = [m for m in mask_layers if acc in masks[m]]
-            if alphabet and tables["iupac"].get(acc):
-                ops.append(OPERATION_OF_ALPHABET)
-            if ops:  # rebuilding from root and operations must give the digests
-                spans = tuple(s for m in mask_layers for s in spans_of[m].get(acc, []))
-                positions = tuple(tables["iupac"].get(acc, [])) if alphabet else ()
+            if compiled.get(r["name"], (None,))[0] != acc:
+                sys.exit(f"{label} {r['name']}: the recipe compiles to another root")
+            ops = compiled[r["name"]][1]
+            if ops:  # rebuilding from root and operations, in Python, must give the digests
+                spans = tuple(s for m in ops if m != OPERATION_OF_ALPHABET for s in spans_of[m].get(acc, []))
+                positions = tuple(tables["iupac"].get(acc, [])) if OPERATION_OF_ALPHABET in ops else ()
                 if engine.derivative_digests(build, acc, spans, positions) != (r["md5"], r["sha512t24u"]):
                     sys.exit(f"{label} {r['name']}: operations {ops} don't give its digests")
             elif (r["md5"], r["sha512t24u"]) != (tables["roots"][acc]["md5"], tables["roots"][acc]["sha512t24u"]):

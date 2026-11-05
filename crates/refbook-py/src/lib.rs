@@ -1,10 +1,12 @@
 //! refbook._core: Python bindings of refbook-core.
 
+use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString, PyTuple};
 use refbook_core::operations;
+use refbook_core::recipe;
 use refbook_core::refget;
 use refbook_core::seqcol::{self, Json};
 
@@ -167,6 +169,103 @@ fn apply_operations<'py>(
     PyBytes::new(py, &out)
 }
 
+create_exception!(
+    _core,
+    RecipeError,
+    PyValueError,
+    "A recipe that doesn't compile."
+);
+
+type MemberRow = (
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// The catalog tables the recipe compiler reads, built once and shared by
+/// every recipe: members as (assembly, accession, role, ucsc_name,
+/// sequence_name, refseq_accession) in report order; every root id; the roots
+/// with IUPAC codes; mask layer -> the roots it has spans on; external roots
+/// as (root_id, collection, group, name) in rank order; placements as
+/// (root_id, parent_type).
+#[pyclass(frozen)]
+struct RecipeTables(recipe::Tables);
+
+#[pymethods]
+impl RecipeTables {
+    #[new]
+    fn new(
+        members: Vec<MemberRow>,
+        roots: Vec<String>,
+        iupac: Vec<String>,
+        layers: std::collections::HashMap<String, Vec<String>>,
+        external: Vec<(String, String, String, Option<String>)>,
+        placements: Vec<(String, String)>,
+    ) -> Self {
+        let mut parent_types =
+            std::collections::HashMap::<String, std::collections::HashSet<String>>::new();
+        for (root, parent) in placements {
+            parent_types.entry(root).or_default().insert(parent);
+        }
+        RecipeTables(recipe::Tables {
+            members: members
+                .into_iter()
+                .map(
+                    |(assembly, accession, role, ucsc_name, sequence_name, refseq_accession)| {
+                        recipe::Member {
+                            assembly,
+                            accession,
+                            role,
+                            ucsc_name,
+                            sequence_name,
+                            refseq_accession,
+                        }
+                    },
+                )
+                .collect(),
+            roots: roots.into_iter().collect(),
+            iupac: iupac.into_iter().collect(),
+            layers: layers
+                .into_iter()
+                .map(|(k, v)| (k, v.into_iter().collect()))
+                .collect(),
+            external: external
+                .into_iter()
+                .map(|(root_id, collection, group, name)| recipe::External {
+                    root_id,
+                    collection,
+                    group,
+                    name,
+                })
+                .collect(),
+            parent_types,
+        })
+    }
+}
+
+/// Compile a recipe (JSON text): its manifest rows (name, root_id, operations),
+/// in canonical order. Raises RecipeError.
+#[pyfunction]
+fn compile_recipe(
+    py: Python<'_>,
+    recipe_json: &str,
+    tables: &RecipeTables,
+) -> PyResult<Vec<(String, String, Vec<String>)>> {
+    py.detach(|| {
+        let r = recipe::Recipe::from_json(recipe_json)?;
+        recipe::compile(&r, &tables.0)
+    })
+    .map(|rows| {
+        rows.into_iter()
+            .map(|r| (r.name, r.root_id, r.operations))
+            .collect()
+    })
+    .map_err(|e| RecipeError::new_err(e.to_string()))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(canonical_bases, m)?)?;
@@ -181,8 +280,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(seqcol_ancillary, m)?,
         wrap_pyfunction!(named_set_digest, m)?,
         wrap_pyfunction!(apply_operations, m)?,
+        wrap_pyfunction!(compile_recipe, m)?,
     ] {
         m.add_function(f)?;
     }
+    m.add_class::<RecipeTables>()?;
+    m.add("RecipeError", m.py().get_type::<RecipeError>())?;
     Ok(())
 }

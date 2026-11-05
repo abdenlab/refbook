@@ -7,6 +7,7 @@ import engine
 import lock
 import observe
 import pytest
+import reference_engine
 from conftest import step
 
 from refbook import refget
@@ -180,7 +181,7 @@ def test_source_url():
         "?db=nuccore&id=AJ507799.2&rettype=gb&retmode=text")
 
 
-# engine
+# engine (select and name_of: the frozen Python compiler, the core's oracle)
 
 def test_compare_is_order_free():
     got = [{"flavor": "t", "name": "a", "root_id": "A.1", "length": 3, "md5": "m1", "sha512t24u": "s1"},
@@ -219,7 +220,7 @@ PARENTS = {"A1.1": {"chromosome"}, "F1.1": {"chromosome"}, "F2.1": {"scaffold"}}
 
 
 def selected(entries):
-    sel = engine.select({"flavor": "t", "select": entries}, MEMBERS, ROOTS, EXTERNAL, PARENTS)
+    sel = reference_engine.select({"flavor": "t", "select": entries}, MEMBERS, ROOTS, EXTERNAL, PARENTS)
     return [s["root_id"] for s in sel]
 
 
@@ -252,16 +253,16 @@ def test_name_of_precedence():
     rename = {"namespace": "ucsc", "by_role": {"assembled-molecule": "sequence"},
               "map": {"U1.1": "mapped"}, "template": {"GCA_1.1": "t_{accession_v}"}}
     s = {"root_id": "C1.1", "assembly": "GCA_1.1", "member": MEMBERS[0]}
-    assert engine.name_of({**s, "root_id": "U1.1"}, rename) == "mapped"       # map first
-    assert engine.name_of(s, rename) == "t_C1v1"                              # then template
+    assert reference_engine.name_of({**s, "root_id": "U1.1"}, rename) == "mapped"       # map first
+    assert reference_engine.name_of(s, rename) == "t_C1v1"                              # then template
     del rename["template"]
-    assert engine.name_of(s, rename) == "1"                                   # then by_role
-    assert engine.name_of({"root_id": "P1.1", "assembly": "GCA_1.1", "member": MEMBERS[2]},
+    assert reference_engine.name_of(s, rename) == "1"                                   # then by_role
+    assert reference_engine.name_of({"root_id": "P1.1", "assembly": "GCA_1.1", "member": MEMBERS[2]},
                                rename) == "chrUn_P1v1"                             # then namespace
     ext = {"root_id": "IMGTHLA:1:H1", "assembly": "IMGT/HLA 1", "member": None, "external": EXTERNAL[0]}
-    assert engine.name_of(ext, {"namespace": "ucsc", "template": {"IMGT/HLA 1": "HLA-{name}"}}) == "HLA-A*01"
+    assert reference_engine.name_of(ext, {"namespace": "ucsc", "template": {"IMGT/HLA 1": "HLA-{name}"}}) == "HLA-A*01"
     with pytest.raises(SystemExit):
-        engine.name_of({"root_id": "C1.1", "assembly": "GCA_1.1", "member": {**MEMBERS[0], "refseq_accession": None}},
+        reference_engine.name_of({"root_id": "C1.1", "assembly": "GCA_1.1", "member": {**MEMBERS[0], "refseq_accession": None}},
                             {"namespace": "refseq"})
 
 

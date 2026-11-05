@@ -71,6 +71,15 @@ def test_recipes_give_the_release_flavor_sequences(reproduced):
             want[flavor], key=lambda r: r["position"]), flavor
 
 
+def test_the_core_compiles_like_the_frozen_python_engine(reproduced):
+    """Every recipe, compiled by the Rust core, gives the frozen Python
+    compiler's rows: the same names, roots and operations, in the same order."""
+    import reference_engine
+    engine, rs, tables, _ = reproduced
+    for r in rs:
+        assert engine.compile(r, tables) == reference_engine.compile(r, tables), r["flavor"]
+
+
 def test_every_recipe_reproduces_its_observation(reproduced):
     engine, rs, _, outputs = reproduced
     for r in rs:
