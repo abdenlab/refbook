@@ -12,6 +12,7 @@
   --n-text: #a2a7b0;
   --ok: #1d7a3e;
   --bad: #b3261e;
+  --warn: #8a5a00;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
@@ -19,13 +20,13 @@
   :root:not([data-theme="light"]) {
     --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
     --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
-    --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; color-scheme: dark;
+    --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
   --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
-  --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; color-scheme: dark;
+  --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -234,3 +235,14 @@ pre.bases .pos { color: var(--muted); user-select: none; }
   .tagline { display: none; }
   h1 { font-size: 1.45rem; }
 }
+
+/* Identify: the pasted list (or its summary once read), then the tabs that view it. */
+.tabs.strip { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 1.2rem 0 1rem; padding: 0; }
+.pasted { display: flex; gap: 0.6rem; align-items: center; margin: 0.6rem 0 0; padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.whole p { margin: 0 0 0.8rem; padding: 0.55rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.whole.match p { color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
+.whole.match a { color: inherit; font-weight: 600; }
+.identify-page .filebar .exports { flex-wrap: nowrap; }
+.identify-page .filebar select { max-width: 24rem; }
+.warn { color: var(--warn); }

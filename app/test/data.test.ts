@@ -13,7 +13,7 @@ import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
 import { flavors, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/flavors.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
-import { identifyTables, level2, pairs, parseHeader } from "../src/data/identify.ts";
+import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
 
@@ -153,6 +153,36 @@ test("two flavors compared: seqcol's counts and refbook's pairs", { skip }, asyn
   assert.deepEqual([count("same"), count("operations"), count("different"), count("a_only"), count("b_only")], [181, 14, 0, 0, 0]);
   const renamed = pairs([{ ...a[0], name: "one" }], [a[0]]);
   assert.deepEqual(renamed.map((x) => x.kind), ["renamed"]);
+});
+
+
+test("a pasted list against the catalog: matched, ranked and renamed", { skip }, async () => {
+  const t = await identifyTables(cat);
+  const [nalt, set] = await Promise.all([manifest(cat, "grch38-no-alt"), manifest(cat, "hg38-analysis-set")]);
+  const paste = (text: string) => { const h = parseHeader(text); return mine(h.entries, rb.identifySequences(h.entries, t)); };
+  // A .dict with MD5s pins every sequence: exactly its flavor, and 14 off from the one that differs only by IUPAC → N.
+  const dict = paste(sequenceDictionary(nalt));
+  assert.deepEqual(distance(matches(dict, nalt)), { off: 0, missing: 0, extra: 0, unsure: 0 });
+  assert.deepEqual(distance(matches(dict, set)), { off: 14, missing: 14, extra: 0, unsure: 0 });
+  // Names and lengths can't tell those two apart: both fit, every sequence unsure.
+  const sizes = paste(chromSizes(nalt));
+  assert.deepEqual(distance(matches(sizes, nalt)), { off: 0, missing: 0, extra: 0, unsure: 195 });
+  assert.deepEqual(distance(matches(sizes, set)), { off: 0, missing: 0, extra: 0, unsure: 195 });
+  // Renamed, found by root and length; an unknown name is only in the paste; a missing one only in the flavor.
+  const chr1 = nalt.find((r) => r.name === "chr1")!, chr2 = nalt.find((r) => r.name === "chr2")!;
+  const ms = matches(paste(`1\t${chr1.length}\nchr2\t${chr2.length}\nphiX174\t5386\n`), nalt);
+  const kinds = Object.groupBy(ms, (m) => m.kind);
+  assert.deepEqual([kinds.renamed?.length, kinds.unsure?.length, kinds.a_only?.length, kinds.b_only?.length], [1, 1, 1, 193]);
+  // Aliases: into a namespace by root, or into a flavor's names by match.
+  const few = paste(`1\t${chr1.length}\nchr2\t${chr2.length}\nphiX174\t5386\n`);
+  const aliases = await cat.table("aliases.parquet");
+  assert.equal(aliasFile(renameTo(few, "genbank", aliases)), "1\tCM000663.2\nchr2\tCM000664.2\n");
+  const ens = await manifest(cat, "ensembl-grch38-primary");
+  assert.equal(aliasFile(renameAs(matches(few, ens))), "1\t1\nchr2\t2\n");
+  assert.deepEqual(renameAs(matches(few, ens)).at(-1), { from: "phiX174", to: null, how: "not in it", weak: false });
+  // Other names and other bases (hard-masked against IUPAC → N) still rename by root: every Ensembl primary sequence.
+  const dh = paste(sequenceDictionary(await manifest(cat, "hs38dh")));
+  assert.equal(renameAs(matches(dh, ens)).filter((r) => r.to !== null).length, ens.length);
 });
 
 

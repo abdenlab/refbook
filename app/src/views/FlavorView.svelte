@@ -41,17 +41,17 @@
 
 {#await loaded then { f, rows, names, mine, recipe }}
   <section>
-    <p class="crumbs"><a href="#/">Catalog</a> / {label}</p>
+    <p class="crumbs"><a href="#/catalog">Catalog</a> / {label}</p>
     {#if !f || !recipe}
       <h1>No such flavor</h1>
-      <p><a href="#/">Back to the catalog</a></p>
+      <p><a href="#/catalog">Back to the catalog</a></p>
     {:else}
       <h1>{label}</h1>
       <p class="lede">
         {f.assembly}{f.patch_release !== null ? `, patch release ${f.patch_release}` : ""}:
         {n(f.n_sequences)} sequences, {bp(f.total_length)}. Published as {n(mine.length)} file{mine.length === 1 ? "" : "s"}.
       </p>
-      <p><a href={`#/compare?${new URLSearchParams({ a: label, b: "" })}`}>Compare with another flavor or file →</a>
+      <p><a href={`#/identify?${new URLSearchParams({ from: label, tab: "compare" })}`}>Compare with another flavor or file →</a>
         &nbsp; <a href={`#/?${new URLSearchParams({ from: label, tab: "recipe" })}`}>Edit its recipe →</a></p>
 
       <h2>Identity</h2>

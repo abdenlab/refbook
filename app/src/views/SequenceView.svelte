@@ -71,7 +71,7 @@
 </script>
 
 <section>
-  <p class="crumbs"><a href="#/">Catalog</a> / <a href={href("flavor", label)}>{label}</a> / {name}</p>
+  <p class="crumbs"><a href="#/catalog">Catalog</a> / <a href={href("flavor", label)}>{label}</a> / {name}</p>
   {#await loaded then v}
     {#if !v}
       <h1>No such sequence</h1>

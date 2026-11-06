@@ -9,8 +9,8 @@
   import { bytes } from "./format.ts";
   import { route } from "./route.svelte.ts";
   import ErrorBox from "./components/ErrorBox.svelte";
-  import CompareView from "./views/CompareView.svelte";
-  import DesignView from "./views/DesignView.svelte";
+  import CatalogView from "./views/CatalogView.svelte";
+  import EditorView from "./views/EditorView.svelte";
   import IdentifyView from "./views/IdentifyView.svelte";
   import FlavorView from "./views/FlavorView.svelte";
   import SequenceView from "./views/SequenceView.svelte";
@@ -44,9 +44,9 @@
   <a class="brand" href="#/">refbook</a>
   <span class="tagline">Genome: get the book, in any edition.</span>
   <nav>
-    <a href="#/" class:here={!parts.length || parts[0] === "flavor" || parts[0] === "design"}>Catalog</a>
-    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
-    <a href="#/compare" class:here={parts[0] === "compare"}>Compare</a>
+    <a href="#/" class:here={!parts.length || parts[0] === "design"}>Editor</a>
+    <a href="#/catalog" class:here={parts[0] === "catalog" || parts[0] === "flavor"}>Catalog</a>
+    <a href="#/identify" class:here={parts[0] === "identify" || parts[0] === "compare"}>Identify</a>
   </nav>
 </header>
 <main>
@@ -56,15 +56,18 @@
     {#key route.current}
       {#if parts[0] === "flavor" && parts[2] === "seq" && parts[3]}
         <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
+      {:else if parts[0] === "catalog"}
+        <CatalogView {cat} />
       {:else if parts[0] === "identify"}
-        <IdentifyView {cat} />
+        <IdentifyView {cat} query={route.current.query} />
       {:else if parts[0] === "compare"}
-        <CompareView {cat} query={route.current.query} />
+        <!-- The old compare page: A pasted, compared against B. -->
+        <IdentifyView {cat} query={new URLSearchParams({ from: route.current.query.get("a") ?? "", against: route.current.query.get("b") ?? "", tab: "compare" })} />
       {:else if parts[0] === "flavor" && parts[1]}
         <FlavorView {cat} label={parts[1]} />
       {:else}
-        <!-- The catalog and the recipe editor are one page; #/design is its old address. -->
-        <DesignView {cat} query={route.current.query} />
+        <!-- The editor; #/design is its old address. -->
+        <EditorView {cat} query={route.current.query} />
       {/if}
     {/key}
   {:catch e}

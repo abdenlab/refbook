@@ -1,11 +1,11 @@
 <script lang="ts" module>
   // The recipe being edited, kept for the session: leaving for a flavor's page
-  // and coming back (or clicking Catalog) returns to it.
+  // and coming back (or clicking Editor) returns to it.
   let kept: { recipe: string; loaded: string } | null = null;
 </script>
 
 <script lang="ts">
-  // The workbench: the catalog and the recipe editor in one. A shelf on the
+  // The editor: a workbench for recipes, with the catalog to start from. A shelf on the
   // left holds every choice of the recipe, always in the same place (a choice
   // that doesn't apply is disabled, not hidden). The stage on the right shows
   // the catalog (fixed, with how far each flavor is from the recipe), the

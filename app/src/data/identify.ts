@@ -134,3 +134,124 @@ export function pairs(a: ManifestRow[], b: ManifestRow[]): Pair[] {
 /** A collection's level 2, in the given order. */
 export const level2 = (rows: ManifestRow[]) =>
   rb.seqcolLevel2(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u));
+
+// A pasted list against the catalog: identify's answers, compared with a
+// flavor or published file, and renamed into a namespace or a flavor's names.
+
+/** A pasted entry, with what identify made of it: as much as can be compared. */
+export interface Mine {
+  name: string;
+  length: number | null;
+  /** The entry came with a digest (MD5 or SQ.), so its bases are pinned, cataloged or not. */
+  digested: boolean;
+  /** Its SQ. digest: given, or the store's for its MD5. Null without a digest, or for an MD5 the catalog lacks. */
+  sq: string | null;
+  root_id: string | null;
+  evidence: rb.Identity["evidence"];
+}
+
+export function mine(entries: rb.Entry[], ids: rb.Identity[]): Mine[] {
+  return entries.map((e, i) => ({
+    name: e.name ?? "",
+    length: e.length ?? ids[i].length,
+    digested: !!(e.md5 || e.sq),
+    sq: ids[i].sequence ?? e.sq ?? null,
+    root_id: ids[i].root_id,
+    evidence: ids[i].evidence,
+  }));
+}
+
+/** A pasted sequence against a cataloged one: by name, then the rest by sequence (or root and length, without a digest). */
+export type Match =
+  | { kind: "same"; name: string; a: Mine; b: ManifestRow }
+  | { kind: "unsure"; name: string; a: Mine; b: ManifestRow }       // same root and length; no digest to tell the version
+  | { kind: "operations"; name: string; a: Mine; b: ManifestRow }   // same root, other bases
+  | { kind: "different"; name: string; a: Mine; b: ManifestRow }    // another sequence
+  | { kind: "renamed"; a: Mine; b: ManifestRow; by: "digest" | "root_and_length" | "root" }  // root: same root, other bases
+  | { kind: "a_only"; a: Mine }
+  | { kind: "b_only"; b: ManifestRow };
+
+export function matches(a: Mine[], b: ManifestRow[]): Match[] {
+  const byName = new Map(b.map((r) => [r.name, r]));
+  const out: Match[] = [];
+  const restA: Mine[] = [];
+  const used = new Set<string>();
+  const fits = (x: Mine, y: ManifestRow) => x.root_id === y.root_id && (x.length === null || x.length === y.length);
+  for (const x of a) {
+    const y = byName.get(x.name);
+    if (!y || used.has(y.name)) { restA.push(x); continue; }
+    used.add(y.name);
+    const kind = x.digested
+      ? x.sq === y.sha512t24u ? "same" : x.root_id === y.root_id ? "operations" : "different"
+      : fits(x, y) ? "unsure" : "different";
+    out.push({ kind, name: x.name, a: x, b: y });
+  }
+  const rest = b.filter((r) => !used.has(r.name));
+  const bySq = new Map(rest.map((r) => [r.sha512t24u, r]));
+  const byRoot = Map.groupBy(rest, (r) => r.root_id);
+  const taken = new Set<ManifestRow>();
+  const take = (y: ManifestRow) => {
+    taken.add(y);
+    bySq.delete(y.sha512t24u);
+    const g = byRoot.get(y.root_id)!;
+    g.splice(g.indexOf(y), 1);
+  };
+  for (const x of restA) {
+    const exact = x.sq ? bySq.get(x.sq) : undefined;
+    const y = exact ?? byRoot.get(x.root_id ?? "")?.find((r) => fits(x, r));
+    if (y) { out.push({ kind: "renamed", a: x, b: y, by: exact ? "digest" : x.digested ? "root" : "root_and_length" }); take(y); }
+    else out.push({ kind: "a_only", a: x });
+  }
+  for (const y of rest) if (!taken.has(y)) out.push({ kind: "b_only", b: y });
+  return out;
+}
+
+/**
+ * How far a pasted list is from a flavor: of yours, those not in it as they
+ * are (missing); of its, those not in yours (extra); and of the matches,
+ * those only a digest could confirm (unsure). Off is missing and extra.
+ */
+export function distance(ms: Match[]): { off: number; missing: number; extra: number; unsure: number } {
+  let missing = 0, extra = 0, unsure = 0;
+  for (const m of ms) {
+    if (m.kind === "unsure" || (m.kind === "renamed" && m.by === "root_and_length")) unsure++;
+    if (m.kind === "b_only") extra++;
+    else if (m.kind !== "same" && m.kind !== "unsure") missing++;
+  }
+  return { off: missing + extra, missing, extra, unsure };
+}
+
+/** A line of an alias file: a pasted name and what it becomes, or why it can't. */
+export interface Rename { from: string; to: string | null; how: string; weak: boolean }
+
+const HOW: Record<rb.Identity["evidence"], string> = {
+  digest: "by digest", name_and_length: "by name and length", name: "by name only", nothing: "",
+};
+
+/** Each pasted name in a namespace, by its root (from the aliases table). */
+export function renameTo(ms: Mine[], namespace: string, aliases: { root_id: string; namespace: string; alias: string }[]): Rename[] {
+  const of = new Map(aliases.filter((a) => a.namespace === namespace).map((a) => [a.root_id, a.alias]));
+  return ms.map((x) => {
+    if (!x.root_id) return { from: x.name, to: null, how: "not identified", weak: false };
+    const to = of.get(x.root_id) ?? null;
+    return { from: x.name, to, how: to ? HOW[x.evidence] : `${x.root_id} has no ${namespace} name`, weak: x.evidence === "name" };
+  });
+}
+
+/** Each pasted name as a flavor (or file) names the same sequence. */
+export function renameAs(ms: Match[]): Rename[] {
+  const out: Rename[] = [];
+  for (const m of ms) {
+    if (m.kind === "b_only") continue;
+    const from = m.a.name, weak = m.a.evidence === "name";
+    if (m.kind === "same" || m.kind === "unsure") out.push({ from, to: m.b.name, how: m.kind === "same" ? "by digest" : "same root and length", weak });
+    else if (m.kind === "renamed") out.push({ from, to: m.b.name, how: { digest: "by digest", root_and_length: "same root and length", root: "same root, other bases" }[m.by], weak });
+    else if (m.kind === "operations") out.push({ from, to: m.b.name, how: "same root, other bases", weak });
+    else if (m.kind === "different") out.push({ from, to: null, how: "the name is used for another sequence", weak: false });
+    else out.push({ from, to: null, how: "not in it", weak: false });
+  }
+  return out;
+}
+
+/** An alias file: from and to, tab-separated, one rename a line (as bcftools --rename-chrs reads). */
+export const aliasFile = (rs: Rename[]) => rs.filter((r) => r.to !== null).map((r) => `${r.from}\t${r.to}\n`).join("");
