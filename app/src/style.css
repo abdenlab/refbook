@@ -14,6 +14,8 @@
   --bad: #b3261e;
   --warn: #8a5a00;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* The mark's colours (docs/assets/make_mark.py has the same). */
+  --mark-spine: #9097a1; --mark-band: #262a30; --mark-ed: #1f5fa8; --mark-ed-band: #0f3563; --mark-shelf: #1d1f23;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,12 +23,14 @@
     --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
     --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
     --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
+    --mark-spine: #a3a9b2; --mark-band: #2a2e34; --mark-ed: #7fb2ec; --mark-ed-band: #2c5c93; --mark-shelf: #e6e6e3;
   }
 }
 :root[data-theme="dark"] {
   --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
   --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
   --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
+    --mark-spine: #a3a9b2; --mark-band: #2a2e34; --mark-ed: #7fb2ec; --mark-ed-band: #2c5c93; --mark-shelf: #e6e6e3;
 }
 
 * { box-sizing: border-box; }
@@ -43,7 +47,12 @@ code.small { font-size: 0.8em; color: var(--muted); }
   display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
   padding: 0.9rem 16px; border-bottom: 1px solid var(--line); background: var(--surface);
 }
-.brand { font-weight: 700; font-size: 1.15rem; color: var(--text); letter-spacing: -0.01em; }
+.brand { font-weight: 700; font-size: 1.15rem; color: var(--text); letter-spacing: -0.01em; display: inline-flex; gap: 0.45rem; align-items: center; align-self: center; }
+.brand:hover { text-decoration: none; }
+.brand .mark { flex: none; }
+.top nav { align-items: center; }
+.top nav button.theme { border: none; background: none; color: var(--muted); padding: 0.25rem; font-size: 1rem; line-height: 1; display: inline-flex; }
+.top nav button.theme:hover { color: var(--text); }
 .tagline { color: var(--muted); font-size: 0.9rem; }
 .top nav { margin-left: auto; display: flex; gap: 1rem; font-size: 0.95rem; }
 .top nav a { color: var(--muted); }

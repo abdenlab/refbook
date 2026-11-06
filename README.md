@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/refbook-mark-dark.svg">
+  <img src="docs/assets/refbook-mark.svg" alt="refbook's mark: a shelf of book spines banded like chromosomes" width="72" height="72">
+</picture>
+
 # refbook
 
 **A catalog of human reference genome sequences, and a library to identify,

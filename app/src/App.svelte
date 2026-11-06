@@ -8,6 +8,9 @@
   import { measure, onMeasure, type Tally } from "./data/meter.ts";
   import { bytes } from "./format.ts";
   import { route } from "./route.svelte.ts";
+  import { LABEL, NEXT, setTheme, theme } from "./theme.svelte.ts";
+  import Icon from "./components/Icon.svelte";
+  import Mark from "./components/Mark.svelte";
   import ErrorBox from "./components/ErrorBox.svelte";
   import CatalogView from "./views/CatalogView.svelte";
   import EditorView from "./views/EditorView.svelte";
@@ -41,12 +44,16 @@
 </script>
 
 <header class="top">
-  <a class="brand" href="#/">refbook</a>
+  <a class="brand" href="#/"><Mark />refbook</a>
   <span class="tagline">Genome: get the book, in any edition.</span>
   <nav>
     <a href="#/" class:here={!parts.length || parts[0] === "design"}>Editor</a>
     <a href="#/catalog" class:here={parts[0] === "catalog" || parts[0] === "flavor"}>Catalog</a>
     <a href="#/identify" class:here={parts[0] === "identify" || parts[0] === "compare"}>Identify</a>
+    <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
+            aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
+      <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
+    </button>
   </nav>
 </header>
 <main>

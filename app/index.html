@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>refbook</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // The theme chosen in the header (light or dark), set before the page paints; none means follow the system.
+      try { const t = localStorage.getItem("refbook-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+    </script>
     <meta name="description" content="A catalog of human reference genome sequences: every published GRCh38, how it was made, and its bases." />
   </head>
   <body>

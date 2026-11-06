@@ -1,0 +1,93 @@
+"""Write refbook's mark (study D: the leaning shelf with centromere waists) as SVG files.
+
+Writes docs/assets/refbook-mark{,-dark,-mono}.svg, app/public/favicon.svg and
+app/src/components/Mark.svelte. Usage: python docs/assets/make_mark.py .
+"""
+import pathlib
+import sys
+
+R, D, H, W = 1.1, 0.5, 1.0, 4.8  # corner radius, waist depth, waist half-height, spine width
+f = lambda v: f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def spine(x, t, b, c):
+    """A spine: book corners, a centromere waist at c on both sides."""
+    return (f"M{f(x+R)} {f(t)}H{f(x+W-R)}Q{f(x+W)} {f(t)} {f(x+W)} {f(t+R)}V{f(c-H)}Q{f(x+W-2*D)} {f(c)} {f(x+W)} {f(c+H)}"
+            f"V{f(b-R)}Q{f(x+W)} {f(b)} {f(x+W-R)} {f(b)}H{f(x+R)}Q{f(x)} {f(b)} {f(x)} {f(b-R)}V{f(c+H)}"
+            f"Q{f(x+2*D)} {f(c)} {f(x)} {f(c-H)}V{f(t+R)}Q{f(x)} {f(t)} {f(x+R)} {f(t)}Z")
+
+
+# x, top, bottom, centromere, the edition (accent) or not, bands (y, height)
+BOOKS = [
+    (2.5, 6, 27, 11.5, False, [(8.2, 1.4), (14.5, 2.2), (20.5, 2.5)]),
+    (8.6, 3.5, 27, 10, True, [(6, 1.4), (13, 2.4), (18.6, 1.1), (22, 2.3)]),
+    (14.7, 10, 27, 14.5, False, [(11.6, 1.2), (17.6, 2.2), (22.4, 2.2)]),
+    (26.15, 7, 27, 12.1, False, [(8.8, 1.4), (15.2, 2.4), (21, 2.6)]),
+]
+# The fourth leans 22° back on its bottom-left corner: dropped 0.33 so its rounded corner meets the others' bottom
+# line, and moved 0.32 right for a 0.3-unit gap to the third book's corner.
+LEAN = "translate(0.32 0.33) rotate(-22 26.15 27)"
+SHELF = '<rect x="1.5" y="27.4" width="29.6" height="1.7" rx="0.85" fill="{shelf}"/>'
+
+
+def mark(c, ids="rbm", mono=False):
+    """The mark's elements. c maps spine, band, ed, ed_band, shelf to fills; mono cuts the bands out instead.
+    ids prefixes the clip and mask ids: unique per file, so several marks can share one HTML page."""
+    defs, body = [], [SHELF.format(shelf=c["shelf"])]
+    for k, (x, t, b, cen, ed, bands) in enumerate(BOOKS):
+        clip = f"{ids}-s{k}"
+        if mono:
+            # The spine in one colour, its bands cut out (a mask), so the ground shows through.
+            defs.append(f'<mask id="{clip}" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">'
+                        f'<path d="{spine(x, t, b, cen)}" fill="#fff"/>'
+                        + "".join(f'<rect x="{x}" y="{y}" width="{W}" height="{h}" fill="#000"/>' for y, h in bands)
+                        + "</mask>")
+            g = f'<rect x="{x}" y="{t}" width="{W}" height="{f(b-t)}" fill="{c["spine"]}" mask="url(#{clip})"/>'
+        else:
+            defs.append(f'<clipPath id="{clip}"><path d="{spine(x, t, b, cen)}"/></clipPath>')
+            fill, band = (c["ed"], c["ed_band"]) if ed else (c["spine"], c["band"])
+            g = (f'<g clip-path="url(#{clip})"><rect x="{x}" y="{t}" width="{W}" height="{f(b-t)}" fill="{fill}"/>'
+                 + "".join(f'<rect x="{x}" y="{y}" width="{W}" height="{h}" fill="{band}"/>' for y, h in bands) + "</g>")
+        body.append(f'<g transform="{LEAN}">{g}</g>' if k == 3 else g)
+    return "<defs>" + "".join(defs) + "</defs>" + "".join(body)
+
+
+LIGHT = dict(spine="#9097a1", band="#262a30", ed="#1f5fa8", ed_band="#0f3563", shelf="#1d1f23")
+DARK = dict(spine="#a3a9b2", band="#2a2e34", ed="#7fb2ec", ed_band="#2c5c93", shelf="#e6e6e3")
+CSS = dict(spine="var(--mark-spine)", band="var(--mark-band)", ed="var(--mark-ed)", ed_band="var(--mark-ed-band)",
+           shelf="var(--mark-shelf)")
+
+
+def svg(inner, extra=""):
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"{extra}>{inner}</svg>\n'
+
+
+def adaptive():
+    """For the favicon: the light colours, and the dark ones when the browser is dark."""
+    cls = {k: f"var(--{k.replace('_', '-')})" for k in LIGHT}
+    root = ";".join(f"--{k.replace('_', '-')}:{v}" for k, v in LIGHT.items())
+    dark = ";".join(f"--{k.replace('_', '-')}:{v}" for k, v in DARK.items())
+    style = f"<style>svg{{{root}}}@media (prefers-color-scheme:dark){{svg{{{dark}}}}}</style>"
+    return svg(style + mark(cls, ids="rbm-f"))
+
+
+def main(root: pathlib.Path):
+    assets = root / "docs" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "refbook-mark.svg").write_text(svg(mark(LIGHT, ids="rbm-l")))
+    (assets / "refbook-mark-dark.svg").write_text(svg(mark(DARK, ids="rbm-d")))
+    (assets / "refbook-mark-mono.svg").write_text(svg(mark(dict(LIGHT, spine="#1d1f23"), ids="rbm-m", mono=True)))
+    (root / "app" / "public").mkdir(exist_ok=True)
+    (root / "app" / "public" / "favicon.svg").write_text(adaptive())
+    # The app's header mark: its colours are the app's theme tokens (--mark-*), so it follows the theme toggle.
+    (root / "app" / "src" / "components" / "Mark.svelte").write_text(
+        "<script lang=\"ts\">\n"
+        "  // refbook's mark: a shelf of editions, spines banded like chromosomes, one in the accent (the edition you built).\n"
+        "  // Generated by docs/assets/make_mark.py, with the docs/assets SVGs; colours from the --mark-* tokens in style.css.\n"
+        "  let { size = 26 }: { size?: number } = $props();\n"
+        "</script>\n\n"
+        f'<svg class="mark" viewBox="0 0 32 32" width={{size}} height={{size}} aria-hidden="true">{mark(CSS, ids="hdr")}</svg>\n')
+
+
+if __name__ == "__main__":
+    main(pathlib.Path(sys.argv[1]))
