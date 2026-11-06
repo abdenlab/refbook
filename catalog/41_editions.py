@@ -1,24 +1,24 @@
-"""Build the flavors, the targets that reproduce them, and each flavor's manifest.
+"""Build the editions, the targets that reproduce them, and each edition's manifest.
 
-A flavor is a named sequence set that refbook catalogs; a target is a file
+An edition is a named sequence set that refbook catalogs; a target is a file
 that reproduces one (see docs/GLOSSARY.md). Reads the reproduced targets
-(flavor_sequences.parquet, from 40_recipes.py), the
+(reproduced.parquet, from 40_recipes.py), the
 recipes, the catalog tables, and the curated labels in
-catalog/assemblies/<assembly>/flavors.json, and
-writes to build/grch38/41_flavors/:
+catalog/assemblies/<assembly>/editions.json, and
+writes to build/grch38/41_editions/:
 
-- flavors.parquet     one row per flavor: label, id (the named-sequence-set
+- editions.parquet     one row per edition: label, id (the named-sequence-set
                       digest, refbook.seqcol.named_set_digest), the seqcol
                       digest of its manifest, counts, and the facets generated
                       from its recipe and manifest: assembly, patch_release,
                       contents (sequences by kind), excluded, operations,
                       naming, plus the recipe itself (select, mask, alphabet,
                       rename)
-- manifests.parquet   one row per sequence of each flavor, in canonical order
+- manifests.parquet   one row per sequence of each edition, in canonical order
                       (by name, code point): name, root_id, operations (the
                       nucleotide operations applied to the root), length, MD5,
                       SQ. digest
-- targets.parquet     one row per target: its flavor, publisher, alias (the
+- targets.parquet     one row per target: its edition, publisher, alias (the
                       publisher's name for the file), URLs, the exact file it
                       was checked against (sha256, size and Last-Modified from
                       the targets lock) and the evidence (FASTA content or
@@ -31,7 +31,7 @@ writes to build/grch38/41_flavors/:
                       derivation (root_id, operations) used to build it:
                       fewest operations, then sorted operation names, then root
 - derivations.parquet every known way to make each sequence: sha512t24u,
-                      root_id, operations, and the flavors whose recipes give it
+                      root_id, operations, and the editions whose recipes give it
                       (none for a root as submitted)
 - collections/<digest>.json  the level-2 seqcol representation of every
                       manifest and target collection, with the ancillary
@@ -40,10 +40,10 @@ writes to build/grch38/41_flavors/:
                       digest
 
 Fails unless the targets that share a named-sequence-set digest are exactly
-the targets flavors.json lists under one label, and unless rebuilding each
+the targets editions.json lists under one label, and unless rebuilding each
 manifest row from its root and operations gives its digests.
 
-Usage: uv run python -I catalog/41_flavors.py [--assembly A] [--raw DIR] [--build DIR]
+Usage: uv run python -I catalog/41_editions.py [--assembly A] [--raw DIR] [--build DIR]
 """
 
 import argparse
@@ -63,7 +63,7 @@ import layout
 from observe import read_provenance
 
 GRCH38 = layout.GRCH38
-STEP = "41_flavors"
+STEP = "41_editions"
 OPERATION_OF_ALPHABET = "iupac_to_n"
 
 
@@ -90,7 +90,7 @@ def naming(rename: dict) -> str:
 
 
 def excluded(recipe: dict, members: list[dict], selected: set[str]) -> list[str]:
-    """Members an entry's assembly and roles cover that the flavor leaves out,
+    """Members an entry's assembly and roles cover that the edition leaves out,
     e.g. patches placed on alt scaffolds, by role and reason."""
     out = Counter()
     for entry in recipe["select"]:
@@ -122,20 +122,20 @@ def main() -> None:
 
 def run(args, build: Path, out: Path) -> None:
 
-    recipes = {r["flavor"]: r for r in layout.recipes(args.assembly)}
-    curated = json.loads(layout.flavors_file(args.assembly).read_text())["flavors"]
+    recipes = {r["target"]: r for r in layout.recipes(args.assembly)}
+    curated = json.loads(layout.editions_file(args.assembly).read_text())["editions"]
     label_of = {t: f["label"] for f in curated for t in f["targets"]}
     target_meta = {t: m for f in curated for t, m in f["targets"].items()}
     if len({f["label"] for f in curated}) != len(curated):
-        sys.exit("flavors.json: a label is used twice")
+        sys.exit("editions.json: a label is used twice")
 
     rows = defaultdict(list)
-    for r in pq.read_table(layout.path(build, "flavor_sequences.parquet")).to_pylist():
-        rows[r["flavor"]].append(r)  # "flavor" here is still the target
+    for r in pq.read_table(layout.path(build, "reproduced.parquet")).to_pylist():
+        rows[r["target"]].append(r)
     for v in rows.values():
         v.sort(key=lambda r: r["position"])
     if set(rows) != set(recipes) or set(rows) != set(label_of):
-        sys.exit(f"targets differ between flavor_sequences, recipes and flavors.json: "
+        sys.exit(f"targets differ between reproduced, recipes and editions.json: "
                  f"{sorted(set(rows) ^ set(label_of))}")
 
     # Group targets by their named sequence set, and check the curation.
@@ -161,7 +161,7 @@ def run(args, build: Path, out: Path) -> None:
 
     out_dir = out / "collections"
     out_dir.mkdir()
-    flavors, manifests, targets, orders = [], [], [], []
+    editions, manifests, targets, orders = [], [], [], []
     for digest, ts in sorted(by_digest.items(), key=lambda kv: label_of[kv[1][0]]):
         label = label_of[ts[0]]
         first = next(t for t in curated_targets(curated, label) if t in ts)
@@ -183,7 +183,7 @@ def run(args, build: Path, out: Path) -> None:
                     sys.exit(f"{label} {r['name']}: operations {ops} don't give its digests")
             elif (r["md5"], r["sha512t24u"]) != (tables["roots"][acc]["md5"], tables["roots"][acc]["sha512t24u"]):
                 sys.exit(f"{label} {r['name']}: differs from root {acc} with no operations")
-            manifest.append({"flavor": label, "name": r["name"], "root_id": acc, "operations": ops,
+            manifest.append({"edition": label, "name": r["name"], "root_id": acc, "operations": ops,
                              "length": r["length"], "md5": r["md5"], "sha512t24u": r["sha512t24u"]})
         manifests += manifest
         names = [r["name"] for r in manifest]
@@ -195,8 +195,8 @@ def run(args, build: Path, out: Path) -> None:
         patch_releases = [m["release"] for m in members if m["genbank_accession"] in
                           {r["root_id"] for r in manifest} and m["role"] in ("fix-patch", "novel-patch")]
         selected = {r["root_id"] for r in manifest}
-        flavors.append({
-            "flavor": label, "id": digest, "seqcol_digest": top,
+        editions.append({
+            "edition": label, "id": digest, "seqcol_digest": top,
             "n_sequences": len(manifest), "total_length": sum(r["length"] for r in manifest),
             "assembly": "GRCh38",
             "patch_release": max(patch_releases) if patch_releases else None,
@@ -216,7 +216,7 @@ def run(args, build: Path, out: Path) -> None:
                                                [x["sha512t24u"] for x in v], out_dir)
             prov = read_provenance(layout.path(build, f"observed/{t}.parquet"))
             targets.append({
-                "target": t, "flavor": label, **target_meta[t],
+                "target": t, "edition": label, **target_meta[t],
                 "published": r["published"], "checked_against": prov["url"],
                 "evidence": prov["evidence"], "checked_sha256": prov["sha256"],
                 "checked_bytes": int(prov["bytes"]), "checked_last_modified": prov["last_modified"],
@@ -227,26 +227,26 @@ def run(args, build: Path, out: Path) -> None:
             orders += [{"target": t, "position": x["position"], "name": x["name"]} for x in v]
 
     sequences, derivations = sequence_store(manifests, tables["roots"])
-    for name, table in (("flavors", flavors), ("manifests", manifests), ("targets", targets),
+    for name, table in (("editions", editions), ("manifests", manifests), ("targets", targets),
                         ("target_sequences", orders), ("sequences", sequences),
                         ("derivations", derivations)):
         pq.write_table(pa.Table.from_pylist(table), out / f"{name}.parquet", compression="zstd")
-    print(f"{len(flavors)} flavors, {len(targets)} targets, {len(manifests)} manifest rows",
+    print(f"{len(editions)} editions, {len(targets)} targets, {len(manifests)} manifest rows",
           file=sys.stderr)
-    for f in flavors:
-        print(f"  {f['flavor']:<30} {f['id']}  {f['n_targets']} target(s)", file=sys.stderr)
+    for f in editions:
+        print(f"  {f['edition']:<30} {f['id']}  {f['n_targets']} target(s)", file=sys.stderr)
 
 
 def sequence_store(manifests: list[dict], roots: dict) -> tuple[list[dict], list[dict]]:
     """The sequences and derivations tables: every root as submitted, and every
     derivative the manifests use, with each way it is made."""
-    ways = defaultdict(lambda: defaultdict(set))  # sq -> (root, operations) -> flavors
+    ways = defaultdict(lambda: defaultdict(set))  # sq -> (root, operations) -> editions
     info = {}
     for acc, r in roots.items():
         ways[r["sha512t24u"]][acc, ()]
         info[r["sha512t24u"]] = (r["md5"], r["length"])
     for r in manifests:
-        ways[r["sha512t24u"]][r["root_id"], tuple(r["operations"])].add(r["flavor"])
+        ways[r["sha512t24u"]][r["root_id"], tuple(r["operations"])].add(r["edition"])
         info[r["sha512t24u"]] = (r["md5"], r["length"])
     sequences, derivations = [], []
     for sq in sorted(ways):
@@ -257,7 +257,7 @@ def sequence_store(manifests: list[dict], roots: dict) -> tuple[list[dict], list
                           "n_derivations": len(ways[sq])})
         for (acc, o), fl in sorted(ways[sq].items()):
             derivations.append({"sha512t24u": sq, "root_id": acc, "operations": list(o),
-                                "flavors": sorted(fl)})
+                                "editions": sorted(fl)})
     return sequences, derivations
 
 

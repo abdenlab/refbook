@@ -3,7 +3,7 @@
 // per sequence.
 import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
-import type { ManifestRow } from "./flavors.ts";
+import type { ManifestRow } from "./editions.ts";
 import { measure } from "./meter.ts";
 
 export interface Header { format: string; entries: rb.Entry[] }
@@ -84,7 +84,7 @@ export function identifyTables(cat: Catalog): Promise<rb.IdentifyTables> {
     const [sequences, aliases, manifests] = await Promise.all([
       cat.table<{ sha512t24u: string; md5: string; length: number; root_id: string; operations: string[] }>("sequences.parquet"),
       cat.table<{ root_id: string; alias: string }>("aliases.parquet"),
-      cat.table<{ flavor: string; name: string; sha512t24u: string }>("manifests.parquet"),
+      cat.table<{ edition: string; name: string; sha512t24u: string }>("manifests.parquet"),
     ]);
     // Every root is in the store as itself (no operations): its length is the root's.
     const roots = sequences.filter((s) => s.operations.length === 0).map((s) => ({ root_id: s.root_id, length: s.length }));
@@ -92,7 +92,7 @@ export function identifyTables(cat: Catalog): Promise<rb.IdentifyTables> {
       sequences: sequences.map((s) => ({ ...s, operations: [...s.operations] })),
       roots,
       aliases: aliases.map((a) => ({ root_id: a.root_id, alias: a.alias })),
-      manifests: manifests.map((m) => ({ flavor: m.flavor, name: m.name, sha512t24u: m.sha512t24u })),
+      manifests: manifests.map((m) => ({ edition: m.edition, name: m.name, sha512t24u: m.sha512t24u })),
     });
   }));
 }
@@ -136,7 +136,7 @@ export const level2 = (rows: ManifestRow[]) =>
   rb.seqcolLevel2(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u));
 
 // A pasted list against the catalog: identify's answers, compared with a
-// flavor or published file, and renamed into a namespace or a flavor's names.
+// edition or published file, and renamed into a namespace or an edition's names.
 
 /** A pasted entry, with what identify made of it: as much as can be compared. */
 export interface Mine {
@@ -207,7 +207,7 @@ export function matches(a: Mine[], b: ManifestRow[]): Match[] {
 }
 
 /**
- * How far a pasted list is from a flavor: of yours, those not in it as they
+ * How far a pasted list is from an edition: of yours, those not in it as they
  * are (missing); of its, those not in yours (extra); and of the matches,
  * those only a digest could confirm (unsure). Off is missing and extra.
  */
@@ -238,7 +238,7 @@ export function renameTo(ms: Mine[], namespace: string, aliases: { root_id: stri
   });
 }
 
-/** Each pasted name as a flavor (or file) names the same sequence. */
+/** Each pasted name as an edition (or file) names the same sequence. */
 export function renameAs(ms: Match[]): Rename[] {
   const out: Rename[] = [];
   for (const m of ms) {

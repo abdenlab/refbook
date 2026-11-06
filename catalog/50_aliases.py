@@ -15,13 +15,13 @@ Writes to build/grch38/50_aliases/:
                     `aliases` of refget's /sequence/:id/metadata. A root as
                     submitted has all its root's aliases. A derivative (a root
                     with nucleotide operations applied) has only the names
-                    flavors give it that are names of its root (UCSC, GRC,
+                    editions give it that are names of its root (UCSC, GRC,
                     Ensembl, IMGT allele), never an accession: an INSDC or
                     RefSeq accession identifies the bases as submitted.
                     Namespaces become refget naming authorities (genbank ->
                     insdc; both IMGT namespaces -> imgt.hla).
 
-(Flavors, targets and seqcol documents are built by 41_flavors.py.)
+(Editions, targets and seqcol documents are built by 41_editions.py.)
 
 Usage: uv run python -I catalog/50_aliases.py [--assembly A] [--raw DIR] [--build DIR]
 """
@@ -55,9 +55,9 @@ def main() -> None:
 
 def run(raw: Path, build: Path, out: Path) -> None:
 
-    flavors = defaultdict(list)
-    for s in pq.read_table(layout.path(build, "flavor_sequences.parquet")).to_pylist():
-        flavors[s["flavor"]].append(s)
+    targets = defaultdict(list)
+    for s in pq.read_table(layout.path(build, "reproduced.parquet")).to_pylist():
+        targets[s["target"]].append(s)
 
     # Aliases.
     aliases = set()
@@ -84,7 +84,7 @@ def run(raw: Path, build: Path, out: Path) -> None:
             aliases.add((rec["genbank"], "ensembl", rec["ensembl"], "UCSC hg38.p14.chromAlias.txt"))
     seen = {}
     for f in ("Ensembl116_primary_assembly", "Ensembl116_toplevel"):
-        for s in flavors.get(f, []):
+        for s in targets.get(f, []):
             seen[s["root_id"]] = s["name"]
     mismatch = {a: (ensembl.get(a), n) for a, n in seen.items() if ensembl.get(a) not in (None, n)}
     if mismatch:
@@ -93,7 +93,7 @@ def run(raw: Path, build: Path, out: Path) -> None:
     for a, n in seen.items():
         if a not in ensembl:
             aliases.add((a, "ensembl", n, "Ensembl 116 FASTA (reproduced)"))
-    for s in flavors.get("GRCh38_full_plus_hs38d1_analysis_set", []):
+    for s in targets.get("GRCh38_full_plus_hs38d1_analysis_set", []):
         if s["root_id"] == "AJ507799.2" or s["name"].endswith("_decoy"):
             aliases.add((s["root_id"], "ucsc", s["name"], "GRC analysis sets (reproduced)"))
     ext = build / "11_external_roots" / "roots_external.parquet"
@@ -122,9 +122,9 @@ def sequence_aliases(build: Path, aliases: set) -> set[tuple[str, str, str]]:
     by_root = defaultdict(set)
     for root, ns, alias, _ in aliases:
         by_root[root].add((ns, alias))
-    flavor_names = defaultdict(set)
+    edition_names = defaultdict(set)
     for m in pq.read_table(layout.path(build, "manifests.parquet"), columns=["name", "sha512t24u"]).to_pylist():
-        flavor_names[m["sha512t24u"]].add(m["name"])
+        edition_names[m["sha512t24u"]].add(m["name"])
     out = set()
     for s in pq.read_table(layout.path(build, "sequences.parquet"),
                            columns=["sha512t24u", "root_id", "operations"]).to_pylist():
@@ -132,7 +132,7 @@ def sequence_aliases(build: Path, aliases: set) -> set[tuple[str, str, str]]:
         if not s["operations"]:
             out |= {(sq, AUTHORITY[ns], alias) for ns, alias in by_root[root]}
         else:
-            names = flavor_names[sq]
+            names = edition_names[sq]
             out |= {(sq, AUTHORITY[ns], alias) for ns, alias in by_root[root] if ns in NAMES and alias in names}
     return out
 

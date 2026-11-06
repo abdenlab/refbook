@@ -1,8 +1,8 @@
 {
-  "_doc": "Illumina iGenomes (ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens), checked against each genome.dict (observe_dict.py). Each is an existing flavor: NCBI/GRCh38 = GRC no_alt analysis set (its genome.fa.fai is byte-identical to NCBI's); NCBI/GRCh38Decoy = no_alt_plus_hs38d1 with the decoys named by bare accession; UCSC/hg38 = UCSC hg38.analysisSet; GATK/GRCh38 = Broad Homo_sapiens_assembly38 (.dict and .fai byte-identical by MD5). Applied by catalog/40_recipes.py.",
+  "_doc": "Illumina iGenomes (ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens), checked against each genome.dict (observe_dict.py). Each is an existing edition: NCBI/GRCh38 = GRC no_alt analysis set (its genome.fa.fai is byte-identical to NCBI's); NCBI/GRCh38Decoy = no_alt_plus_hs38d1 with the decoys named by bare accession; UCSC/hg38 = UCSC hg38.analysisSet; GATK/GRCh38 = Broad Homo_sapiens_assembly38 (.dict and .fai byte-identical by MD5). Applied by catalog/40_recipes.py.",
   "recipes": [
     {
-      "flavor": "iGenomes_NCBI_GRCh38",
+      "target": "iGenomes_NCBI_GRCh38",
       "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38/Sequence/WholeGenomeFasta/genome.fa",
       "select": [
         {
@@ -34,7 +34,7 @@
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38/Sequence/WholeGenomeFasta/genome.dict"
     },
     {
-      "flavor": "iGenomes_NCBI_GRCh38Decoy",
+      "target": "iGenomes_NCBI_GRCh38Decoy",
       "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38Decoy/Sequence/WholeGenomeFasta/genome.fa",
       "select": [
         {
@@ -75,7 +75,7 @@
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/GRCh38Decoy/Sequence/WholeGenomeFasta/genome.dict"
     },
     {
-      "flavor": "iGenomes_UCSC_hg38",
+      "target": "iGenomes_UCSC_hg38",
       "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.fa",
       "select": [
         {
@@ -110,7 +110,7 @@
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.dict"
     },
     {
-      "flavor": "iGenomes_GATK_GRCh38",
+      "target": "iGenomes_GATK_GRCh38",
       "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta",
       "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.dict",
       "select": [

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  // The pasted list, kept for the session: leaving for a flavor's page and
+  // The pasted list, kept for the session: leaving for an edition's page and
   // coming back finds it still here.
   let kept: { text: string; source: string | null } | null = null;
 </script>
@@ -7,13 +7,13 @@
 <script lang="ts">
   // A pasted sequence list (or a file from the catalog), and three views of
   // it below: what each sequence is (refbook-core identify, in the browser),
-  // how it compares with a flavor or published file, and an alias file that
-  // renames it into a namespace or a flavor's names. Nothing leaves the browser.
+  // how it compares with an edition or published file, and an alias file that
+  // renames it into a namespace or an edition's names. Nothing leaves the browser.
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
   import { inOrder, sequenceDictionary } from "../data/exports.ts";
-  import { flavors, manifest, OPERATION_LABELS, targetOrder, targets, type ManifestRow } from "../data/flavors.ts";
+  import { editions, manifest, OPERATION_LABELS, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
   import {
     aliasFile, distance, identifyTables, level2, matches, mine, parseHeader, renameAs, renameTo,
     type Header, type Match, type Mine,
@@ -35,14 +35,14 @@
 
   const ready = measure("identify", async () => {
     const [tables, fs, ts, all, aliases] = await Promise.all([
-      identifyTables(cat), flavors(cat), targets(cat), cat.table<ManifestRow>("manifests.parquet"),
+      identifyTables(cat), editions(cat), targets(cat), cat.table<ManifestRow>("manifests.parquet"),
       cat.table<{ root_id: string; namespace: string; alias: string }>("aliases.parquet"),
     ]);
     const present = new Set(aliases.map((a) => a.namespace));
     return {
       tables, fs, ts, aliases,
-      manifests: Map.groupBy(all, (r) => r.flavor),
-      byFlavor: Map.groupBy(ts, (t) => t.flavor),
+      manifests: Map.groupBy(all, (r) => r.edition),
+      byEdition: Map.groupBy(ts, (t) => t.edition),
       namespaces: NAMESPACES.filter(([k]) => present.has(k)),
     };
   });
@@ -91,11 +91,11 @@
     }
   }
 
-  /** A flavor's sequences by name, or a published file's in its own order. */
+  /** An edition's sequences by name, or a published file's in its own order. */
   async function rowsOf(choice: string): Promise<ManifestRow[]> {
     const t = (await targets(cat)).find((x) => x.target === choice);
     if (!t) return manifest(cat, choice);
-    return inOrder(await manifest(cat, t.flavor), await targetOrder(cat, t.target));
+    return inOrder(await manifest(cat, t.edition), await targetOrder(cat, t.target));
   }
 
   /** Paste a file from the catalog: its .dict, with MD5s, in its order. */
@@ -130,17 +130,17 @@
   const tally = $derived(Object.groupBy(rows, (r) => r.id.evidence));
   const digested = $derived(result ? result.ms.filter((m) => m.digested).length : 0);
 
-  /** Every flavor, nearest first: how many sequences differ, and how many only a digest could confirm. */
+  /** Every edition, nearest first: how many sequences differ, and how many only a digest could confirm. */
   function ranked(ms: Mine[], manifests: Map<string, ManifestRow[]>) {
-    return [...manifests].map(([flavor, rs]) => ({ flavor, ...distance(matches(ms, rs)) }))
-      .sort((a, b) => a.missing - b.missing || a.extra - b.extra || a.unsure - b.unsure || a.flavor.localeCompare(b.flavor));
+    return [...manifests].map(([edition, rs]) => ({ edition, ...distance(matches(ms, rs)) }))
+      .sort((a, b) => a.missing - b.missing || a.extra - b.extra || a.unsure - b.unsure || a.edition.localeCompare(b.edition));
   }
 
-  /** The published files of a flavor whose order the pasted list has. */
-  async function sameOrder(flavor: string, ts: { target: string; flavor: string; publisher: string; alias: string }[]) {
+  /** The published files of an edition whose order the pasted list has. */
+  async function sameOrder(edition: string, ts: { target: string; edition: string; publisher: string; alias: string }[]) {
     const names = result!.ms.map((m) => m.name).join("\n");
     const out = [];
-    for (const t of ts.filter((x) => x.flavor === flavor)) if ((await targetOrder(cat, t.target)).join("\n") === names) out.push(t);
+    for (const t of ts.filter((x) => x.edition === edition)) if ((await targetOrder(cat, t.target)).join("\n") === names) out.push(t);
     return out;
   }
 
@@ -173,7 +173,7 @@
       case "no_root_of_this_length": return `no root of this length named so (${x.roots.join(", ")})`;
     }
   }
-  const flavorsOf = (id: rb.Identity) => [...new Set(id.flavors.map((u) => u.flavor))];
+  const editionsOf = (id: rb.Identity) => [...new Set(id.editions.map((u) => u.edition))];
 
   /** Seqcol's comparison, over the attributes the pasted list has. */
   function seqcol(ms: Mine[], theirs: ManifestRow[]) {
@@ -195,7 +195,7 @@
   <h1>Identify sequences</h1>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
-  {:then { fs, ts, manifests, byFlavor, aliases, namespaces }}
+  {:then { fs, ts, manifests, byEdition, aliases, namespaces }}
     {#if editing}
       <p class="lede">
         Paste a <code>.fai</code>, a chrom.sizes, a <code>.dict</code> or SAM header (<code>samtools view -H</code>), VCF
@@ -212,7 +212,7 @@
         <span class="muted">or a file from the catalog</span>
         <select aria-label="A file from the catalog" value="" onchange={(e) => fill(e.currentTarget.value)}>
           <option value="">choose…</option>
-          <optgroup label="Flavors (by name)">{#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}</optgroup>
+          <optgroup label="Editions (by name)">{#each fs as f (f.edition)}<option value={f.edition}>{f.edition}</option>{/each}</optgroup>
           <optgroup label="Published files (their order)">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
         </select>
       </p>
@@ -227,7 +227,7 @@
 
     {#if result && rows.length}
       {@const near = ranked(result.ms, manifests)}
-      {@const theirs = against || near[0]?.flavor || ""}
+      {@const theirs = against || near[0]?.edition || ""}
       <div class="tabs strip" role="tablist">
         {#each TABS as [k, label] (k)}
           <button type="button" role="tab" aria-selected={tab === k} class:here={tab === k} onclick={() => show(k)}>{label}</button>
@@ -239,19 +239,19 @@
         {@const fits = near.filter((x) => x.off === 0 && x.unsure > 0)}
         <div class="whole" class:match={exact.length > 0}>
           {#if exact.length}
-            <p><Icon name="check" /> Exactly the flavor <a href={href("flavor", exact[0].flavor)}>{exact[0].flavor}</a>, published as
-              {#each byFlavor.get(exact[0].flavor) ?? [] as t, i (t.target)}{i ? "; " : ""}{t.publisher} <span class="alias">{t.alias}</span>{/each}.
-              {#await sameOrder(exact[0].flavor, ts) then same}
-                {@const all = byFlavor.get(exact[0].flavor) ?? []}
+            <p><Icon name="check" /> Exactly the edition <a href={href("edition", exact[0].edition)}>{exact[0].edition}</a>, published as
+              {#each byEdition.get(exact[0].edition) ?? [] as t, i (t.target)}{i ? "; " : ""}{t.publisher} <span class="alias">{t.alias}</span>{/each}.
+              {#await sameOrder(exact[0].edition, ts) then same}
+                {@const all = byEdition.get(exact[0].edition) ?? []}
                 {#if same.length && same.length === all.length}In {all.length > 1 ? "their" : "its"} order.{:else if same.length}In the order of {same.map((t) => t.publisher).join(" and ")}.{:else}In an order of its own.{/if}
               {/await}
             </p>
           {:else if fits.length}
-            <p>The names and lengths are those of {#each fits as x, i (x.flavor)}{i ? (i === fits.length - 1 ? " or " : ", ") : ""}<a href={href("flavor", x.flavor)}>{x.flavor}</a>{/each}.
+            <p>The names and lengths are those of {#each fits as x, i (x.edition)}{i ? (i === fits.length - 1 ? " or " : ", ") : ""}<a href={href("edition", x.edition)}>{x.edition}</a>{/each}.
               <span class="muted">Without digests the bases can't be told apart: paste a .dict with MD5s, or FASTA, to know which.</span></p>
           {:else}
-            <p>Not a flavor in the catalog. The nearest:
-              {#each near.slice(0, 3) as x, i (x.flavor)}{i ? ", " : ""}<button type="button" class="link" onclick={() => { against = x.flavor; show("compare"); }}>{x.flavor}</button>
+            <p>Not an edition in the catalog. The nearest:
+              {#each near.slice(0, 3) as x, i (x.edition)}{i ? ", " : ""}<button type="button" class="link" onclick={() => { against = x.edition; show("compare"); }}>{x.edition}</button>
                 <span class="muted">({x.missing ? `${n(x.missing)} of yours not in it` : "all of yours"}{x.extra ? `, ${n(x.extra)} more of its own` : ""})</span>{/each}.
             </p>
           {/if}
@@ -277,9 +277,9 @@
                     {:else if id.root_id}{" "}<span class="muted">{id.cognates.length > 1 ? `one of ${id.cognates.length} cataloged versions` : id.cognates.length ? "its one cataloged version" : "a version the catalog lacks"}</span>{/if}
                   </td>
                   <td>
-                    {#if id.flavors.length}
-                      <details><summary>{flavorsOf(id).length} flavor{flavorsOf(id).length === 1 ? "" : "s"}</summary>
-                        <ul class="plain">{#each id.flavors as u (u.flavor + u.name + u.sequence)}<li><a href={href("flavor", u.flavor, "seq", u.name)}>{u.flavor}</a> as {u.name}</li>{/each}</ul>
+                    {#if id.editions.length}
+                      <details><summary>{editionsOf(id).length} edition{editionsOf(id).length === 1 ? "" : "s"}</summary>
+                        <ul class="plain">{#each id.editions as u (u.edition + u.name + u.sequence)}<li><a href={href("edition", u.edition, "seq", u.name)}>{u.edition}</a> as {u.name}</li>{/each}</ul>
                       </details>
                     {/if}
                   </td>
@@ -295,7 +295,7 @@
         <p class="exports">
           <label>Against
             <select value={theirs} onchange={(e) => { against = e.currentTarget.value; remember(); }}>
-              <optgroup label="Flavors (by name)">{#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}</optgroup>
+              <optgroup label="Editions (by name)">{#each fs as f (f.edition)}<option value={f.edition}>{f.edition}</option>{/each}</optgroup>
               <optgroup label="Published files (their order)">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
             </select>
           </label>
@@ -360,7 +360,7 @@
           <label class="exports">Rename into
             <select value={to} onchange={(e) => { to = e.currentTarget.value; remember(); }}>
               <optgroup label="A namespace">{#each namespaces as [k, label] (k)}<option value={`ns:${k}`}>{label}</option>{/each}</optgroup>
-              <optgroup label="A flavor's names">{#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}</optgroup>
+              <optgroup label="An edition's names">{#each fs as f (f.edition)}<option value={f.edition}>{f.edition}</option>{/each}</optgroup>
               <optgroup label="A published file's names">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
             </select>
           </label>

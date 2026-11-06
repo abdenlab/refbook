@@ -1,11 +1,11 @@
 <script lang="ts">
-  // A recipe as four cards: roots selected → operations → names → the flavor.
-  import type { Flavor, ManifestRow } from "../data/flavors.ts";
-  import { OPERATION_LABELS } from "../data/flavors.ts";
+  // A recipe as four cards: roots selected → operations → names → the edition.
+  import type { Edition, ManifestRow } from "../data/editions.ts";
+  import { OPERATION_LABELS } from "../data/editions.ts";
   import { bp, n } from "../format.ts";
   import { role, type Recipe } from "../views/recipe.ts";
 
-  let { flavor: f, recipe, rows, names }: { flavor: Flavor; recipe: Recipe; rows: ManifestRow[]; names: Map<string, string> } = $props();
+  let { edition: f, recipe, rows, names }: { edition: Edition; recipe: Recipe; rows: ManifestRow[]; names: Map<string, string> } = $props();
 
   const affected = (op: string) => rows.filter((r) => r.operations.includes(op)).length;
   const r = $derived(recipe.rename);
@@ -51,7 +51,7 @@
   </div>
   <div class="arrow" aria-hidden="true">→</div>
   <div class="card">
-    <h3>Flavor</h3>
+    <h3>Edition</h3>
     <div class="entry"><strong>{n(f.n_sequences)} sequences</strong><div>{bp(f.total_length)}</div></div>
     <ul class="plain">{#each f.contents as c (c.kind)}<li>{n(c.count)} {role(c.kind)}</li>{/each}</ul>
     {#if f.excluded.length}<div class="muted">Left out: {f.excluded.join("; ")}</div>{/if}

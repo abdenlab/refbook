@@ -20,7 +20,7 @@ files, in Illumina blog posts and in READMEs on FTP sites. No single service
 answers "what is this reference, and is it the same as that one, for my
 purpose?"
 
-## How bad it is: a survey of GRCh38 flavors
+## How bad it is: a survey of GRCh38 editions
 
 We checked about a dozen GRCh38 distributions. We read only their metadata,
 plus individual contigs fetched by byte range, without downloading whole
@@ -81,9 +81,9 @@ content or made it easy to use. Full notes with sources are in
 | Name conventions | UCSC chromAlias, GenomeInfoDb, dpryan79/ChromosomeMappings | Map names to names only, with no digests, so they can't detect that two "chr1"s differ |
 | Sequence aliases | biocommons SeqRepo | Sequence-level only. No collections |
 
-None of these tools stores where a flavor came from. Each records what a
-flavor is (its digests, its names), not how it was made. That is the approach
-taken here: store the lossless sources once, and treat every flavor as a recipe
+None of these tools stores where an edition came from. Each records what a
+edition is (its digests, its names), not how it was made. That is the approach
+taken here: store the lossless sources once, and treat every edition as a recipe
 applied to them.
 
 ## The model: roots, layers, recipes
@@ -96,7 +96,7 @@ from the extra sequences listed below. The lossless sources are the **roots**.
 
 | Root set | Source | Used by |
 | --- | --- | --- |
-| GRCh38, every sequence in any release p0–p14: 711 sequences, including 2 superseded patch versions | GenBank `GCA_000001405.15`–`.29` (accession.version), plus the AGP files | All GRCh38/hg38 flavors |
+| GRCh38, every sequence in any release p0–p14: 711 sequences, including 2 superseded patch versions | GenBank `GCA_000001405.15`–`.29` (accession.version), plus the AGP files | All GRCh38/hg38 editions |
 | GRCh37.p13 | GenBank `GCA_000001405.14` + AGP | GRCh37, hg19, hs37d5 |
 | hs38d1 decoys | GenBank `GCA_000786075.2` | hs38DH, Broad, 1000 Genomes, GRC `plus_hs38d1` sets |
 | hs37d5 decoy | 1000 Genomes FTP (INSDC status not checked) | hs37d5 |
@@ -128,7 +128,7 @@ Two of these need care:
 - **GenBank, not RefSeq, is the root.** The GRCh38.p14 assembly report marks 705
   of 709 sequences as identical in both, and 4 GenBank scaffolds have no RefSeq
   copy. For T2T, RefSeq replaces CHM13's own chrM with rCRS. RefSeq is therefore
-  itself a flavor, although a very small one.
+  itself an edition, although a very small one.
 - **A root sequence keeps everything**, including its IUPAC codes, and its gaps
   are recorded as gaps. The flat GenBank chromosome record is itself built from
   component sequences by AGP. Storing the AGP keeps the information that every
@@ -202,7 +202,7 @@ verified. New sequences will come from the T2T and pangenome assemblies below.
 
 How these fit the model:
 
-- **CHM13 already has the same variety of flavors as GRCh38.** The T2T project
+- **CHM13 already has the same variety of editions as GRCh38.** The T2T project
   ships versions with the chrY PAR masked and with rCRS swapped in for CHM13's
   chrM, and UCSC republishes it as hs1. These are roots plus layers plus
   recipes, with nothing new.
@@ -240,7 +240,7 @@ against.
 
 ### Recipes
 
-A **flavor** is a recipe applied to roots. The operations:
+A **edition** is a recipe applied to roots. The operations:
 
 1. **select** sequences, by identifier, role, molecule or assembly unit;
 2. **place** sequences onto a coordinate frame. In AGP terms this covers
@@ -250,7 +250,7 @@ A **flavor** is a recipe applied to roots. The operations:
 4. **change the alphabet**: IUPAC→`N`, or a change of case;
 5. **rename** into a namespace, or with an explicit map;
 6. ~~**order** the sequences~~ and 7. ~~**format** the output~~: removed
-   2026-11-04. A flavor is a named sequence set (docs/GLOSSARY.md), so order and
+   2026-11-04. An edition is a named sequence set (docs/GLOSSARY.md), so order and
    formatting are recorded from each published file, not reproduced.
 
 A root after the sequence-level operations (mask, alphabet) is a
@@ -259,10 +259,10 @@ sequences in published files are a root as submitted, the identity
 derivative. The others are, for example, chrY with the GRC hard-mask, or chr1
 with IUPAC→`N`. ("Variant" would read as a mutation, so it isn't used.)
 
-**Reconstruction is the verification.** A flavor counts as catalogd only
+**Reconstruction is the verification.** An edition counts as catalogd only
 once running its recipe reproduces the per-sequence digests of the published
 file. A label can't be wrong because it isn't asserted; it is the name of a
-recipe that has been checked. A flavor that doesn't reproduce is a finding in
+recipe that has been checked. An edition that doesn't reproduce is a finding in
 its own right: it has a root we lack, or an operation we haven't modeled.
 Examples are DRAGEN's graph haplotypes, spike-ins (phiX, lambda, ERCC), and
 UCSC's superseded patches.
@@ -277,7 +277,7 @@ The identity questions from the first draft follow without extra machinery:
   case, every base of S equals R's base or is `N`. A cognate class is named by
   its root's refget digest.
 - **Coordinate system:** the ordered list of placed roots, without names.
-- **Explained diff** between two flavors: the difference between their
+- **Explained diff** between two editions: the difference between their
   recipes, e.g. "B = A + hs38d1 decoys, PAR-Y masked, renamed to UCSC". This
   answers "are these compatible for my purpose?". Seqcol's comparison counts
   are the shadow of it.
@@ -298,23 +298,23 @@ work.
   pruning over HTTP range requests, which DuckDB, Polars and pyarrow already do.
 - `components` and `gaps` (AGP), `roles`, `placements`, `aliases`.
 - `masks`: one table per layer, as intervals with a layer name and version.
-- `recipes`, and the expected per-sequence digests of each flavor:
-  `flavor_sequences` (flavor, order, name, root, length, MD5, `SQ.`).
-- Seqcol JSON documents generated for each flavor, so any seqcol client can
+- `recipes`, and the expected per-sequence digests of each edition:
+  `edition_sequences` (edition, order, name, root, length, MD5, `SQ.`).
+- Seqcol JSON documents generated for each edition, so any seqcol client can
   read them.
 
 **The library** (Rust core, Python first) can:
-- materialize any flavor or subset as an Arrow stream conforming to the
+- materialize any edition or subset as an Arrow stream conforming to the
   CompoSeq Sequence schema, or as FASTA, 2bit, `.fai`, `.dict` (with M5),
   chrom.sizes or seqcol JSON;
-- fetch a region of a flavor, as Arrow. This is the input for the slicing RFC
+- fetch a region of an edition, as Arrow. This is the input for the slicing RFC
   the sequence schema defers to;
 - identify a FASTA, `.fai`, `.dict`, BAM/CRAM header or VCF header offline,
   against the catalog;
-- rename a BED, VCF or BAM header from one flavor's names to another's,
+- rename a BED, VCF or BAM header from one edition's names to another's,
   refusing when the coordinate systems differ;
 - fill htslib's `REF_CACHE` for a CRAM: read the `@SQ` M5s, identify the
-  flavor, and write out the derived sequences htslib asks for.
+  edition, and write out the derived sequences htslib asks for.
 
 Size: the GRCh38 roots are about 3.2 Gb of sequence. With ZSTD, all the human
 roots fit in a few GB. Layers and recipes are megabytes.
@@ -352,7 +352,7 @@ This section was checked against htslib `develop` (`cram/cram_io.c`,
 `REF_CACHE=~/.cache/hts-ref/%2s/%2s/%s`. Each file holds the raw uppercase
 sequence, with no header and no newlines. htslib checks the MD5 before writing
 the file, writes it atomically, and makes it read-only. Because files are named
-by content, a contig shared by several flavors is stored once.
+by content, a contig shared by several editions is stored once.
 
 **htslib 1.22 (May 2025) removed the defaults.** Up to 1.21, an unset `REF_PATH`
 meant the EBI server, with a `~/.cache/hts-ref` cache turned on automatically.
@@ -365,24 +365,24 @@ MD5 X". Applying a recipe therefore happens outside htslib. There are two ways
 to do it, and neither needs a hosted server:
 
 1. **Fill the cache ahead of time** (`… refcache populate sample.cram`). Read the
-   CRAM's `@SQ` M5s and look each up in `flavor_sequences`. Apply the recipe to
+   CRAM's `@SQ` M5s and look each up in `edition_sequences`. Apply the recipe to
    the root, check the MD5, and write the file into `REF_CACHE`. Only the
    contigs the CRAM names are built, and contigs already present are skipped.
    The cost is the full contig length on disk per distinct derivative:
-   about 3 GB for a whole human flavor, less what flavors share.
+   about 3 GB for a whole human edition, less what editions share.
 2. **Serve lazily on localhost.** Point `REF_PATH=http://localhost:PORT/%s` at a
    small process that builds sequences from the Parquet roots on request.
    htslib then caches them itself. The same process can be the upstream of a
    site-wide `ref-cache`.
 
-Both depend on the catalog knowing the MD5. A CRAM aligned to a flavor that
+Both depend on the catalog knowing the MD5. A CRAM aligned to an edition that
 hasn't been reproduced (milestone 2) can't be resolved. Hosting the most-used
 derived sequences, or running a recipe-applying edge function as a public
 `REF_PATH`, is possible later. It is a hosting decision, not a design one.
 
 ## Fit with CompoSeq
 
-- **Transport.** Region fetches return the Sequence schema. A flavor's digest
+- **Transport.** Region fetches return the Sequence schema. An edition's digest
   is the obvious value to put in schema metadata (the sequence RFC's unresolved
   question 1). CRAM readers get a way to find their reference.
 - **Execution.** The digest kernels listed in the sequence RFC (refget
@@ -395,8 +395,8 @@ derived sequences, or running a recipe-applying edge function as a public
 
 ## Scope
 
-**In:** the human roots above, with their layers, and recipes for the flavors
-in the survey. Mouse (GRCm38/39 and their flavors) next. Static Parquet
+**In:** the human roots above, with their layers, and recipes for the editions
+in the survey. Mouse (GRCm38/39 and their editions) next. Static Parquet
 distribution and the library.
 
 **Out, for now:**
@@ -413,7 +413,7 @@ distribution and the library.
    plus hs38d1, EBV and rCRS. Build `roots`, `root_blocks`, `components`,
    `gaps`, `roles`, `placements`, `aliases` and the ambiguity layer. Check the
    result against NCBI's own MD5s and lengths.
-2. **Recipes for the surveyed flavors**, starting with the cheapest to verify:
+2. **Recipes for the surveyed editions**, starting with the cheapest to verify:
    the GRC analysis sets (whose deflines carry `M5:`), Broad/1000 Genomes
    (`.dict` M5s), UCSC hg38 (initial and p14) and the analysisSet, Ensembl
    primary and toplevel, GENCODE, iGenomes. Every recipe reproduces its
@@ -426,11 +426,11 @@ distribution and the library.
 
 ## What would make this a mistake
 
-- Some widely used flavors can't be reproduced from public roots: their masks
+- Some widely used editions can't be reproduced from public roots: their masks
   or added sequences aren't published. DRAGEN is the most likely case. If that
   is common, the catalog falls back to recording the digests it observes for
-  those flavors, and loses the explained diffs it is meant to provide.
-- Users never ask for derived flavors, only for "the" reference plus a check,
+  those editions, and loses the explained diffs it is meant to provide.
+- Users never ask for derived editions, only for "the" reference plus a check,
   so the recipe machinery is more than they need.
 - Static Parquet range reads are too slow for the access patterns that matter,
   such as many small random regions for model training, compared with
@@ -462,5 +462,5 @@ distribution and the library.
 5. **Seqcol interoperability.** How the coordinate-system and cognate notions
    are exposed to seqcol. Deferred for now.
 6. **Name.** Settled: **refbook**, a reference book and the referee's rulebook
-   (recipes are the rules; a flavor counts once it is reproduced "by the
+   (recipes are the rules; an edition counts once it is reproduced "by the
    book"). "Registry" suggested stewardship, which isn't claimed here.

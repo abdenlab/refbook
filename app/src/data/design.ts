@@ -1,10 +1,10 @@
-// Design your own flavor: compile a recipe in the browser (the core's
+// Design your own edition: compile a recipe in the browser (the core's
 // compiler, over the catalog's tables), give each sequence its digests from
 // the catalog's derivations, and say what the result is.
 import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
 import type { Place } from "./exports.ts";
-import type { Flavor, ManifestRow } from "./flavors.ts";
+import type { Edition, ManifestRow } from "./editions.ts";
 import { measure } from "./meter.ts";
 
 /** A recipe, in the grammar the core compiles (docs: catalog/40_recipes.py). */
@@ -123,19 +123,19 @@ export interface Design {
   rows: DesignRow[];
   /** Rows whose (root, operations) the catalog has never built: digests unknown without their bases. */
   novel: DesignRow[];
-  /** With every digest known: the flavor ID and seqcol digest (the seqcol digest's order is by name). */
+  /** With every digest known: the edition ID and seqcol digest (the seqcol digest's order is by name). */
   id: string | null;
   seqcolDigest: string | null;
-  /** The cataloged flavor it is, if any. */
+  /** The cataloged edition it is, if any. */
   equals: string | null;
 }
 
 /** Compile a recipe and say what it makes. Throws the compiler's error. */
-export function design(recipe: Recipe, t: DesignTables, flavors: Flavor[]): Design {
+export function design(recipe: Recipe, t: DesignTables, editions: Edition[]): Design {
   const compiled = rb.compileRecipe(recipe, t.compiler);
   const rows: DesignRow[] = compiled.map((r) => {
     const d = t.derived.get(key(r.root_id, r.operations));
-    return { flavor: "", name: r.name, root_id: r.root_id, operations: r.operations, length: t.rootLength.get(r.root_id) ?? 0,
+    return { edition: "", name: r.name, root_id: r.root_id, operations: r.operations, length: t.rootLength.get(r.root_id) ?? 0,
              md5: d?.md5 ?? null, sha512t24u: d?.sha512t24u ?? null };
   });
   const novel = rows.filter((r) => !r.sha512t24u);
@@ -143,7 +143,7 @@ export function design(recipe: Recipe, t: DesignTables, flavors: Flavor[]): Desi
   const names = rows.map((r) => r.name), sqs = rows.map((r) => r.sha512t24u!);
   const id = rb.namedSetDigest(names, sqs);
   return { rows, novel, id, seqcolDigest: rb.seqcolDigests(names, rows.map((r) => r.length), sqs).digest,
-           equals: flavors.find((f) => f.id === id)?.flavor ?? null };
+           equals: editions.find((f) => f.id === id)?.edition ?? null };
 }
 
 /** Rows as manifest rows, for the comparison and the exports (only when every digest is known). */
@@ -158,7 +158,7 @@ export function grcNames(rename: Recipe["rename"]): Recipe["rename"] {
   return out;
 }
 
-/** The recipe without metadata (flavor, published, ...): only what the compiler reads. */
+/** The recipe without metadata (edition, published, ...): only what the compiler reads. */
 export function plainRecipe(r: Recipe & Record<string, unknown>): Recipe {
   const out: Recipe = { select: r.select, rename: grcNames(r.rename) };
   if (r.mask?.length) out.mask = r.mask;

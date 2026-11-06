@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch published GRCh38 flavor files (the recipe targets) into raw/.
+# Fetch published GRCh38 edition files (the recipe targets) into raw/.
 #
 # Same conventions as 00_fetch_inputs.sh: files land at raw/<host>/<url path>,
 # wget -N keeps the server's Last-Modified time and skips unchanged files.

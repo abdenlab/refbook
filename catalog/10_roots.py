@@ -1,6 +1,6 @@
 """Build the GRCh38 root tables from the raw NCBI downloads.
 
-The roots are every GRCh38 sequence (p0-p14) plus the roots its flavors add:
+The roots are every GRCh38 sequence (p0-p14) plus the roots its editions add:
 the hs38d1 decoys and EBV. Reads raw/ (see 00_fetch_inputs.sh) and
 writes Parquet to build/grch38/10_roots/:
 
@@ -35,7 +35,7 @@ import layout
 
 P14 = f"{layout.LATEST[1]}_{layout.LATEST[2]}"
 SUPERSEDED = ["KQ759759.1", "KQ759762.1"]
-# Roots outside GRCh38 that GRCh38 flavors add: the hs38d1 decoys (an
+# Roots outside GRCh38 that GRCh38 editions add: the hs38d1 decoys (an
 # assembly of their own) and EBV (in no assembly).
 EBV = "AJ507799.2"
 STEP = "10_roots"

@@ -1,4 +1,4 @@
-// A flavor's recipe, as flavors.parquet stores it (the recipe JSON), and the
+// An edition's recipe, as editions.parquet stores it (the recipe JSON), and the
 // words the app uses for its parts.
 
 export interface Recipe {

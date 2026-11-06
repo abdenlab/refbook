@@ -47,7 +47,7 @@ FILES = {
     "layer_iupac.parquet": "layer", "layer_n_runs.parquet": "layer",
     "layer_softmask_ncbi.parquet": "layer",
     "sequences.parquet": "sequences", "derivations.parquet": "sequences",
-    "flavors.parquet": "flavors", "manifests.parquet": "flavors",
+    "editions.parquet": "editions", "manifests.parquet": "editions",
     "targets.parquet": "targets", "target_sequences.parquet": "targets",
     "collections": "collections",
 }
@@ -71,20 +71,20 @@ def place(src: Path, dst: Path) -> None:
 
 def card(build: Path, version: str) -> str:
     import pyarrow.parquet as pq
-    flavors = pq.read_table(layout.path(build, "flavors.parquet"), columns=["flavor"]).to_pylist()
-    targets = pq.read_table(layout.path(build, "targets.parquet"), columns=["flavor", "publisher", "alias"]).to_pylist()
-    by_flavor = defaultdict(list)
+    editions = pq.read_table(layout.path(build, "editions.parquet"), columns=["edition"]).to_pylist()
+    targets = pq.read_table(layout.path(build, "targets.parquet"), columns=["edition", "publisher", "alias"]).to_pylist()
+    by_edition = defaultdict(list)
     for t in targets:
-        by_flavor[t["flavor"]].append(f"{t['publisher']} `{t['alias']}`")
-    rows = ["| Flavor | Published as |", "| --- | --- |"]
-    rows += [f"| `{f}` | {'; '.join(sorted(ts))} |" for f, ts in sorted(by_flavor.items())]
+        by_edition[t["edition"]].append(f"{t['publisher']} `{t['alias']}`")
+    rows = ["| Edition | Published as |", "| --- | --- |"]
+    rows += [f"| `{f}` | {'; '.join(sorted(ts))} |" for f, ts in sorted(by_edition.items())]
     members = pq.read_table(layout.path(build, "assembly_members.parquet"),
                             columns=["assembly_name", "genbank_accession"]).to_pylist()
     grch38 = {m["genbank_accession"] for m in members if m["assembly_name"].startswith("GRCh38")}
     decoys = {m["genbank_accession"] for m in members if m["assembly_name"] == "hs38d1"}
     template = (Path(__file__).parent / "catalog_card.md").read_text()
-    return template.format(version=version, n_flavors=len(targets), n_sets=len(flavors),
-                           flavor_table="\n".join(rows),
+    return template.format(version=version, n_editions=len(targets), n_sets=len(editions),
+                           edition_table="\n".join(rows),
                            n_roots=pq.read_metadata(layout.path(build, "roots.parquet")).num_rows,
                            n_grch38=len(grch38), n_decoys=len(decoys))
 
@@ -162,7 +162,7 @@ def main() -> None:
         "checks": {c: {"passed": r["passed"], **({"ena": r["details"]["ena"]} if "ena" in r["details"] else {})}
                    for c, r in results.items()},
         "created": datetime.date.today().isoformat(),
-        "description": "GRCh38 roots, layers and reproduced flavor recipes",
+        "description": "GRCh38 roots, layers and reproduced edition recipes",
         "files": files,
     }
     (staging / "catalog.json").write_text(json.dumps(manifest, indent=2) + "\n")

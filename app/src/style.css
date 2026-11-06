@@ -97,11 +97,11 @@ section.bench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 @media (max-width: 640px) { .stage .notes dl { grid-template-columns: 1fr; } .stage .notes dd { margin-bottom: 0.4rem; } }
 .verdict { font-size: 1.05rem; margin: 0.2rem 0 0.8rem; }
 .stage .table-wrap.flat { border: none; border-radius: 0; margin: 0 -1rem; }
-.stage table.flavors tr.here td { background: var(--op-bg); }
-.stage table.flavors th, .stage table.flavors td { padding: 0.45rem 0.45rem; }
-.stage table.flavors .edit { padding: 0.3rem 0.1rem 0.3rem 1rem; width: 1%; }
-.stage table.flavors th:last-child, .stage table.flavors td:last-child { padding-right: 1rem; }
-.stage table.flavors td.flavor { white-space: nowrap; }
+.stage table.editions tr.here td { background: var(--op-bg); }
+.stage table.editions th, .stage table.editions td { padding: 0.45rem 0.45rem; }
+.stage table.editions .edit { padding: 0.3rem 0.1rem 0.3rem 1rem; width: 1%; }
+.stage table.editions th:last-child, .stage table.editions td:last-child { padding-right: 1rem; }
+.stage table.editions td.edition { white-space: nowrap; }
 button.icon { display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.45rem; line-height: 1; }
 button.icon .icon, .ok .icon { vertical-align: -0.12em; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -172,7 +172,7 @@ th { font-weight: 600; color: var(--muted); font-size: 0.82rem; white-space: now
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 ul.plain { list-style: none; margin: 0; padding: 0; }
 .publisher { font-weight: 500; }
-table.flavors td:first-child { white-space: nowrap; }
+table.editions td:first-child { white-space: nowrap; }
 .alias { color: var(--muted); font-size: 0.88em; }
 .naming { color: var(--muted); }
 .op, .tag {
@@ -260,7 +260,7 @@ pre.bases .pos { color: var(--muted); user-select: none; }
 .identify-page .filebar select { max-width: 24rem; }
 .warn { color: var(--warn); }
 
-/* A heading with its section's action beside it (the flavor page's Compare and Edit). */
+/* A heading with its section's action beside it (the edition page's Compare and Edit). */
 h2.act { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
 h2.act .action { font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem;
   padding: 0.15rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
@@ -284,7 +284,7 @@ h2.act .action:hover { border-color: var(--accent); text-decoration: none; }
 .scroller .pending { color: var(--line); }
 .nowrap { white-space: nowrap; }
 
-/* The flavor page's sequence table: a box of fixed height, rows of one height, columns of fixed widths. */
+/* The edition page's sequence table: a box of fixed height, rows of one height, columns of fixed widths. */
 .table-wrap.seqs { max-height: min(65dvh, 36rem); overflow: auto; overscroll-behavior: contain; }
 .seqs table { table-layout: fixed; width: max(100%, 64rem); }
 .seqs thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: inset 0 -1px 0 var(--line); }

@@ -2,7 +2,7 @@
   "_doc": "The four GRC analysis sets (GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids). Applied by catalog/40_recipes.py; see its docstring for the operations.",
   "recipes": [
     {
-      "flavor": "GRCh38_no_alt_analysis_set",
+      "target": "GRCh38_no_alt_analysis_set",
       "published": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz",
       "select": [
         {"assembly": "GCA_000001405.15", "roles": ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]},
@@ -12,7 +12,7 @@
       "rename": {"namespace": "ucsc", "map": {"AJ507799.2": "chrEBV"}}
     },
     {
-      "flavor": "GRCh38_no_alt_plus_hs38d1_analysis_set",
+      "target": "GRCh38_no_alt_plus_hs38d1_analysis_set",
       "published": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.gz",
       "select": [
         {"assembly": "GCA_000001405.15", "roles": ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]},
@@ -24,7 +24,7 @@
                  "template": {"GCA_000786075.2": "chrUn_{accession_v}_decoy"}}
     },
     {
-      "flavor": "GRCh38_full_analysis_set",
+      "target": "GRCh38_full_analysis_set",
       "published": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_full_analysis_set.fna.gz",
       "select": [
         {"assembly": "GCA_000001405.15", "roles": ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold"]},
@@ -34,7 +34,7 @@
       "rename": {"namespace": "ucsc", "map": {"AJ507799.2": "chrEBV"}}
     },
     {
-      "flavor": "GRCh38_full_plus_hs38d1_analysis_set",
+      "target": "GRCh38_full_plus_hs38d1_analysis_set",
       "published": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set.fna.gz",
       "select": [
         {"assembly": "GCA_000001405.15", "roles": ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold"]},

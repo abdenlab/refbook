@@ -1,7 +1,7 @@
 """The Python recipe compiler the Rust core replaced, frozen as its oracle.
 
 select and name_of are catalog/engine.py's as of the switch-over; compile
-gives the operations as 41_flavors.py derived them. test_golden.py checks
+gives the operations as 41_editions.py derived them. test_golden.py checks
 the core against compile, row for row, on every recipe.
 """
 
@@ -20,7 +20,7 @@ def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
             rows = [e for e in external if e["collection"] == entry["collection"]
                     and e["group"] in entry["groups"]]
             if not rows:
-                sys.exit(f"{recipe['flavor']}: nothing in {entry['collection']} {entry['groups']}")
+                sys.exit(f"{recipe['target']}: nothing in {entry['collection']} {entry['groups']}")
             for e in rows:
                 out.append({"root_id": e["root_id"], "assembly": entry["collection"],
                             "member": None, "external": e})
@@ -28,23 +28,23 @@ def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
         if "roots" in entry:
             for acc in entry["roots"]:
                 if acc not in roots:
-                    sys.exit(f"{recipe['flavor']}: no root {acc}")
+                    sys.exit(f"{recipe['target']}: no root {acc}")
                 out.append({"root_id": acc, "assembly": None, "member": None})
             continue
         rows = [m for m in members if m["assembly_accession"] == entry["assembly"]]
         if not rows:
-            sys.exit(f"{recipe['flavor']}: no assembly {entry['assembly']}")
+            sys.exit(f"{recipe['target']}: no assembly {entry['assembly']}")
         only = set(entry.get("accessions", [])) or None
         placed_on = set(entry.get("placed_on", [])) or None
         for m in rows:
             acc = m["genbank_accession"]
             if placed_on and parent_types.get(acc, placed_on) - placed_on:
-                continue  # placed on a parent type the flavor leaves out
+                continue  # placed on a parent type the edition leaves out
             if m["role"] in entry["roles"] and (only is None or acc in only):
                 out.append({"root_id": acc, "assembly": entry["assembly"], "member": m})
     ids = [s["root_id"] for s in out]
     if len(ids) != len(set(ids)):
-        sys.exit(f"{recipe['flavor']}: a root is selected twice")
+        sys.exit(f"{recipe['target']}: a root is selected twice")
     return out
 
 
@@ -77,7 +77,7 @@ def compile(recipe: dict, t: dict) -> list[tuple[str, str, list[str]]]:
         s["name"] = name_of(s, recipe["rename"])
     names = [s["name"] for s in sel]
     if len(names) != len(set(names)):
-        sys.exit(f"{recipe['flavor']}: a name is used twice")
+        sys.exit(f"{recipe['target']}: a name is used twice")
     layers = [m["layer"] for m in recipe.get("mask", [])]
     alphabet = bool(recipe.get("alphabet"))
     out = []

@@ -1,17 +1,17 @@
 <script lang="ts">
-  // A flavor's sequences, in a chosen order (the caller sorts them), with each
+  // An edition's sequences, in a chosen order (the caller sorts them), with each
   // one's place in it; filterable by name or root. All of them scroll in a
   // box of fixed height, and only the rows in view are drawn (rows are of one
   // height, columns of fixed widths, so nothing shifts as rows come and go).
   import type { Place } from "../data/exports.ts";
-  import type { ManifestRow } from "../data/flavors.ts";
-  import { OPERATION_LABELS } from "../data/flavors.ts";
+  import type { ManifestRow } from "../data/editions.ts";
+  import { OPERATION_LABELS } from "../data/editions.ts";
   import { n } from "../format.ts";
   import { href } from "../route.svelte.ts";
   import Icon from "./Icon.svelte";
 
-  let { flavor, rows, places, orders, order = $bindable() }: {
-    flavor: string; rows: ManifestRow[];
+  let { edition, rows, places, orders, order = $bindable() }: {
+    edition: string; rows: ManifestRow[];
     /** Each root's assembly role and unit, or its collection. */
     places: Map<string, Place> | null;
     /** The orders offered: [value, label]. */
@@ -64,7 +64,7 @@
           {@const p = places?.get(r.root_id)}
           <tr>
             <td class="num muted">{n(i + 1)}</td>
-            <td title={r.name}><a href={href("flavor", flavor, "seq", r.name)}>{r.name}</a></td>
+            <td title={r.name}><a href={href("edition", edition, "seq", r.name)}>{r.name}</a></td>
             {#if p && "role" in p}
               <td>{p.role}</td>
               <td>{p.unit}{#if !p.grch38}{" "}<span class="muted">({p.assembly})</span>{/if}</td>

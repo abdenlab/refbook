@@ -5,7 +5,7 @@
 - build/<assembly>/: the steps' outputs; by default catalog/output/build.
   Override with --build or REFBOOK_BUILD.
 - catalog/assemblies/<assembly>/: the declarative inputs: recipes/*.json,
-  flavors.json, and locks/ (written by lock.py).
+  editions.json, and locks/ (written by lock.py).
 
 catalog/output/ is gitignored. Every path has a default, so a step needs no
 arguments.
@@ -69,8 +69,8 @@ def recipes(assembly: str = ASSEMBLY) -> list[dict]:
     return [r for p in recipe_files(assembly) for r in json.loads(p.read_text())["recipes"]]
 
 
-def flavors_file(assembly: str = ASSEMBLY) -> Path:
-    return assembly_dir(assembly) / "flavors.json"
+def editions_file(assembly: str = ASSEMBLY) -> Path:
+    return assembly_dir(assembly) / "editions.json"
 
 
 def arguments(ap):

@@ -2,31 +2,31 @@
 
 sequences(header, cat) says what each sequence is, on its own evidence (the
 Rust core's identify): with a digest the store knows, the sequence, its root,
-the nucleotide operations from it, and the flavors that use it; otherwise,
+the nucleotide operations from it, and the editions that use it; otherwise,
 from a name that names a root of that length, the root and its cognates
 (the stored sequences it could be); and notes on whatever disagrees.
 
-identify(header, cat), below, summarizes a whole header against the flavors.
+identify(header, cat), below, summarizes a whole header against the editions.
 It has two layers:
 
 - Per sequence: each header sequence with an MD5 is looked up in the sequence
   store, which says what it is ("CM000663.2 with IUPAC -> N"). This needs no
-  flavor at all.
+  edition at all.
 - Per collection: the header (names, lengths, and MD5s where the format
-  carries them) is compared with every cataloged flavor as a named sequence
+  carries them) is compared with every cataloged edition as a named sequence
   set, so order plays no part in the verdict:
 
   - exact        the same names, each with the same length, and the same MD5
                  if the header has them
   - consistent   the same names and lengths, but the header has no MD5s, so
-                 flavors that differ only in bases cannot be told apart
-  - contains     the whole flavor, unchanged, plus other sequences
+                 editions that differ only in bases cannot be told apart
+  - contains     the whole edition, unchanged, plus other sequences
                  (spike-ins, other genomes)
-  - subset       every header sequence is in the flavor, unchanged, but the
-                 flavor has more (e.g. chr1-22, X, Y only)
-  - partial      everything else, with the differences from that flavor
+  - subset       every header sequence is in the edition, unchanged, but the
+                 edition has more (e.g. chr1-22, X, Y only)
+  - partial      everything else, with the differences from that edition
 
-  Order is reported separately: the flavor's targets whose order the header
+  Order is reported separately: the edition's targets whose order the header
   follows. That matters to formats that refer to sequences by position (BAM
   reference IDs, coordinate-sorted files).
 
@@ -57,15 +57,15 @@ def sequences(x: Header | list, cat: Catalog) -> list[dict]:
 
 @dataclass
 class Comparison:
-    flavor: str
+    edition: str
     verdict: str                      # exact | consistent | contains | subset | partial
     score: float                      # Jaccard of matching sequences
     matched: int = 0
-    renamed: list[tuple[str, str]] = field(default_factory=list)       # (header, flavor)
+    renamed: list[tuple[str, str]] = field(default_factory=list)       # (header, edition)
     different_bases: list[tuple[Entry, Seq]] = field(default_factory=list)
     different_length: list[tuple[Entry, Seq]] = field(default_factory=list)
     extra: list[Entry] = field(default_factory=list)                   # in header only
-    missing: list[Seq] = field(default_factory=list)                   # in flavor only
+    missing: list[Seq] = field(default_factory=list)                   # in edition only
     in_order_of: list[str] = field(default_factory=list)               # targets whose order it follows
     entries: list[Entry] = field(default_factory=list, repr=False)     # the header's
     identities: list[dict] = field(default_factory=list, repr=False)   # per entry (sequences())
@@ -82,12 +82,12 @@ def _bases_differ(e: Entry, s: Seq) -> bool:
     return bool((e.md5 and e.md5.lower() != s.md5) or (e.sq and e.sq != s.sha512t24u))
 
 
-def compare(header: Header, flavor: str, cat: Catalog, identities: list[dict] | None = None) -> Comparison:
-    """A header against one flavor, on the per-sequence identities: entries pair
-    with the flavor's sequences by name, then (renamed) by the root each
+def compare(header: Header, edition: str, cat: Catalog, identities: list[dict] | None = None) -> Comparison:
+    """A header against one edition, on the per-sequence identities: entries pair
+    with the edition's sequences by name, then (renamed) by the root each
     identity gives."""
     ids = identities if identities is not None else sequences(header, cat)
-    seqs = cat.manifests[flavor]
+    seqs = cat.manifests[edition]
     by_name = {s.name: s for s in seqs}
     by_root = {s.root_id: s for s in seqs}
     pairs, unpaired = [], []
@@ -97,7 +97,7 @@ def compare(header: Header, flavor: str, cat: Catalog, identities: list[dict] | 
         else:
             unpaired.append(k)
     used = {s.name for _, s, _ in pairs}
-    c = Comparison(flavor, "partial", 0.0, entries=header.entries, identities=ids)
+    c = Comparison(edition, "partial", 0.0, entries=header.entries, identities=ids)
     for k in unpaired:
         e = header.entries[k]
         here = _roots(ids[k]) & set(by_root)
@@ -121,10 +121,10 @@ def compare(header: Header, flavor: str, cat: Catalog, identities: list[dict] | 
         if renamed:
             c.renamed.append((e.name, s.name))
     c.matched = good
-    # Which of the flavor's targets list the paired sequences in the header's order.
+    # Which of the edition's targets list the paired sequences in the header's order.
     header_order = [s.name for _, s, _ in sorted(pairs, key=lambda p: p[0])]
     for t, r in cat.targets.items():
-        if r["flavor"] == flavor:
+        if r["edition"] == edition:
             shared = set(header_order)
             if [n for n in cat.target_order[t] if n in shared] == header_order:
                 c.in_order_of.append(t)
@@ -152,7 +152,7 @@ class Result:
     sequences: dict[str, str]         # header name -> SQ. digest, for each known digest
     unknown: list[str]                # header names whose digest the store doesn't know
     seqcol_digest: str | None         # the header's collection, if every digest is known
-    seqcol_matches: list[str]         # stored collections (flavors, targets) with that digest
+    seqcol_matches: list[str]         # stored collections (editions, targets) with that digest
     ambiguity: list[str]              # how indistinguishable candidates differ
     identities: list[dict] = field(default_factory=list, repr=False)
 
@@ -168,11 +168,11 @@ def _base_differences(a: str, b: str, cat: Catalog) -> str | None:
 
 
 def identify(header: Header, cat: Catalog) -> Result:
-    """A header summarized against every flavor, on its per-sequence identities."""
+    """A header summarized against every edition, on its per-sequence identities."""
     ids = sequences(header, cat)
-    ranked = sorted((compare(header, f, cat, ids) for f in cat.flavors),
+    ranked = sorted((compare(header, f, cat, ids) for f in cat.editions),
                     key=lambda c: (RANK[c.verdict], -c.matched if c.verdict == "contains" else 0,
-                                   len(c.missing), -c.score, c.flavor))
+                                   len(c.missing), -c.score, c.edition))
     top = RANK[ranked[0].verdict]
     best = [c for c in ranked if RANK[c.verdict] == top and c.verdict != "partial"] or ranked[:1]
     if best[0].verdict == "contains":
@@ -190,7 +190,7 @@ def identify(header: Header, cat: Catalog) -> Result:
                           if r["seqcol_digest"] == digest and t not in matches)
 
     ambiguity = []
-    consistent = [c.flavor for c in best if c.verdict == "consistent"]
+    consistent = [c.edition for c in best if c.verdict == "consistent"]
     for other in consistent[1:]:
         d = _base_differences(consistent[0], other, cat)
         if d:
@@ -199,7 +199,7 @@ def identify(header: Header, cat: Catalog) -> Result:
 
 
 def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
-    """Plain-language differences between the header and one flavor."""
+    """Plain-language differences between the header and one edition."""
     identity = {id(e): i for e, i in zip(c.entries, c.identities)}
     out = []
     if c.renamed:
@@ -223,17 +223,17 @@ def describe(c: Comparison, cat: Catalog, limit: int = 3) -> list[str]:
         i = identity.get(id(e))
         sq = i["sequence"] if i else None
         if sq is not None and i["root_id"] == s.root_id:
-            seen = cat.flavors_with(sq)
+            seen = cat.editions_with(sq)
             where = f"; as in {', '.join(seen[:2])}" if seen else ""
             out.append(f"{e.name}: a different version of the same sequence: header has it {cat.how(sq)}, "
-                       f"{c.flavor} has it {cat.how(s.sha512t24u)}{where}")
+                       f"{c.edition} has it {cat.how(s.sha512t24u)}{where}")
         else:
             out.append(f"{e.name}: different bases (header digest {e.md5 or e.sq} is not a version of "
                        f"{s.root_id} we know)")
     if len(c.different_bases) > limit:
         out.append(f"... {len(c.different_bases) - limit} more sequences with different bases")
     for e, s in c.different_length[:limit]:
-        out.append(f"{e.name}: length {e.length:,}, but {c.flavor} has {s.length:,}")
+        out.append(f"{e.name}: length {e.length:,}, but {c.edition} has {s.length:,}")
     if c.verdict in ("exact", "consistent") and not c.in_order_of:
-        out.append("in an order none of this flavor's targets uses")
+        out.append("in an order none of this edition's targets uses")
     return out

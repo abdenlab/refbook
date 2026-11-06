@@ -11,7 +11,7 @@
 
   let { length, read, warm, top = 0, mark = null, submitted = false, onview, onmove }: {
     length: number;
-    /** The flavor's bases and the root's at [start, end). */
+    /** The edition's bases and the root's at [start, end). */
     read: (start: number, end: number) => Promise<{ bases: Uint8Array; root: Uint8Array }>;
     /** Read ahead into the block store's cache, nothing kept here. */
     warm: (start: number, end: number) => void;

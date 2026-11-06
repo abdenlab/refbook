@@ -2,7 +2,7 @@
   "_doc": "GENCODE release 50 genome FASTAs (ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50). The primary assembly has the bases of the Ensembl 116 primary assembly (IUPAC -> N), with chromosomes named UCSC-style (chr1..chrM) in karyotype order, then the scaffolds by GenBank accession, sorted as text. Deflines are '>chr1 1' (UCSC name, then Ensembl name). Applied by catalog/40_recipes.py. GRCh38.p14.genome has the bases of Ensembl 116 toplevel (so it too leaves out the 3 patches placed on alt scaffolds), every non-chromosome named by GenBank accession; after the chromosomes come the alts and patches, sorted by GRC Sequence-Name (HG1012_PATCH, ...) though labeled by accession, then the scaffolds by accession.",
   "recipes": [
     {
-      "flavor": "GENCODE50_primary_assembly",
+      "target": "GENCODE50_primary_assembly",
       "published": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.primary_assembly.genome.fa.gz",
       "select": [
         {
@@ -25,7 +25,7 @@
       }
     },
     {
-      "flavor": "GENCODE50_p14",
+      "target": "GENCODE50_p14",
       "published": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.p14.genome.fa.gz",
       "select": [
         {

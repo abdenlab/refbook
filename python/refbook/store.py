@@ -10,7 +10,7 @@ The functions refget Sequences v2 needs, over a catalog:
 - metadata(cat, sq)         /sequence/:id/metadata: md5, ga4gh, length and
                             aliases, plus refbook's account of the sequence: its
                             root, the nucleotide operations from it, and the
-                            flavors that use it under which names.
+                            editions that use it under which names.
 - subsequence(cat, sq, ...) bases [start, end) of a stored sequence, reading
                             only the root blocks that hold them.
 """
@@ -53,7 +53,7 @@ def metadata(cat: Catalog, sq: str) -> dict:
         "refbook": {
             "root_id": rec["root_id"],
             "operations": list(rec["operations"]),
-            "flavors": [{"flavor": f, "name": n} for f, n in cat.flavor_names().get(sq, [])],
+            "editions": [{"edition": f, "name": n} for f, n in cat.edition_names().get(sq, [])],
         },
     }
 

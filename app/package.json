@@ -2,7 +2,7 @@
   "name": "refbook-app",
   "private": true,
   "version": "0.0.0",
-  "description": "refbook's web app: the catalog, each flavor's recipe, identity and sequences, in the browser",
+  "description": "refbook's web app: the catalog, each edition's recipe, identity and sequences, in the browser",
   "type": "module",
   "scripts": {
     "dev": "vite",

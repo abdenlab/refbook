@@ -91,7 +91,7 @@ def write_dict(path, seqs):
 
 @needs_catalog
 def test_every_manifest_sequence_is_identified(cat):
-    """By its MD5 or SQ. digest: the sequence, root, operations and flavors (as
+    """By its MD5 or SQ. digest: the sequence, root, operations and editions (as
     store.metadata has them). By name and length: the root, with the sequence
     among its cognates, wherever the name names one root."""
     from refbook import store
@@ -101,18 +101,18 @@ def test_every_manifest_sequence_is_identified(cat):
     by_sq = sequences([{"sq": s.sha512t24u} for _, s in rows], cat)
     by_name = sequences([{"name": s.name, "length": s.length} for _, s in rows], cat)
     settled = 0
-    for (flavor, s), a, b, c in zip(rows, by_md5, by_sq, by_name):
+    for (edition, s), a, b, c in zip(rows, by_md5, by_sq, by_name):
         m = store.metadata(cat, s.sha512t24u)["refbook"]
-        assert a["evidence"] == "digest" and not a["notes"], (flavor, s.name, a["notes"])
+        assert a["evidence"] == "digest" and not a["notes"], (edition, s.name, a["notes"])
         assert (a["sequence"], a["root_id"], a["operations"]) == (s.sha512t24u, m["root_id"], m["operations"])
-        assert [{"flavor": u["flavor"], "name": u["name"]} for u in a["flavors"]] == m["flavors"]
+        assert [{"edition": u["edition"], "name": u["name"]} for u in a["editions"]] == m["editions"]
         assert b == a
         if c["evidence"] == "name_and_length":
             settled += 1
             assert c["root_id"] == s.root_id and s.sha512t24u in c["cognates"]
-            assert {"flavor": flavor, "name": s.name, "sequence": s.sha512t24u} in c["flavors"]
+            assert {"edition": edition, "name": s.name, "sequence": s.sha512t24u} in c["editions"]
         else:
-            assert [n["kind"] for n in c["notes"]] == ["ambiguous_name"], (flavor, s.name, c)
+            assert [n["kind"] for n in c["notes"]] == ["ambiguous_name"], (edition, s.name, c)
     assert settled > 0.99 * len(rows)
 
 
@@ -140,7 +140,7 @@ def test_a_seqcol_document_identifies(cat, tmp_path):
     h = read_header(tmp_path / "l2.json")
     assert h.format == "seqcol" and h.has_digests and not h.has_md5
     res = identify(h, cat)
-    assert [c.flavor for c in res.best] == ["hg38-analysis-set"] and res.best[0].verdict == "exact"
+    assert [c.edition for c in res.best] == ["hg38-analysis-set"] and res.best[0].verdict == "exact"
     assert target in res.best[0].in_order_of
     assert res.seqcol_digest == cat.targets[target]["seqcol_digest"]
     (tmp_path / "l1.json").write_text(json.dumps(resolve(cat, target, 1)))
@@ -154,7 +154,7 @@ def test_a_seqcol_document_identifies(cat, tmp_path):
 def test_exact_dict_and_seqcol(cat, tmp_path):
     res = run(write_dict(tmp_path / "broad.dict", rows(cat, "Broad_Homo_sapiens_assembly38")), cat)
     assert res.best[0].verdict == "exact"
-    assert [c.flavor for c in res.best] == ["hs38dh"]
+    assert [c.edition for c in res.best] == ["hs38dh"]
     assert "Broad_Homo_sapiens_assembly38" in res.best[0].in_order_of
     assert res.seqcol_digest == cat.targets["Broad_Homo_sapiens_assembly38"]["seqcol_digest"]
     assert "Broad_Homo_sapiens_assembly38" in res.seqcol_matches
@@ -165,7 +165,7 @@ def test_exact_dict_and_seqcol(cat, tmp_path):
 def test_consistent_without_md5_explains_ambiguity(cat):
     res = run(FIXTURES / "giab_HG002_GRCh38_v4.2.1.vcf", cat)
     assert res.best[0].verdict == "consistent"
-    assert {"grch38-no-alt", "hg38-analysis-set"} <= {c.flavor for c in res.best}
+    assert {"grch38-no-alt", "hg38-analysis-set"} <= {c.edition for c in res.best}
     assert any("IUPAC" in a for a in res.ambiguity)
 
 
@@ -173,22 +173,22 @@ def test_consistent_without_md5_explains_ambiguity(cat):
 def test_subset_and_contains(cat):
     gnomad = run(FIXTURES / "gnomad_v4.1_genomes_chr21.vcf", cat)
     assert gnomad.best[0].verdict == "subset"
-    assert "grch38-no-alt" in {c.flavor for c in gnomad.best}
+    assert "grch38-no-alt" in {c.edition for c in gnomad.best}
     encode = run(FIXTURES / "encode_ENCFF462XCI.sam", cat)
     assert encode.best[0].verdict == "contains"
-    assert "grch38-no-alt" in {c.flavor for c in encode.best}
+    assert "grch38-no-alt" in {c.edition for c in encode.best}
     assert len(encode.best[0].extra) == 1871
 
 
 @needs_catalog
 def test_order_is_reported_not_judged(cat, tmp_path):
-    # Ensembl's names and bases in GENCODE's order: the same flavor as Ensembl's
+    # Ensembl's names and bases in GENCODE's order: the same edition as Ensembl's
     # primary assembly, in an order no Ensembl target uses.
     def ensembl_style(name):  # chr1 -> 1, chrM -> MT; scaffolds keep their accession
         return "MT" if name == "chrM" else name.removeprefix("chr")
     reordered = [(ensembl_style(n), n_bp, m) for n, n_bp, m in rows(cat, "GENCODE50_primary_assembly")]
     res = run(write_dict(tmp_path / "reordered.dict", reordered), cat)
-    assert res.best[0].flavor == "ensembl-grch38-primary" and res.best[0].verdict == "exact"
+    assert res.best[0].edition == "ensembl-grch38-primary" and res.best[0].verdict == "exact"
     assert res.best[0].in_order_of == []
     in_order = run(write_dict(tmp_path / "ensembl.dict", rows(cat, "Ensembl116_primary_assembly")), cat)
     assert in_order.best[0].in_order_of == ["Ensembl116_primary_assembly"]
@@ -199,7 +199,7 @@ def test_renamed_by_md5_and_derivative_swap(cat, tmp_path):
     from refbook.identify import describe
     renamed = [(f"seq{i}", n_bp, m) for i, (n, n_bp, m) in enumerate(rows(cat, "grch38-no-alt"))]
     res = run(write_dict(tmp_path / "renamed.dict", renamed), cat)
-    assert res.best[0].flavor == "grch38-no-alt" and len(res.best[0].renamed) == 195
+    assert res.best[0].edition == "grch38-no-alt" and len(res.best[0].renamed) == 195
 
     ucsc_chr21 = next(m for n, _, m in rows(cat, "hg38-analysis-set") if n == "chr21")
     broad = [(n, n_bp, ucsc_chr21 if n == "chr21" else m) for n, n_bp, m in rows(cat, "hs38dh")]
@@ -228,27 +228,27 @@ def test_other_assembly_is_no_good_match(cat, tmp_path):
 def test_materialize_subset_variants_and_batches(cat):
     from refbook.materialize import SCHEMA, materialize
     md5s = {}
-    for flavor in ("grch38-no-alt", "hg38-analysis-set", "hg38", "ensembl-grch38-primary"):
-        name = "21" if flavor.startswith("ensembl") else "chr21"
-        t = materialize(cat, flavor, names=[name]).read_all()
+    for edition in ("grch38-no-alt", "hg38-analysis-set", "hg38", "ensembl-grch38-primary"):
+        name = "21" if edition.startswith("ensembl") else "chr21"
+        t = materialize(cat, edition, names=[name]).read_all()
         assert t.schema.equals(SCHEMA, check_metadata=False)
-        assert "refbook:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no flavor digest
+        assert "refbook:seqcol_digest" not in (t.schema.metadata or {})  # a subset has no edition digest
         seq = t["sequence"][0].as_py()
         assert len(seq) == 46709983 and seq == seq.upper()
-        md5s[flavor] = hashlib.md5(seq.encode()).hexdigest()
+        md5s[edition] = hashlib.md5(seq.encode()).hexdigest()
     # chr21 in four published versions: masked or not, IUPAC -> N or not.
     assert md5s["grch38-no-alt"] == "974dc7aec0b755b19f031418fdedf293"
     assert len(set(md5s.values())) == 3  # Ensembl and UCSC hg38 share the IUPAC -> N version
     assert md5s["hg38"] == md5s["ensembl-grch38-primary"]
 
     want = ["chrM", "chrEBV", "chr22"]
-    # A target lists its sequences in its own order (chr22, chrM, chrEBV), a flavor
+    # A target lists its sequences in its own order (chr22, chrM, chrEBV), an edition
     # in canonical order (chr22, chrEBV, chrM); never in request order. chr22
     # alone exceeds the batch limit.
     target = list(materialize(cat, "GRCh38_no_alt_analysis_set", names=want, max_batch_bytes=200_000))
     assert [b.column("name").to_pylist() for b in target] == [["chr22"], ["chrM", "chrEBV"]]
-    flavor = list(materialize(cat, "grch38-no-alt", names=want, max_batch_bytes=200_000))
-    assert [b.column("name").to_pylist() for b in flavor] == [["chr22"], ["chrEBV", "chrM"]]
+    edition = list(materialize(cat, "grch38-no-alt", names=want, max_batch_bytes=200_000))
+    assert [b.column("name").to_pylist() for b in edition] == [["chr22"], ["chrEBV", "chrM"]]
 
 
 @needs_catalog
@@ -261,7 +261,7 @@ def test_resolve_levels_and_uncataloged_collections(cat):
     level2 = resolve(cat, digest, 2)            # by digest, through the collection store
     assert resolve(cat, level2, 0) == digest
     assert resolve(cat, resolve(cat, target, 1), 0) == digest
-    assert resolve(cat, target, 1)["sorted_named_sequences"] == cat.flavors["hs38dh"]["id"]
+    assert resolve(cat, target, 1)["sorted_named_sequences"] == cat.editions["hs38dh"]["id"]
     # Any named sequence set the store can resolve, cataloged or not.
     pairs = [("mito", "c68f52674c9fb33aef52dcf399755519"), ("chr21_masked", "974dc7aec0b755b19f031418fdedf293")]
     t = resolve(cat, pairs, 3).read_all()
@@ -292,9 +292,9 @@ def test_fetch_matches_materialize(cat):
     from refbook import fetch
     from refbook.materialize import materialize
     rng = random.Random(7)
-    for flavor in ("grch38-no-alt", "hg38-analysis-set", "ensembl-grch38-primary"):
-        names = ["21", "Y", "1"] if flavor.startswith("ensembl") else ["chr21", "chrY", "chr1"]
-        full = {n: s for n, s in zip(*materialize(cat, flavor, names=names).read_all()
+    for edition in ("grch38-no-alt", "hg38-analysis-set", "ensembl-grch38-primary"):
+        names = ["21", "Y", "1"] if edition.startswith("ensembl") else ["chr21", "chrY", "chr1"]
+        full = {n: s for n, s in zip(*materialize(cat, edition, names=names).read_all()
                                      .select(["name", "sequence"]).to_pydict().values())}
         rows = []
         for n, s in full.items():
@@ -308,13 +308,13 @@ def test_fetch_matches_materialize(cat):
         iv = pa.table({"chrom": [r[0] for r in rows], "start": [r[1] for r in rows],
                        "end": [r[2] for r in rows], "strand": [r[3] for r in rows]})
         for engine in ("pyarrow", "datafusion"):
-            got = fetch(cat, flavor, iv, strand="strand", engine=engine)
+            got = fetch(cat, edition, iv, strand="strand", engine=engine)
             for (n, a, b, st), seq in zip(rows, got["sequence"].to_pylist()):
                 want = full[n][a:b]
-                assert seq == (_revcomp(want) if st == "-" else want), (engine, flavor, n, a, b, st)
+                assert seq == (_revcomp(want) if st == "-" else want), (engine, edition, n, a, b, st)
         few = iv.slice(0, 3)  # few blocks per sequence: the per-sequence IN-list path
-        assert (fetch(cat, flavor, few, strand="strand", engine="datafusion")["sequence"].to_pylist()
-                == fetch(cat, flavor, few, strand="strand", engine="pyarrow")["sequence"].to_pylist())
+        assert (fetch(cat, edition, few, strand="strand", engine="datafusion")["sequence"].to_pylist()
+                == fetch(cat, edition, few, strand="strand", engine="pyarrow")["sequence"].to_pylist())
 
 
 @needs_catalog

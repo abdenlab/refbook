@@ -6,12 +6,12 @@ must match the target's observation by name (same names, and for each the same
 length and digests, where the observation has them). The target's order is
 taken from its observation.
 
-Writes build/grch38/40_recipes/flavor_sequences.parquet (flavor, position, name,
+Writes build/grch38/40_recipes/reproduced.parquet (target, position, name,
 root_id, length, md5, sha512t24u): each target's sequences, in the target's
 observed order, from the observations (30_observe: a target's FASTA, or its
 .dict, which gives only name, length and M5).
-("flavor" there is still the target; 41_flavors.py groups targets into
-flavors.) Exits nonzero, writing nothing, if any target does not reproduce.
+(41_editions.py groups the targets into
+editions.) Exits nonzero, writing nothing, if any target does not reproduce.
 
 The output holds exactly the recipes given, so pass every recipe file.
 
@@ -38,29 +38,29 @@ def main() -> None:
     build = args.build
 
     recipes = layout.recipes(args.assembly)
-    flavors = [r["flavor"] for r in recipes]
-    if len(flavors) != len(set(flavors)):
-        sys.exit("a flavor is defined in more than one recipe")
+    targets = [r["target"] for r in recipes]
+    if len(targets) != len(set(targets)):
+        sys.exit("a target is defined in more than one recipe")
     t = load_tables(build, recipes)
 
     rows, failed = [], []
     for recipe in recipes:
         got = run(recipe, build, t)
-        observed = pq.read_table(layout.path(build, f"observed/{recipe['flavor']}.parquet")).to_pylist()
+        observed = pq.read_table(layout.path(build, f"observed/{recipe['target']}.parquet")).to_pylist()
         errs = compare(got, observed)
-        print(f"{recipe['flavor']}: {len(got)} sequences, "
+        print(f"{recipe['target']}: {len(got)} sequences, "
               f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES'}", file=sys.stderr)
         for e in errs[:20]:
             print(f"  {e}", file=sys.stderr)
         if errs:
-            failed.append(recipe["flavor"])
+            failed.append(recipe["target"])
         else:
             rows += in_observed_order(got, observed)
 
-    if failed:  # a flavor is cataloged only once it reproduces: write nothing
+    if failed:  # a target is cataloged only once it reproduces: write nothing
         sys.exit(f"not reproduced: {failed}")
     with layout.step_output(build, STEP) as out:
-        pq.write_table(pa.Table.from_pylist(rows), out / "flavor_sequences.parquet", compression="zstd")
+        pq.write_table(pa.Table.from_pylist(rows), out / "reproduced.parquet", compression="zstd")
 
 
 if __name__ == "__main__":

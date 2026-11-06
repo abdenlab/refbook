@@ -25,7 +25,7 @@ const comparisons = collections.map((a: any) => collections.map((b: any) => rb.s
 const compiled: Record<string, unknown> = {};
 if (req.tables) {
   const tables = rb.recipeTables(req.tables);
-  for (const r of req.recipes) compiled[r.flavor] = attempt(() => rb.compileRecipe(r, tables));
+  for (const r of req.recipes) compiled[r.target] = attempt(() => rb.compileRecipe(r, tables));
 }
 const identified = req.identify
   ? rb.identifySequences(req.identify.entries, rb.identifyTables(req.identify.tables)) : null;

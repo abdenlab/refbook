@@ -54,15 +54,15 @@ The terms refbook uses, grouped from the genome outward.
   digest each pair, sort the pair digests, and digest the sorted list. A 
   subset is identifiable by comparing the pair digests. 
 
-**sequence set flavor** (flavor)
+**edition**
 : A named sequence set that refbook catalogs, together with a recipe that
-  derives it from root sequences and a label chosen by refbook. A flavor is
+  derives it from root sequences and a label chosen by refbook. An edition is
   identified by its named sequence set's digest, so order, formatting and file
   type play no part, and neither do who made it or how it was found. Each
-  target collection that reproduces it is recorded as having that flavor. The
+  target collection that reproduces it is recorded as having that edition. The
   names the targets' publishers use (e.g. "UCSC hg38.analysisSet", "iGenomes
-  UCSC/hg38") are **aliases** of the flavor, and one flavor often has several:
-  the GRC no-alt analysis set and iGenomes NCBI/GRCh38 are the same flavor.
+  UCSC/hg38") are **aliases** of the edition, and one edition often has several:
+  the GRC no-alt analysis set and iGenomes NCBI/GRCh38 are the same edition.
 
 **sequence collection**
 : An ordered collection of named sequences. Identifiable by a digest that
@@ -71,8 +71,8 @@ The terms refbook uses, grouped from the genome outward.
   collections can share one.
 
 **sequence order**
-: The order of a sequence collection. It is not part of a flavor's identity: a
-  target's order is recorded as an observation, and one flavor can appear in
+: The order of a sequence collection. It is not part of an edition's identity: a
+  target's order is recorded as an observation, and one edition can appear in
   several orders (UCSC's `hg38.fa` and `hg38.chrom.sizes`). Order matters to
   formats that refer to sequences by position: BAM and CRAM reference IDs,
   coordinate-sorted files, and genome-wide offsets. A FASTA's order on disk
@@ -136,7 +136,7 @@ The terms refbook uses, grouped from the genome outward.
   observation is recorded in the release.
 
 **recipe**
-: How a flavor is generated from root sequences: **select** (which roots are
+: How an edition is generated from root sequences: **select** (which roots are
   used), nucleotide operations, and **rename** (what each is called). Recipes
   are data, in `catalog/assemblies/<assembly>/recipes/`.
 
@@ -144,13 +144,13 @@ The terms refbook uses, grouped from the genome outward.
 : A recipe's resolved result: one row per sequence with its name, root
   sequence, nucleotide operations and digests. It is what every consumer
   (materialize, fetch, identify, seqcol) reads. Its rows are a seqcol
-  representation of the flavor, with the root and operations as non-inherent
+  representation of the edition, with the root and operations as non-inherent
   collated attributes.
 
 **reproduction**
 : Running a recipe and checking that its named sequence set equals a target's:
   the same names, each with the same length and digest. The target's order is
-  recorded as an observation, not matched. A flavor is cataloged only once it
+  recorded as an observation, not matched. An edition is cataloged only once it
   reproduces. "Reconstruction is the verification."
 
 **observation**
@@ -185,7 +185,7 @@ The terms refbook uses, grouped from the genome outward.
 : The level-0 and level-1 digests of a seqcol representation; see that entry.
   Order-independent ones are `sorted_name_length_pairs` (the coordinate
   system), `sorted_sequences` (the sequence set) and, a new one proposed here,
-  `sorted_named_sequences` (the named sequence set, a flavor's identity).
+  `sorted_named_sequences` (the named sequence set, an edition's identity).
 
 The examples are for a toy collection with `names = ["chr2", "chr1"]`,
 `lengths = [20, 10]` and `sequences = ["SQ.bbb", "SQ.aaa"]`. `d(x)` stands
@@ -197,7 +197,7 @@ sorted as strings.
 | `name_length_pairs` | ✓ | ✗ | ✓ | the ordered coordinate system | `[{"name":"chr2","length":20}, {"name":"chr1","length":10}]` |
 | `sorted_name_length_pairs` | ✓ | ✗ | ✗ | the order-invariant coordinate system | sorted `[d({"length":20,"name":"chr2"}), d({"length":10,"name":"chr1"})]` |
 | `sorted_sequences` | ✗ | ✓ | ✗ | the sequence set | `["SQ.aaa", "SQ.bbb"]` |
-| **`sorted_named_sequences`** | ✓ | ✓ | ✗ | **the named sequence set (a flavor)** | sorted `[d({"name":"chr2","sequence":"SQ.bbb"}), d({"name":"chr1","sequence":"SQ.aaa"})]` |
+| **`sorted_named_sequences`** | ✓ | ✓ | ✗ | **the named sequence set (an edition)** | sorted `[d({"name":"chr2","sequence":"SQ.bbb"}), d({"name":"chr1","sequence":"SQ.aaa"})]` |
 
 `name_length_pairs` and `sorted_name_length_pairs` are recommended by the
 seqcol spec and `sorted_sequences` is optional; `named_sequences` is
@@ -209,7 +209,7 @@ built from `name_length_pairs`.
 : Another name for a root sequence in a naming convention (namespace):
   `genbank`, `refseq`, `ucsc`, `grc` (the GRC Sequence-Name), `ensembl`,
   `imgt`. The seqcol spec also uses "alias" for a human-readable name of a
-  collection; refbook uses it that way for flavors.
+  collection; refbook uses it that way for editions.
 
 ## Assemblies (GRCh38)
 

@@ -2,7 +2,7 @@
 
 Seqcol level 3: one row per sequence, in the collection's order: `name`,
 `description` (null) and `sequence` (LargeUtf8). The collection can be any that
-refbook.resolve accepts: a flavor, a target, a stored digest, a seqcol
+refbook.resolve accepts: an edition, a target, a stored digest, a seqcol
 representation or a named sequence set. Each sequence's bases are built from
 its canonical derivation in the sequence store (a root and nucleotide
 operations) and checked against its digests. Soft-masking is a layer, not part

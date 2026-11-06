@@ -1,10 +1,10 @@
 """Resolve sequence collections against a catalog, at any seqcol level.
 
-A collection can be given as a flavor label, a target, a seqcol top-level
-digest (looked up in the collection store), a flavor's named-sequence-set id,
+A collection can be given as an edition label, a target, a seqcol top-level
+digest (looked up in the collection store), an edition's named-sequence-set id,
 a level-1 or level-2 representation, or a named sequence set: (name, digest)
 pairs, where each digest is an `SQ.` digest or an MD5. Nothing requires it to
-be a cataloged flavor; every sequence just has to be in the sequence store.
+be a cataloged edition; every sequence just has to be in the sequence store.
 
     resolve(cat, collection, 0)   the top-level digest
     resolve(cat, collection, 1)   one digest per attribute, transient ones
@@ -32,7 +32,7 @@ class UnknownSequences(KeyError):
 
 @dataclass(frozen=True)
 class Collection:
-    """A collection at level 2. `label` is the flavor or target it is, if any."""
+    """A collection at level 2. `label` is the edition or target it is, if any."""
     names: tuple[str, ...]
     lengths: tuple[int, ...]
     sequences: tuple[str, ...]    # SQ. digests
@@ -66,20 +66,20 @@ def collection(cat: Catalog, x) -> Collection:
     if isinstance(x, Collection):
         return x
     if isinstance(x, str):
-        if x in cat.flavor_by_id:
-            x = cat.flavor_by_id[x]
+        if x in cat.edition_by_id:
+            x = cat.edition_by_id[x]
         if x in cat.manifests:
             seqs = cat.manifests[x]
             return Collection(tuple(s.name for s in seqs), tuple(s.length for s in seqs),
                               tuple(s.sha512t24u for s in seqs), x)
         if x in cat.target_order:
-            by_name = {s.name: s for s in cat.manifests[cat.targets[x]["flavor"]]}
+            by_name = {s.name: s for s in cat.manifests[cat.targets[x]["edition"]]}
             seqs = [by_name[n] for n in cat.target_order[x]]
             return Collection(tuple(s.name for s in seqs), tuple(s.length for s in seqs),
                               tuple(s.sha512t24u for s in seqs), x)
         stored = cat.stored_collection(x)
         if stored is None:
-            raise KeyError(f"{x}: not a flavor, target or stored collection")
+            raise KeyError(f"{x}: not an edition, target or stored collection")
         return _from_store(cat, stored["names"], stored["sequences"], cat.named.get(x))
     if isinstance(x, dict):
         if all(isinstance(v, str) for v in x.values()):
@@ -94,7 +94,7 @@ def collection(cat: Catalog, x) -> Collection:
         raise TypeError(f"not a collection: {x!r}")
     pairs = sorted(x, key=lambda p: p[0].encode())
     c = _from_store(cat, [n for n, _ in pairs], [d for _, d in pairs], None)
-    named = cat.flavor_by_id.get(seqcol.named_set_digest(list(c.names), list(c.sequences)))
+    named = cat.edition_by_id.get(seqcol.named_set_digest(list(c.names), list(c.sequences)))
     return Collection(c.names, c.lengths, c.sequences, named)
 
 

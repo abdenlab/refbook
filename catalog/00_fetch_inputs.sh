@@ -68,7 +68,7 @@ for acc in KQ759759.1 KQ759762.1; do
         "$EUTILS?db=nuccore&id=${acc}&rettype=fasta&retmode=text"
 done
 
-# Roots outside GRCh38 that GRCh38 flavors add (the GRC analysis sets):
+# Roots outside GRCh38 that GRCh38 editions add (the GRC analysis sets):
 # the hs38d1 decoys, and EBV.
 HS38D1=https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1
 for suffix in assembly_report.txt assembly_stats.txt fcs_report.txt genomic.fna.gz; do

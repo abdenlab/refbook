@@ -1,4 +1,4 @@
-//! The recipe compiler: a recipe and the catalog's tables in, a flavor's
+//! The recipe compiler: a recipe and the catalog's tables in, an edition's
 //! manifest rows out (name, root, nucleotide operations), in canonical order.
 //!
 //! A recipe (catalog/assemblies/<assembly>/recipes/*.json) is data:
@@ -19,7 +19,7 @@
 //!   root), then the namespace for the root's role, then the default namespace.
 //!
 //! A recipe defines a named sequence set: no order, no formatting. Other keys
-//! of a recipe (`flavor`, `published`, ...) are its metadata and are ignored;
+//! of a recipe (`target`, `published`, ...) are its metadata and are ignored;
 //! a key the grammar doesn't know inside `select`, `mask`, `alphabet` or
 //! `rename` is an error.
 
@@ -597,7 +597,7 @@ mod tests {
     #[test]
     fn rename_precedence_and_operations() {
         let rows = compiled(
-            r#"{"flavor": "t", "published": "x",
+            r#"{"target": "t", "published": "x",
             "select": [{"assembly": "GCA_1.1", "roles": ["assembled-molecule",
                 "unlocalized-scaffold", "unplaced-scaffold"]}, {"roots": ["EBV.1"]},
                 {"collection": "HLA", "groups": ["A"]}],

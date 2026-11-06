@@ -11,7 +11,7 @@ import { catalogHandler } from "../server/catalog.ts";
 import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
-import { flavors, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/flavors.ts";
+import { editions, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/editions.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
 import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
@@ -36,14 +36,14 @@ before(async () => {
 after(() => server.close());
 
 test("tables", { skip }, async () => {
-  const fs = await flavors(cat);
+  const fs = await editions(cat);
   assert.equal(fs.length, 13);
   assert.equal((await targets(cat)).length, 17);
-  const noAlt = fs.find((f) => f.flavor === "grch38-no-alt")!;
+  const noAlt = fs.find((f) => f.edition === "grch38-no-alt")!;
   const rows = await manifest(cat, "grch38-no-alt");
   assert.equal(rows.length, noAlt.n_sequences);
   assert.equal(rows.reduce((s, r) => s + r.length, 0), noAlt.total_length);
-  // The manifest is the flavor: its named sequence set digest is the flavor's id.
+  // The manifest is the edition: its named sequence set digest is the edition's id.
   assert.equal(rb.namedSetDigest(rows.map((r) => r.name), rows.map((r) => r.sha512t24u)), noAlt.id);
   const doc = await cat.json(`collections/${noAlt.seqcol_digest}.json`);
   assert.equal(rb.seqcolDigests(doc.names, doc.lengths, doc.sequences).digest, noAlt.seqcol_digest);
@@ -52,7 +52,7 @@ test("tables", { skip }, async () => {
 
 test("exports in a target's order", { skip }, async () => {
   const t = (await targets(cat)).find((t) => t.target === "UCSC_hg38.analysisSet")!;
-  const rows = inOrder(await manifest(cat, t.flavor), await targetOrder(cat, t.target));
+  const rows = inOrder(await manifest(cat, t.edition), await targetOrder(cat, t.target));
   assert.equal(rb.seqcolDigests(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u)).digest, t.seqcol_digest);
   assert.match(chromSizes(rows), /^chr1\t248956422\n/);
   assert.match(sequenceDictionary(rows), /^@HD\tVN:1\.6\n@SQ\tSN:chr1\tLN:248956422\tM5:[0-9a-f]{32}\n/);
@@ -137,13 +137,13 @@ test("identify in the browser, like the catalog says", { skip }, async () => {
   const [byMd5, byName, wrong] = rb.identifySequences(
     [{ name: "chr1", length: chr1.length, md5: chr1.md5 }, { name: "chr1", length: chr1.length }, { name: "chr1", length: 5 }], t);
   assert.deepEqual([byMd5.evidence, byMd5.sequence, byMd5.root_id, byMd5.operations], ["digest", chr1.sha512t24u, "CM000663.2", chr1.operations]);
-  assert.ok(byMd5.flavors.some((u) => u.flavor === "hg38-analysis-set" && u.name === "chr1"));
+  assert.ok(byMd5.editions.some((u) => u.edition === "hg38-analysis-set" && u.name === "chr1"));
   assert.deepEqual([byName.evidence, byName.root_id], ["name_and_length", "CM000663.2"]);
   assert.ok(byName.cognates.includes(chr1.sha512t24u));
   assert.deepEqual(wrong.notes.map((x) => x.kind), ["length_differs", "no_root_of_this_length"]);
 });
 
-test("two flavors compared: seqcol's counts and refbook's pairs", { skip }, async () => {
+test("two editions compared: seqcol's counts and refbook's pairs", { skip }, async () => {
   const [a, b] = await Promise.all([manifest(cat, "grch38-no-alt"), manifest(cat, "hg38-analysis-set")]);
   const c = rb.seqcolCompare(level2(a), level2(b));
   assert.equal(c.array_elements.a_and_b_count.names, 195);
@@ -160,7 +160,7 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
   const t = await identifyTables(cat);
   const [nalt, set] = await Promise.all([manifest(cat, "grch38-no-alt"), manifest(cat, "hg38-analysis-set")]);
   const paste = (text: string) => { const h = parseHeader(text); return mine(h.entries, rb.identifySequences(h.entries, t)); };
-  // A .dict with MD5s pins every sequence: exactly its flavor, and 14 off from the one that differs only by IUPAC → N.
+  // A .dict with MD5s pins every sequence: exactly its edition, and 14 off from the one that differs only by IUPAC → N.
   const dict = paste(sequenceDictionary(nalt));
   assert.deepEqual(distance(matches(dict, nalt)), { off: 0, missing: 0, extra: 0, unsure: 0 });
   assert.deepEqual(distance(matches(dict, set)), { off: 14, missing: 14, extra: 0, unsure: 0 });
@@ -168,12 +168,12 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
   const sizes = paste(chromSizes(nalt));
   assert.deepEqual(distance(matches(sizes, nalt)), { off: 0, missing: 0, extra: 0, unsure: 195 });
   assert.deepEqual(distance(matches(sizes, set)), { off: 0, missing: 0, extra: 0, unsure: 195 });
-  // Renamed, found by root and length; an unknown name is only in the paste; a missing one only in the flavor.
+  // Renamed, found by root and length; an unknown name is only in the paste; a missing one only in the edition.
   const chr1 = nalt.find((r) => r.name === "chr1")!, chr2 = nalt.find((r) => r.name === "chr2")!;
   const ms = matches(paste(`1\t${chr1.length}\nchr2\t${chr2.length}\nphiX174\t5386\n`), nalt);
   const kinds = Object.groupBy(ms, (m) => m.kind);
   assert.deepEqual([kinds.renamed?.length, kinds.unsure?.length, kinds.a_only?.length, kinds.b_only?.length], [1, 1, 1, 193]);
-  // Aliases: into a namespace by root, or into a flavor's names by match.
+  // Aliases: into a namespace by root, or into an edition's names by match.
   const few = paste(`1\t${chr1.length}\nchr2\t${chr2.length}\nphiX174\t5386\n`);
   const aliases = await cat.table("aliases.parquet");
   assert.equal(aliasFile(renameTo(few, "genbank", aliases)), "1\tCM000663.2\nchr2\tCM000664.2\n");
@@ -186,19 +186,19 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
 });
 
 
-test("every flavor's recipe, compiled in the browser, is that flavor", { skip }, async () => {
+test("every edition's recipe, compiled in the browser, is that edition", { skip }, async () => {
   const t = await designTables(cat);
   assert.ok(measured["design tables"].bytes < 1e6, `${measured["design tables"].bytes} bytes`);
-  const fs = await flavors(cat);
+  const fs = await editions(cat);
   for (const f of fs) {
     const d = design(plainRecipe(JSON.parse(f.recipe)), t, fs);
-    assert.deepEqual(d.novel, [], f.flavor);
-    assert.equal(d.id, f.id, f.flavor);
-    assert.equal(d.seqcolDigest, f.seqcol_digest, f.flavor);
-    assert.equal(d.equals, f.flavor);
-    const m = await manifest(cat, f.flavor);
+    assert.deepEqual(d.novel, [], f.edition);
+    assert.equal(d.id, f.id, f.edition);
+    assert.equal(d.seqcolDigest, f.seqcol_digest, f.edition);
+    assert.equal(d.equals, f.edition);
+    const m = await manifest(cat, f.edition);
     assert.deepEqual(d.rows.map((r) => [r.name, r.root_id, r.operations, r.length, r.md5, r.sha512t24u]),
-                     m.map((r) => [r.name, r.root_id, [...r.operations], r.length, r.md5, r.sha512t24u]), f.flavor);
+                     m.map((r) => [r.name, r.root_id, [...r.operations], r.length, r.md5, r.sha512t24u]), f.edition);
   }
   const r = plainRecipe(JSON.parse(fs[0].recipe));
   assert.deepEqual(decodeRecipe(encodeRecipe(r)), r);
@@ -209,9 +209,9 @@ test("every flavor's recipe, compiled in the browser, is that flavor", { skip },
 });
 
 
-test("the form's edits rebuild published flavors from scratch", { skip }, async () => {
+test("the form's edits rebuild published editions from scratch", { skip }, async () => {
   const t = await designTables(cat);
-  const fs = await flavors(cat);
+  const fs = await editions(cat);
   const all = { hla: t.collections.get(edit.HLA)! };
   const is = (r: ReturnType<typeof edit.fromScratch>) => design(r, t, fs).equals;
   let r = edit.fromScratch();
@@ -251,7 +251,7 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   const primaryGoal = edit.GUIDE[0];
   assert.equal(primaryGoal.has(scratch), false);
   assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, all))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
-  const hg38p14 = JSON.parse(fs.find((f) => f.flavor === "hg38-p14")!.recipe);
+  const hg38p14 = JSON.parse(fs.find((f) => f.edition === "hg38-p14")!.recipe);
   assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
   // Naming per group: EBV, decoys and HLA always get a rule, so any default namespace compiles.
   for (const ns of edit.NAMESPACES) {
@@ -280,7 +280,7 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.equal(t.roleCounts.get("GCA_000001405.15")!.get("fix-patch") ?? 0, 0);
   assert.equal(t.roleCounts.get("GCA_000001405.29")!.get("fix-patch"), 164);
   // Filters: leaving out patches placed on scaffolds is Ensembl's toplevel recipe; on again, back to all.
-  const top = JSON.parse(fs.find((f) => f.flavor === "ensembl-grch38-toplevel")!.recipe);
+  const top = JSON.parse(fs.find((f) => f.edition === "ensembl-grch38-toplevel")!.recipe);
   assert.deepEqual(edit.placedOn(top), ["chromosome"]);
   const all2 = edit.setPlacedOn(top, "scaffold", true);
   assert.equal(edit.primary(all2)!.placed_on, undefined);

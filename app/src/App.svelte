@@ -15,7 +15,7 @@
   import CatalogView from "./views/CatalogView.svelte";
   import EditorView from "./views/EditorView.svelte";
   import IdentifyView from "./views/IdentifyView.svelte";
-  import FlavorView from "./views/FlavorView.svelte";
+  import EditionView from "./views/EditionView.svelte";
   import SequenceView from "./views/SequenceView.svelte";
 
   // The catalog: ?catalog=<url> on the page, else VITE_CATALOG_URL at build
@@ -48,7 +48,7 @@
   <span class="tagline">Genome: get the book, in any edition.</span>
   <nav>
     <a href="#/" class:here={!parts.length || parts[0] === "design"}>Editor</a>
-    <a href="#/catalog" class:here={parts[0] === "catalog" || parts[0] === "flavor"}>Catalog</a>
+    <a href="#/catalog" class:here={parts[0] === "catalog" || parts[0] === "edition"}>Catalog</a>
     <a href="#/identify" class:here={parts[0] === "identify" || parts[0] === "compare"}>Identify</a>
     <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
@@ -61,7 +61,7 @@
     <p class="muted">Loading the catalog…</p>
   {:then cat}
     {#key route.current}
-      {#if parts[0] === "flavor" && parts[2] === "seq" && parts[3]}
+      {#if parts[0] === "edition" && parts[2] === "seq" && parts[3]}
         <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
       {:else if parts[0] === "catalog"}
         <CatalogView {cat} />
@@ -70,8 +70,8 @@
       {:else if parts[0] === "compare"}
         <!-- The old compare page: A pasted, compared against B. -->
         <IdentifyView {cat} query={new URLSearchParams({ from: route.current.query.get("a") ?? "", against: route.current.query.get("b") ?? "", tab: "compare" })} />
-      {:else if parts[0] === "flavor" && parts[1]}
-        <FlavorView {cat} label={parts[1]} />
+      {:else if parts[0] === "edition" && parts[1]}
+        <EditionView {cat} label={parts[1]} />
       {:else}
         <!-- The editor; #/design is its old address. -->
         <EditorView {cat} query={route.current.query} />

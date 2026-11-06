@@ -52,10 +52,10 @@ def mark(c, ids="rbm", mono=False):
     return "<defs>" + "".join(defs) + "</defs>" + "".join(body)
 
 
-LIGHT = dict(spine="#9097a1", band="#262a30", ed="#1f5fa8", ed_band="#0f3563", shelf="#1d1f23")
-DARK = dict(spine="#a3a9b2", band="#2a2e34", ed="#7fb2ec", ed_band="#2c5c93", shelf="#e6e6e3")
-CSS = dict(spine="var(--mark-spine)", band="var(--mark-band)", ed="var(--mark-ed)", ed_band="var(--mark-ed-band)",
-           shelf="var(--mark-shelf)")
+LIGHT = {"spine": "#9097a1", "band": "#262a30", "ed": "#1f5fa8", "ed_band": "#0f3563", "shelf": "#1d1f23"}
+DARK = {"spine": "#a3a9b2", "band": "#2a2e34", "ed": "#7fb2ec", "ed_band": "#2c5c93", "shelf": "#e6e6e3"}
+CSS = {"spine": "var(--mark-spine)", "band": "var(--mark-band)", "ed": "var(--mark-ed)", "ed_band": "var(--mark-ed-band)",
+           "shelf": "var(--mark-shelf)"}
 
 
 def svg(inner, extra=""):

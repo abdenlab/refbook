@@ -17,7 +17,7 @@ build_external_roots = step("11_external_roots")
 build_layers = step("20_layers")
 check_gaps = step("60_check_gaps")
 verify_roots = step("61_check_roots")
-build_flavors = step("41_flavors")
+build_editions = step("41_editions")
 
 
 def write(path: Path, text: str) -> Path:
@@ -184,8 +184,8 @@ def test_source_url():
 # engine (select and name_of: the frozen Python compiler, the core's oracle)
 
 def test_compare_is_order_free():
-    got = [{"flavor": "t", "name": "a", "root_id": "A.1", "length": 3, "md5": "m1", "sha512t24u": "s1"},
-           {"flavor": "t", "name": "b", "root_id": "B.1", "length": 4, "md5": "m2", "sha512t24u": "s2"}]
+    got = [{"target": "t", "name": "a", "root_id": "A.1", "length": 3, "md5": "m1", "sha512t24u": "s1"},
+           {"target": "t", "name": "b", "root_id": "B.1", "length": 4, "md5": "m2", "sha512t24u": "s2"}]
     obs = [{"name": "b", "position": 0, "length": 4, "md5": "m2", "sha512t24u": None, "defline_ac": None},
            {"name": "a", "position": 1, "length": 3, "md5": "m1", "sha512t24u": "s1", "defline_ac": "A.1"}]
     assert engine.compare(got, obs) == []
@@ -220,7 +220,7 @@ PARENTS = {"A1.1": {"chromosome"}, "F1.1": {"chromosome"}, "F2.1": {"scaffold"}}
 
 
 def selected(entries):
-    sel = reference_engine.select({"flavor": "t", "select": entries}, MEMBERS, ROOTS, EXTERNAL, PARENTS)
+    sel = reference_engine.select({"target": "t", "select": entries}, MEMBERS, ROOTS, EXTERNAL, PARENTS)
     return [s["root_id"] for s in sel]
 
 
@@ -266,20 +266,20 @@ def test_name_of_precedence():
                             {"namespace": "refseq"})
 
 
-# build_flavors
+# build_editions
 
 
-def test_flavor_facets():
+def test_edition_facets():
     latest = {"F1.1"}
-    assert build_flavors.kind("IMGTHLA:1:H1", None, latest) == "HLA allele"
-    assert build_flavors.kind("C1.1", {**MEMBERS[0], "assembly_accession": "GCA_000001405.15"}, latest) == "assembled-molecule"
-    assert build_flavors.kind("F2.1", {**MEMBERS[5], "assembly_accession": "GCA_000001405.28"}, latest) == "superseded fix-patch"
-    assert build_flavors.kind("D1.1", {**MEMBERS[2], "assembly_accession": "GCA_000786075.2",
+    assert build_editions.kind("IMGTHLA:1:H1", None, latest) == "HLA allele"
+    assert build_editions.kind("C1.1", {**MEMBERS[0], "assembly_accession": "GCA_000001405.15"}, latest) == "assembled-molecule"
+    assert build_editions.kind("F2.1", {**MEMBERS[5], "assembly_accession": "GCA_000001405.28"}, latest) == "superseded fix-patch"
+    assert build_editions.kind("D1.1", {**MEMBERS[2], "assembly_accession": "GCA_000786075.2",
                                        "assembly_name": "hs38d1"}, latest) == "hs38d1 decoy"
-    assert build_flavors.naming({"namespace": "genbank", "by_role": {"assembled-molecule": "ucsc"},
+    assert build_editions.naming({"namespace": "genbank", "by_role": {"assembled-molecule": "ucsc"},
                                  "map": {"E.1": "chrEBV"}}) == "genbank; assembled-molecule: ucsc; E.1: chrEBV"
     recipe = {"select": [{"assembly": "GCA_1.1", "roles": ["fix-patch"], "placed_on": ["chromosome"]}]}
-    assert build_flavors.excluded(recipe, MEMBERS, {"F1.1"}) == ["1 fix-patch (not placed on chromosome)"]
+    assert build_editions.excluded(recipe, MEMBERS, {"F1.1"}) == ["1 fix-patch (not placed on chromosome)"]
 
 
 # layout

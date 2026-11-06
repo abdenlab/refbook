@@ -21,7 +21,7 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
     out = {
         "file": path, "format": header.format, "sequences": len(header.entries),
         "has_md5": header.has_md5, "has_digests": header.has_digests,
-        "matches": [{"flavor": c.flavor, "verdict": c.verdict, "score": round(c.score, 4),
+        "matches": [{"edition": c.edition, "verdict": c.verdict, "score": round(c.score, 4),
                      "in_order_of": [{"target": t, "publisher": cat.targets[t]["publisher"],
                                       "alias": cat.targets[t]["alias"],
                                       "published": cat.targets[t]["published"]} for t in c.in_order_of],
@@ -29,7 +29,7 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
         "unknown_sequences": res.unknown,
         "seqcol_digest": res.seqcol_digest, "seqcol_matches": res.seqcol_matches,
         "ambiguity": res.ambiguity,
-        "runners_up": [{"flavor": c.flavor, "score": round(c.score, 4)}
+        "runners_up": [{"edition": c.edition, "score": round(c.score, 4)}
                        for c in res.ranked[len(res.best):len(res.best) + 3]],
     }
     if per_sequence:
@@ -40,24 +40,24 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
           f"{'with' if header.has_digests else 'without'} digests")
     verdict = res.best[0].verdict if res.best else "none"
     if verdict == "exact":
-        print(f"  EXACT: {', '.join(c.flavor for c in res.best)}")
+        print(f"  EXACT: {', '.join(c.edition for c in res.best)}")
         _orders(res, cat)
     elif verdict == "consistent":
         print(f"  CONSISTENT (names and lengths; no digests to check bases): "
-              f"{', '.join(c.flavor for c in res.best)}")
+              f"{', '.join(c.edition for c in res.best)}")
         for a in res.ambiguity:
             print(f"    {a}")
         _orders(res, cat)
     elif verdict == "contains":
         c = res.best[0]
-        print(f"  CONTAINS {', '.join(x.flavor for x in res.best)} (all {c.matched} sequences, unchanged), "
+        print(f"  CONTAINS {', '.join(x.edition for x in res.best)} (all {c.matched} sequences, unchanged), "
               f"plus {len(c.extra)} others")
         for d in describe(c, cat):
             print(f"    - {d}")
     elif verdict == "subset":
-        names = [x.flavor for x in res.best]
+        names = [x.edition for x in res.best]
         shown = ", ".join(names[:6]) + (f", and {len(names) - 6} more" if len(names) > 6 else "")
-        print(f"  SUBSET of {len(names)} flavors (every sequence unchanged): {shown}")
+        print(f"  SUBSET of {len(names)} editions (every sequence unchanged): {shown}")
         print(f"    smallest: {names[0]}, which also has: "
               + "; ".join(d for d in describe(res.best[0], cat) if d.startswith("not in header"))[15:])
         if not header.has_digests:
@@ -65,7 +65,7 @@ def report(path: str, cat: Catalog, as_json: bool, per_sequence: bool = False) -
     else:
         c = res.best[0]
         label = "CLOSEST" if c.matched * 2 >= len(header.entries) else "NO GOOD MATCH; closest"
-        print(f"  {label}: {c.flavor} ({c.matched} of {len(header.entries)} sequences match, "
+        print(f"  {label}: {c.edition} ({c.matched} of {len(header.entries)} sequences match, "
               f"score {c.score:.3f})")
         if not header.has_digests:
             print("    (no digests: sequences are matched by name and length only)")
@@ -88,7 +88,7 @@ def _identity(i: dict, cat: Catalog) -> str:
     notes = "; ".join(n["kind"].replace("_", " ") + (f" {n['expected']:,}" if "expected" in n else "")
                       + (f" ({', '.join(n['roots'][:3])})" if "roots" in n else "") for n in i["notes"])
     if i["evidence"] == "digest":
-        what = f"{i['root_id']} {cat.how(i['sequence'])}, in {len({u['flavor'] for u in i['flavors']})} flavors"
+        what = f"{i['root_id']} {cat.how(i['sequence'])}, in {len({u['edition'] for u in i['editions']})} editions"
     elif i["root_id"]:
         what = (f"{i['root_id']} (by {i['evidence'].replace('_', ' ')}), "
                 f"one of {len(i['cognates'])} cataloged versions" if i["cognates"] else
@@ -99,13 +99,13 @@ def _identity(i: dict, cat: Catalog) -> str:
 
 
 def _orders(res, cat: Catalog) -> None:
-    """Which targets' order the header follows, per matching flavor."""
+    """Which targets' order the header follows, per matching edition."""
     for c in res.best:
         if c.in_order_of:
             ts = "; ".join(f"{cat.targets[t]['publisher']} {cat.targets[t]['alias']}" for t in c.in_order_of)
-            print(f"    {c.flavor}: in the order of {ts}")
+            print(f"    {c.edition}: in the order of {ts}")
         else:
-            print(f"    {c.flavor}: in an order none of its targets uses")
+            print(f"    {c.edition}: in an order none of its targets uses")
 
 
 def main() -> None:

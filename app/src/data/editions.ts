@@ -1,22 +1,22 @@
-// What the pages show: flavors, their manifests and targets, and the bases of
-// a flavor's sequence, built from its root with the core's operations.
+// What the pages show: editions, their manifests and targets, and the bases of
+// an edition's sequence, built from its root with the core's operations.
 import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
 import type { Blocks } from "./blocks.ts";
 
-export interface Flavor {
-  flavor: string; id: string; seqcol_digest: string; n_sequences: number; total_length: number;
+export interface Edition {
+  edition: string; id: string; seqcol_digest: string; n_sequences: number; total_length: number;
   assembly: string; patch_release: number | null; contents: { kind: string; count: number }[];
   excluded: string[]; operations: string[]; naming: string; recipe: string; n_targets: number;
 }
 
 export interface ManifestRow {
-  flavor: string; name: string; root_id: string; operations: string[];
+  edition: string; name: string; root_id: string; operations: string[];
   length: number; md5: string; sha512t24u: string;
 }
 
 export interface Target {
-  target: string; flavor: string; publisher: string; alias: string; published: string;
+  target: string; edition: string; publisher: string; alias: string; published: string;
   checked_against: string; evidence: string; checked_sha256: string; checked_bytes: number;
   checked_last_modified: string; n_sequences: number; seqcol_digest: string;
 }
@@ -27,11 +27,11 @@ export const OPERATION_LABELS: Record<string, string> = {
   hardmask_grc: "GRC hard-mask", [IUPAC_TO_N]: "IUPAC → N",
 };
 
-export const flavors = (cat: Catalog) => cat.table<Flavor>("flavors.parquet");
+export const editions = (cat: Catalog) => cat.table<Edition>("editions.parquet");
 export const targets = (cat: Catalog) => cat.table<Target>("targets.parquet");
 
-export async function manifest(cat: Catalog, flavor: string): Promise<ManifestRow[]> {
-  return (await cat.table<ManifestRow>("manifests.parquet")).filter((r) => r.flavor === flavor);
+export async function manifest(cat: Catalog, edition: string): Promise<ManifestRow[]> {
+  return (await cat.table<ManifestRow>("manifests.parquet")).filter((r) => r.edition === edition);
 }
 
 /** A target's sequence names in its own order. */
@@ -49,11 +49,11 @@ export async function spans(cat: Catalog, layer: string, root: string): Promise<
 export interface Region {
   /** The root's bases, as stored. */
   root: Uint8Array;
-  /** The flavor's bases: the root's with the row's operations applied. */
+  /** The edition's bases: the root's with the row's operations applied. */
   bases: Uint8Array;
 }
 
-/** A flavor sequence's bases at [start, end): the root's, then its operations. */
+/** An edition sequence's bases at [start, end): the root's, then its operations. */
 export async function region(cat: Catalog, blocks: Blocks, row: ManifestRow, start: number, end: number): Promise<Region> {
   const root = await blocks.read(row.root_id, start, end);
   const masks = await Promise.all(row.operations.filter((op) => op !== IUPAC_TO_N).map((op) => spans(cat, op, row.root_id)));

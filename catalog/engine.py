@@ -1,6 +1,6 @@
 """The recipe engine: compile a recipe into its sequences.
 
-A component, not a pipeline step: 40_recipes.py and 41_flavors.py use it.
+A component, not a pipeline step: 40_recipes.py and 41_editions.py use it.
 Compiling a recipe is the Rust core's (crates/refbook-core/src/recipe.rs);
 this module loads the catalog tables it reads, fills in lengths and digests,
 and compares the result with a target's observation. The Python compiler it
@@ -73,8 +73,8 @@ def apply_operations(bases: bytes, spans: list[tuple[int, int]], positions: list
 
 @functools.cache
 def derivative_digests(build: Path, acc: str, spans: tuple, positions: tuple) -> tuple[str, str]:
-    """Digests of a root after operations, by the Python apply_operations: 41_flavors
-    checks the core's manifest rows with it. Cached, since flavors share derivatives."""
+    """Digests of a root after operations, by the Python apply_operations: 41_editions
+    checks the core's manifest rows with it. Cached, since editions share derivatives."""
     return refget.digests(apply_operations(root_bases(build, acc), spans, positions))
 
 
@@ -84,7 +84,7 @@ def compile(recipe: dict, t: dict) -> list[tuple[str, str, list[str]]]:
     try:
         return _core.compile_recipe(json.dumps(recipe), t["compiler"])
     except _core.RecipeError as e:
-        sys.exit(f"{recipe['flavor']}: {e}")
+        sys.exit(f"{recipe['target']}: {e}")
 
 
 @functools.cache
@@ -102,7 +102,7 @@ def run(recipe: dict, build: Path, t: dict) -> list[dict]:
         if ops:
             spans = tuple(s for op in ops if op != IUPAC_TO_N for s in t["spans"][op].get(acc, ()))
             md5, sq = _derived(build, acc, spans, IUPAC_TO_N in ops)
-        out.append({"flavor": recipe["flavor"], "name": name, "root_id": acc, "operations": ops,
+        out.append({"target": recipe["target"], "name": name, "root_id": acc, "operations": ops,
                     "length": r["length"], "md5": md5, "sha512t24u": sq})
     return out
 
@@ -135,7 +135,7 @@ def in_observed_order(got: list[dict], observed: list[dict]) -> list[dict]:
     out = []
     for o in sorted(observed, key=lambda o: o["position"]):
         g = by_name[o["name"]]
-        out.append({"flavor": g["flavor"], "position": o["position"], "name": g["name"],
+        out.append({"target": g["target"], "position": o["position"], "name": g["name"],
                     "root_id": g["root_id"], "length": g["length"], "md5": g["md5"],
                     "sha512t24u": g["sha512t24u"]})
     return out

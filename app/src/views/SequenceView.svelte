@@ -1,13 +1,13 @@
 <script lang="ts">
-  // One sequence of a flavor, base by base: an overview of the whole sequence
+  // One sequence of an edition, base by base: an overview of the whole sequence
   // (its runs of N, what the operations change, where the view is) above a
   // scroller of its bases, built in the browser from the root's bases and the
-  // flavor's operations, with what the operations changed marked. Coordinates
+  // edition's operations, with what the operations changed marked. Coordinates
   // are shown 1-based, inclusive, as genome browsers show them; the URL keeps
   // them 0-based, half-open (?start=&end=), and follows the view.
   import type { Blocks } from "../data/blocks.ts";
   import type { Catalog } from "../data/catalog.ts";
-  import { IUPAC_TO_N, manifest, OPERATION_LABELS, region, spans, type ManifestRow } from "../data/flavors.ts";
+  import { IUPAC_TO_N, manifest, OPERATION_LABELS, region, spans, type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { bp, n } from "../format.ts";
   import { href } from "../route.svelte.ts";
@@ -30,7 +30,7 @@
     return lead && lead.end < row.length ? lead.end : 0;
   }
 
-  /** What the overview draws: the runs of N, and the spans the flavor's operations change. */
+  /** What the overview draws: the runs of N, and the spans the edition's operations change. */
   async function tracks(row: ManifestRow): Promise<{ gaps: Span[]; changed: Span[] }> {
     const gaps = (await runs()).filter((r) => r.root_id === row.root_id).map((r) => [r.start, r.end] as Span);
     const changed: Span[] = [];
@@ -63,7 +63,7 @@
   function onview(s: number, e: number) {
     view = [s, e];
     if (input && document.activeElement !== input) input.value = `${n(s + 1)}-${n(e)}`;
-    history.replaceState(null, "", `${href("flavor", label, "seq", name)}?${new URLSearchParams({ start: String(s), end: String(e) })}`);
+    history.replaceState(null, "", `${href("edition", label, "seq", name)}?${new URLSearchParams({ start: String(s), end: String(e) })}`);
   }
 
   function submit(e: SubmitEvent, row: ManifestRow) {
@@ -84,7 +84,7 @@
 </script>
 
 <section>
-  <p class="crumbs"><a href="#/catalog">Catalog</a> / <a href={href("flavor", label)}>{label}</a> / {name}</p>
+  <p class="crumbs"><a href="#/catalog">Catalog</a> / <a href={href("edition", label)}>{label}</a> / {name}</p>
   {#await loaded then v}
     {#if !v}
       <h1>No such sequence</h1>

@@ -1,6 +1,6 @@
 {
-  "_doc": "The cataloged flavors: refbook's label for each, and the targets that reproduce it. A target is keyed by its recipe's id in recipes/*.json; `publisher` and `alias` are who made the file and the name they give it (an alias of the flavor). Labels follow each flavor's most common target. build_catalog.py checks that the targets listed under a flavor are exactly those whose named sequence sets have one digest, so a label can't cover two flavors or miss a target.",
-  "flavors": [
+  "_doc": "The cataloged editions: refbook's label for each, and the targets that reproduce it. A target is keyed by its recipe's id in recipes/*.json; `publisher` and `alias` are who made the file and the name they give it (an alias of the edition). Labels follow each edition's most common target. build_catalog.py checks that the targets listed under an edition are exactly those whose named sequence sets have one digest, so a label can't cover two editions or miss a target.",
+  "editions": [
     {"label": "grch38-no-alt", "targets": {
       "GRCh38_no_alt_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.15_GRCh38_no_alt_analysis_set"},
       "iGenomes_NCBI_GRCh38": {"publisher": "Illumina iGenomes", "alias": "NCBI/GRCh38"}}},

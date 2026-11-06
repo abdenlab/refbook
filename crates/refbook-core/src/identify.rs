@@ -6,7 +6,7 @@
 //! identified on its own, with no collection-level guessing:
 //!
 //! - a digest the store knows pins the sequence: its root, the nucleotide
-//!   operations from it, and the flavors that use it (under which names);
+//!   operations from it, and the editions that use it (under which names);
 //! - otherwise a name that names a root of that length gives the root, and
 //!   the stored sequences of that root (its cognates: the same length, the
 //!   same bases but for N) are what it could be;
@@ -53,7 +53,7 @@ pub struct IdentifyTables {
 impl IdentifyTables {
     /// `stored`: the sequence store. `roots`: (root_id, length) of every
     /// root. `aliases`: (root_id, alias) in any namespace. `manifests`:
-    /// (flavor, name, SQ. digest) of every flavor's sequences; their names
+    /// (edition, name, SQ. digest) of every edition's sequences; their names
     /// name roots too.
     pub fn new(
         stored: Vec<Stored>,
@@ -88,11 +88,11 @@ impl IdentifyTables {
             of_root,
             uses: HashMap::new(),
         };
-        for (flavor, name, sq) in manifests {
+        for (edition, name, sq) in manifests {
             if let Some(&i) = t.by_sq.get(&sq) {
                 let root = t.stored[i].root_id.clone();
                 t.names.entry(name.clone()).or_default().insert(root);
-                t.uses.entry(sq).or_default().push((flavor, name));
+                t.uses.entry(sq).or_default().push((edition, name));
             }
         }
         for v in t.uses.values_mut() {
@@ -119,10 +119,10 @@ pub enum Evidence {
     Nothing,
 }
 
-/// A flavor that uses a sequence, under a name.
+/// An edition that uses a sequence, under a name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FlavorUse {
-    pub flavor: String,
+pub struct EditionUse {
+    pub edition: String,
     pub name: String,
     /// The `SQ.` digest of the sequence it uses.
     pub sequence: String,
@@ -162,20 +162,20 @@ pub struct Identity {
     /// Without a known digest: the stored sequences of the root of the
     /// entry's length, any of which it could be.
     pub cognates: Vec<String>,
-    /// The flavors that use the sequence (or, without a known digest, any of
+    /// The editions that use the sequence (or, without a known digest, any of
     /// its cognates under the entry's name).
-    pub flavors: Vec<FlavorUse>,
+    pub editions: Vec<EditionUse>,
     pub notes: Vec<Note>,
 }
 
-fn uses_of<'a>(t: &'a IdentifyTables, sq: &str) -> impl Iterator<Item = FlavorUse> + 'a {
+fn uses_of<'a>(t: &'a IdentifyTables, sq: &str) -> impl Iterator<Item = EditionUse> + 'a {
     let sq = sq.to_string();
     t.uses
         .get(&sq)
         .into_iter()
         .flatten()
-        .map(move |(f, n)| FlavorUse {
-            flavor: f.clone(),
+        .map(move |(f, n)| EditionUse {
+            edition: f.clone(),
             name: n.clone(),
             sequence: sq.clone(),
         })
@@ -227,7 +227,7 @@ pub fn identify_entry(e: &Entry, t: &IdentifyTables) -> Identity {
             root_id: Some(s.root_id.clone()),
             operations: Some(s.operations.clone()),
             cognates: vec![],
-            flavors: uses_of(t, &s.sq).collect(),
+            editions: uses_of(t, &s.sq).collect(),
             notes,
         };
     }
@@ -241,7 +241,7 @@ pub fn identify_entry(e: &Entry, t: &IdentifyTables) -> Identity {
         root_id: None,
         operations: None,
         cognates: vec![],
-        flavors: vec![],
+        editions: vec![],
         notes,
     };
     if named.is_empty() {
@@ -285,12 +285,12 @@ pub fn identify_entry(e: &Entry, t: &IdentifyTables) -> Identity {
             let s = &t.stored[i];
             if Some(s.length) == id.length {
                 id.cognates.push(s.sq.clone());
-                id.flavors
+                id.editions
                     .extend(uses_of(t, &s.sq).filter(|u| u.name == name));
             }
         }
-        id.flavors
-            .sort_by(|a, b| (&a.flavor, &a.name).cmp(&(&b.flavor, &b.name)));
+        id.editions
+            .sort_by(|a, b| (&a.edition, &a.name).cmp(&(&b.edition, &b.name)));
     }
     id.root_id = Some(root);
     id
@@ -354,9 +354,9 @@ mod tests {
         assert_eq!(id.sequence.as_deref(), Some("SQ.r1n"));
         assert_eq!(id.operations, Some(vec!["iupac_to_n".to_string()]));
         assert_eq!(
-            id.flavors,
-            vec![FlavorUse {
-                flavor: "hg".into(),
+            id.editions,
+            vec![EditionUse {
+                edition: "hg".into(),
                 name: "chr1".into(),
                 sequence: "SQ.r1n".into()
             }]
@@ -409,9 +409,9 @@ mod tests {
         );
         assert_eq!(id.cognates, vec!["SQ.r1", "SQ.r1n"]);
         assert_eq!(
-            id.flavors
+            id.editions
                 .iter()
-                .map(|u| u.flavor.as_str())
+                .map(|u| u.edition.as_str())
                 .collect::<Vec<_>>(),
             ["grc", "hg"]
         );

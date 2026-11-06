@@ -1,9 +1,9 @@
-"""Load a catalog: the sequence store, the collection store, flavors and targets.
+"""Load a catalog: the sequence store, the collection store, editions and targets.
 
 The sequence store says, for every sequence refbook knows (keyed by its `SQ.`
 digest, findable by MD5), how to make its bases: a root and the nucleotide
 operations applied to it. The collection store holds named collections by
-seqcol digest. Flavors (cataloged named sequence sets, with labels, recipes and
+seqcol digest. Editions (cataloged named sequence sets, with labels, recipes and
 facets) and targets (the files that reproduce them) are curated entries on top;
 see docs/GLOSSARY.md.
 
@@ -69,11 +69,11 @@ class Catalog:
         for r in pq.read_table(self.file("derivations.parquet")).to_pylist():
             self.derivations[r["sha512t24u"]].append(r)
 
-        # Flavors, their manifests, and the targets that reproduce them.
-        self.flavors = {r["flavor"]: r for r in pq.read_table(self.file("flavors.parquet")).to_pylist()}
+        # Editions, their manifests, and the targets that reproduce them.
+        self.editions = {r["edition"]: r for r in pq.read_table(self.file("editions.parquet")).to_pylist()}
         self.manifests: dict[str, list[Seq]] = defaultdict(list)
         for r in pq.read_table(self.file("manifests.parquet")).to_pylist():
-            self.manifests[r["flavor"]].append(Seq(r["name"], r["root_id"], r["length"], r["md5"],
+            self.manifests[r["edition"]].append(Seq(r["name"], r["root_id"], r["length"], r["md5"],
                                                    r["sha512t24u"]))
         self.targets = {r["target"]: r for r in pq.read_table(self.file("targets.parquet")).to_pylist()}
         order = defaultdict(list)
@@ -81,11 +81,11 @@ class Catalog:
             order[r["target"]].append(r)
         self.target_order = {t: [r["name"] for r in sorted(v, key=lambda r: r["position"])]
                              for t, v in order.items()}
-        # Collection digests of the curated entries: seqcol digest -> flavor label or target.
-        self.named = {r["seqcol_digest"]: f for f, r in self.flavors.items()}
+        # Collection digests of the curated entries: seqcol digest -> edition label or target.
+        self.named = {r["seqcol_digest"]: f for f, r in self.editions.items()}
         for t, r in self.targets.items():
             self.named.setdefault(r["seqcol_digest"], t)
-        self.flavor_by_id = {r["id"]: f for f, r in self.flavors.items()}
+        self.edition_by_id = {r["id"]: f for f, r in self.editions.items()}
 
         # Roots, hosted and external, and what kind each is.
         self.root_length, self.external = {}, {}
@@ -164,15 +164,15 @@ class Catalog:
                     self._by_identifier[pair].add(sq)
         return self._by_identifier
 
-    def flavor_names(self) -> dict[str, list[tuple[str, str]]]:
-        """sha512t24u -> [(flavor, name)]: the flavors that use a sequence, under which names."""
-        if getattr(self, "_flavor_names", None) is None:
+    def edition_names(self) -> dict[str, list[tuple[str, str]]]:
+        """sha512t24u -> [(edition, name)]: the editions that use a sequence, under which names."""
+        if getattr(self, "_edition_names", None) is None:
             out = defaultdict(list)
-            for flavor, seqs in self.manifests.items():
+            for edition, seqs in self.manifests.items():
                 for s in seqs:
-                    out[s.sha512t24u].append((flavor, s.name))
-            self._flavor_names = {sq: sorted(v) for sq, v in out.items()}
-        return self._flavor_names
+                    out[s.sha512t24u].append((edition, s.name))
+            self._edition_names = {sq: sorted(v) for sq, v in out.items()}
+        return self._edition_names
 
     def identify_tables(self):
         """The tables identify reads, built once (refbook-core identify)."""
@@ -221,9 +221,9 @@ class Catalog:
                 ways.append("as submitted (INSDC)")
         return " or ".join(ways) or "unknown"
 
-    def flavors_with(self, sq: str) -> list[str]:
-        """The cataloged flavors containing a sequence."""
-        return sorted({f for d in self.derivations.get(sq, []) for f in d["flavors"]})
+    def editions_with(self, sq: str) -> list[str]:
+        """The cataloged editions containing a sequence."""
+        return sorted({f for d in self.derivations.get(sq, []) for f in d["editions"]})
 
     def kind(self, root_id: str) -> str:
         if root_id in self.external:

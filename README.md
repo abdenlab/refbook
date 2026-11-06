@@ -65,10 +65,10 @@ $ uv run refbook identify HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
     hg38-analysis-set vs grch38-no-alt: 14 sequences differ in bases (12: as submitted (INSDC) vs IUPAC -> N; ...)
     grch38-no-alt: in the order of GRC GCA_000001405.15_GRCh38_no_alt_analysis_set; Illumina iGenomes NCBI/GRCh38
 
-# What each sequence is, on its own evidence (root, operations, flavors).
+# What each sequence is, on its own evidence (root, operations, editions).
 $ uv run refbook identify sample.dict --sequences
   sequences:
-    chr1	248956422	CM000663.2 as submitted (INSDC), in 6 flavors
+    chr1	248956422	CM000663.2 as submitted (INSDC), in 6 editions
     chr2	242193529	CM000664.2 (by name and length), one of 2 cataloged versions
     phiX	5386	unknown to the catalog
 
@@ -84,8 +84,8 @@ $ curl localhost:8000/comparison/B-rB7OjNDYYfvB8O1yO2mVQjYziwvppI/Q_Qsamo09hQ5Kd
 
 `identify` accepts `.fai`, `chrom.sizes`, `.dict`, SAM header text, BAM, CRAM
 (2.x/3.x), VCF, FASTA and seqcol collections (level 2 JSON). It compares the header with each cataloged
-**flavor**, a set of named sequences whatever their order. Its verdicts are
-**exact**, **consistent**, **contains** (the whole flavor plus extra sequences,
+**edition**, a set of named sequences whatever their order. Its verdicts are
+**exact**, **consistent**, **contains** (the whole edition plus extra sequences,
 such as spike-ins), **subset**, or the **closest** match with an itemized
 difference. Order is reported separately: which published files list the
 sequences in the header's order, which is what BAM reference IDs and sorted
@@ -93,7 +93,7 @@ files depend on.
 
 `--sequences` (and `refbook.identify.sequences` in Python, `identifySequences`
 in JS) says what each sequence is on its own: with a digest the catalog knows,
-the sequence, its root, the nucleotide operations from it and the flavors that
+the sequence, its root, the nucleotide operations from it and the editions that
 use it; from a name and length, the root and the cataloged versions it could
 be; and notes on whatever disagrees (an unknown digest, a length, a name that
 names another root). A FASTA's sequences are digested (MD5 and `SQ.`).
@@ -108,9 +108,9 @@ cat = Catalog("https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/"
 
 # Identify a header.
 result = identify(read_header("sample.bam"), cat)
-print(result.best[0].verdict, [c.flavor for c in result.best], result.best[0].in_order_of)
+print(result.best[0].verdict, [c.edition for c in result.best], result.best[0].in_order_of)
 
-# A collection can be a flavor ("hg38-analysis-set"), a published file
+# A collection can be an edition ("hg38-analysis-set"), a published file
 # ("UCSC_hg38.analysisSet", in its own order), a seqcol digest, a seqcol object,
 # or any list of (name, digest) pairs whose sequences the catalog holds.
 resolve(cat, "hg38-analysis-set", 0)     # its seqcol digest
@@ -144,7 +144,7 @@ sequences, such as `ucsc:chr1` (the root and its IUPAC→N derivative), answers
 `refseq`, `ensembl` and `ucsc`, plus `imgt.hla` and refbook's `grc` (GRC
 Sequence-Names, e.g. `grc:HSCHR1_CTG1_UNLOCALIZED`); of these, `insdc`,
 `refseq`, `ensembl` and `imgt.hla` are identifiers.org prefixes. Metadata adds refbook's account under `refbook`: the root,
-the nucleotide operations from it, and the flavors that use the sequence.
+the nucleotide operations from it, and the editions that use the sequence.
 Collections are served with refbook's seqcol schema: the spec's extended
 schema plus `named_sequences` and `sorted_named_sequences`. Against the seqcol
 compliance suite in the `refget` package it passes 52 of 65 checks. The rest
@@ -167,7 +167,7 @@ error unless `clip=True`.
 ## The catalog
 
 The catalog (CC-BY-4.0) reproduces 17 published GRCh38 files, which reduce to
-13 flavors:
+13 editions:
 
 | Publisher | Files |
 | --- | --- |
@@ -183,7 +183,7 @@ uppercase with IUPAC codes kept, in Parquet laid out for range reads. It also
 holds annotation layers in root coordinates (AGP components and gaps, alt and
 patch placements, named regions, the GRC hard-masks, soft-masking), aliases
 across naming conventions, the sequence store (every distinct sequence and how
-it is made), each flavor's recipe and facets, GA4GH seqcol documents, and the
+it is made), each edition's recipe and facets, GA4GH seqcol documents, and the
 evidence of each reproduction. The tables are plain Parquet: read them with
 DuckDB, Polars or pyarrow without this library. See the
 [dataset card](https://huggingface.co/datasets/abdenlab/refbook) for the file
@@ -224,7 +224,7 @@ uv run python -I catalog/11_external_roots.py
 uv run python -I catalog/20_layers.py
 uv run python -I catalog/30_observe.py
 uv run python -I catalog/40_recipes.py
-uv run python -I catalog/41_flavors.py
+uv run python -I catalog/41_editions.py
 uv run python -I catalog/50_aliases.py
 uv run python -I catalog/60_check_gaps.py
 uv run python -I catalog/61_check_roots.py
@@ -236,7 +236,7 @@ Steps read the downloads in `catalog/output/raw/` and write
 `catalog/output/build/<assembly>/` (`catalog/output/` is gitignored; override
 with `--raw`/`--build` or `REFBOOK_RAW`/`REFBOOK_BUILD`).
 Their declarative inputs are in `catalog/assemblies/<assembly>/`: the recipes, the
-cataloged flavors, and the locks.
+cataloged editions, and the locks.
 
 Each step writes its own directory, `catalog/output/build/grch38/<NN_step>/`,
 assembled under
@@ -272,10 +272,10 @@ Each script's docstring says what it reads, writes and checks.
 | `python/` | The Python package (`pyproject.toml`, `README.md`, and `tests/`, with real ENCODE, gnomAD and GIAB headers as fixtures) |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `store`, `service`, `blocks`, `remote` |
 | `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Built with `pnpm build` at the root (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130) |
-| `app/` | The web app (Svelte 5, Vite, TypeScript; the data layer in `app/src/data/` is plain TypeScript): the catalog, each flavor's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations; identify (paste a `.fai`, `.dict`, SAM header, VCF contigs or FASTA: each sequence identified by the core, in the browser); compare (two flavors or published files: seqcol's comparison, and what differs sequence by sequence); and design (a recipe editor: the choices always in view, with a naming convention per sequence group; tabs for analysis goals, the JSON, details, and the catalog ranked by closeness to load a flavor's recipe; compiled live in the browser by the core, with a strip saying whether it is a cataloged flavor, its ID and exports, and a link that carries it). `pnpm dev` at the root serves it with the build in `catalog/output/build/grch38` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere |
+| `app/` | The web app (Svelte 5, Vite, TypeScript; the data layer in `app/src/data/` is plain TypeScript): the catalog, each edition's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations; identify (paste a `.fai`, `.dict`, SAM header, VCF contigs or FASTA: each sequence identified by the core, in the browser); compare (two editions or published files: seqcol's comparison, and what differs sequence by sequence); and design (a recipe editor: the choices always in view, with a naming convention per sequence group; tabs for analysis goals, the JSON, details, and the catalog ranked by closeness to load an edition's recipe; compiled live in the browser by the core, with a strip saying whether it is a cataloged edition, its ID and exports, and a link that carries it). `pnpm dev` at the root serves it with the build in `catalog/output/build/grch38` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere |
 | `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
 | `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
-| `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `flavors.json` (labels, and the targets that reproduce each flavor) and `locks/` |
+| `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `editions.json` (labels, and the targets that reproduce each edition) and `locks/` |
 | `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 
 ## Development

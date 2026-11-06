@@ -24,7 +24,7 @@ Sequence Collections v1 (docs/seqcols/README.md)
 recommended list), `imgt.hla` (an identifiers.org prefix), `ucsc` (in refget's
 list, not at identifiers.org) and `grc` (refbook's, for GRC Sequence-Names
 such as `1` or `HSCHR1_CTG1_UNLOCALIZED`). The collections are the
-catalog's stored ones (every flavor and target), plus any level-2 collections
+catalog's stored ones (every edition and target), plus any level-2 collections
 passed as `extra` (for instance the compliance suite's test collections). The
 sequences are the catalog's, plus any passed as `sequences`, test sequences
 outside the catalog: (bases, [(naming_authority, alias)]) each. Circular
@@ -273,7 +273,7 @@ class Service:
             "id": "io.github.abdenlab.refbook.seqcol",
             "name": "refbook sequence collections",
             "type": {"group": "org.ga4gh", "artifact": "refget-seqcol", "version": "1.0.0"},
-            "description": "The refbook catalog's flavors and targets as sequence collections",
+            "description": "The refbook catalog's editions and targets as sequence collections",
             "organization": ORGANIZATION,
             "version": VERSION,
             "seqcol": {"schema": seqcol.SCHEMA},

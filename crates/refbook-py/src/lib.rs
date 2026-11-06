@@ -348,7 +348,7 @@ fn compile_recipe(
 
 /// The catalog tables identify reads, indexed once: the sequence store as
 /// (sq, md5, length, root_id, operations), roots as (root_id, length),
-/// aliases as (root_id, alias), manifests as (flavor, name, sq).
+/// aliases as (root_id, alias), manifests as (edition, name, sq).
 #[pyclass(frozen)]
 struct IdentifyTables(identify::IdentifyTables);
 

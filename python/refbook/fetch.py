@@ -3,7 +3,7 @@
 `fetch(cat, collection, intervals)` takes an interval table and returns it as
 an Arrow table with one more column, `sequence`: the bases at each interval,
 as `materialize` would give them (each sequence's nucleotide operations
-applied). The collection is anything refbook.resolve accepts: a flavor, a
+applied). The collection is anything refbook.resolve accepts: an edition, a
 target, a stored digest, a seqcol representation or a named sequence set; only
 its names matter, not its order. Bases are uppercase; soft-masking is a layer.
 

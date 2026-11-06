@@ -52,18 +52,18 @@ def main() -> None:
             rel = target_of(r)
             entry = lock.get(rel)
             if entry is None:
-                sys.exit(f"{r['flavor']}: {rel} is in no lock (run the fetch steps)")
-            src, dest = raw / rel, out / "observed" / f"{r['flavor']}.parquet"
+                sys.exit(f"{r['target']}: {rel} is in no lock (run the fetch steps)")
+            src, dest = raw / rel, out / "observed" / f"{r['target']}.parquet"
             if (src.stat().st_size, layout.sha256(src)) != (int(entry["bytes"]), entry["sha256"]):
-                sys.exit(f"{r['flavor']}: {rel} does not match its lock")
+                sys.exit(f"{r['target']}: {rel} does not match its lock")
             old = previous / dest.name
             if args.reuse and old.exists() and read_provenance(old).get("sha256") == entry["sha256"]:
                 shutil.copy2(old, dest)
-                print(f"{r['flavor']}: reused (same bytes)", file=sys.stderr)
+                print(f"{r['target']}: reused (same bytes)", file=sys.stderr)
                 continue
             table = observe(src)
             pq.write_table(table.replace_schema_metadata(provenance(entry)), dest, compression="zstd")
-            print(f"{r['flavor']}: observed {src.name}", file=sys.stderr)
+            print(f"{r['target']}: observed {src.name}", file=sys.stderr)
         layout.record_inputs(out, STEP, layout.inputs_lock(args.assembly), layout.targets_lock(args.assembly))
 
 

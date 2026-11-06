@@ -9,7 +9,7 @@ writes Parquet to build/grch38/20_layers/:
                       half-open on the root, component_start/end likewise on
                       the component. Gap rows have null component columns and
                       vice versa. `object_rank` is the root's position among
-                      the objects of its `source` file (flavors order by it).
+                      the objects of its `source` file (editions order by it).
 - layer_regions.parquet, layer_placements.parquet   see build_regions and
                       build_placements
 - layer_hardmask_grc.parquet   the spans the GRC hard-masks with N in its

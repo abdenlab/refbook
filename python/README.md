@@ -65,8 +65,8 @@ $ REF_CACHE=~/refcache/%2s/%2s/%s samtools view sample.cram
 
 `identify` accepts `.fai`, `chrom.sizes`, `.dict`, SAM header text, BAM, CRAM
 (2.x/3.x), VCF and FASTA. It compares the header with each cataloged
-**flavor**, a set of named sequences whatever their order. Its verdicts are
-**exact**, **consistent**, **contains** (the whole flavor plus extra sequences,
+**edition**, a set of named sequences whatever their order. Its verdicts are
+**exact**, **consistent**, **contains** (the whole edition plus extra sequences,
 such as spike-ins), **subset**, or the **closest** match with an itemized
 difference. Order is reported separately: which published files list the
 sequences in the header's order, which is what BAM reference IDs and sorted
@@ -82,9 +82,9 @@ cat = Catalog("https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/"
 
 # Identify a header.
 result = identify(read_header("sample.bam"), cat)
-print(result.best[0].verdict, [c.flavor for c in result.best], result.best[0].in_order_of)
+print(result.best[0].verdict, [c.edition for c in result.best], result.best[0].in_order_of)
 
-# A collection can be a flavor ("hg38-analysis-set"), a published file
+# A collection can be an edition ("hg38-analysis-set"), a published file
 # ("UCSC_hg38.analysisSet", in its own order), a seqcol digest, a seqcol object,
 # or any list of (name, digest) pairs whose sequences the catalog holds.
 resolve(cat, "hg38-analysis-set", 0)     # its seqcol digest
@@ -115,6 +115,6 @@ error unless `clip=True`.
 ## More
 
 The catalog, how it is built and checked, and the terms used here
-(root, flavor, recipe, ...) are described in the repository's
+(root, edition, recipe, ...) are described in the repository's
 [README](https://github.com/abdenlab/refbook#readme) and
 [glossary](https://github.com/abdenlab/refbook/blob/main/docs/GLOSSARY.md).

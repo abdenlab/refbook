@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The whole sequence as one bar: its runs of N, what the flavor's
+  // The whole sequence as one bar: its runs of N, what the edition's
   // operations change, and where the view is. Click or drag to go anywhere.
   import { n } from "../format.ts";
 

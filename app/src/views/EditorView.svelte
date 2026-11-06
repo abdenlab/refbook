@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  // The recipe being edited, kept for the session: leaving for a flavor's page
+  // The recipe being edited, kept for the session: leaving for an edition's page
   // and coming back (or clicking Editor) returns to it.
   let kept: { recipe: string; loaded: string } | null = null;
 </script>
@@ -8,7 +8,7 @@
   // The editor: a workbench for recipes, with the catalog to start from. A shelf on the
   // left holds every choice of the recipe, always in the same place (a choice
   // that doesn't apply is disabled, not hidden). The stage on the right shows
-  // the catalog (fixed, with how far each flavor is from the recipe), the
+  // the catalog (fixed, with how far each edition is from the recipe), the
   // analysis goals, the recipe and the files it makes, and the details. The
   // recipe is compiled live by the core in the browser.
   import * as rb from "@abdenlab/refbook";
@@ -16,7 +16,7 @@
   import type { Catalog } from "../data/catalog.ts";
   import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
-  import { flavors, manifest, OPERATION_LABELS, targets, type Flavor, type ManifestRow } from "../data/flavors.ts";
+  import { editions, manifest, OPERATION_LABELS, targets, type Edition, type ManifestRow } from "../data/editions.ts";
   import { pairs } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import * as edit from "../data/recipeEdit.ts";
@@ -30,11 +30,11 @@
   let { cat, query }: { cat: Catalog; query: URLSearchParams } = $props();
 
   const ready = $derived(measure("catalog", async () => {
-    const [t, fs, ts] = await Promise.all([designTables(cat), flavors(cat), targets(cat)]);
-    const manifests = new Map(await Promise.all(fs.map(async (f) => [f.flavor, await manifest(cat, f.flavor)] as const)));
+    const [t, fs, ts] = await Promise.all([designTables(cat), editions(cat), targets(cat)]);
+    const manifests = new Map(await Promise.all(fs.map(async (f) => [f.edition, await manifest(cat, f.edition)] as const)));
     // The catalog's order is fixed: smallest first.
-    const listed = [...fs].sort((a, b) => a.n_sequences - b.n_sequences || a.flavor.localeCompare(b.flavor));
-    const publishers = new Map([...Map.groupBy(ts, (x) => x.flavor)].map(([f, xs]) => [f, [...new Set(xs.map((x) => x.publisher))]]));
+    const listed = [...fs].sort((a, b) => a.n_sequences - b.n_sequences || a.edition.localeCompare(b.edition));
+    const publishers = new Map([...Map.groupBy(ts, (x) => x.edition)].map(([f, xs]) => [f, [...new Set(xs.map((x) => x.publisher))]]));
     return { t, fs, listed, publishers, manifests };
   }));
 
@@ -54,13 +54,13 @@
   let order = $state<Order>("name");
   let copied = $state<string | null>(null);
 
-  function initial(fs: Flavor[]): Recipe {
+  function initial(fs: Edition[]): Recipe {
     if (kept && !query.has("r") && !query.has("from")) return JSON.parse(kept.recipe);
     try {
       const r = query.get("r");
       if (r) return decodeRecipe(r);
     } catch { /* a bad link: a new recipe */ }
-    const from = fs.find((f) => f.flavor === query.get("from"));
+    const from = fs.find((f) => f.edition === query.get("from"));
     return from ? plainRecipe(JSON.parse(from.recipe)) : edit.fromScratch();
   }
 
@@ -97,9 +97,9 @@
     }
   }
 
-  function loadFlavor(f: Flavor | null) {
+  function loadEdition(f: Edition | null) {
     const edited = recipe && JSON.stringify(recipe) !== loaded;
-    if (edited && !confirm(`Replace the recipe you are editing with ${f ? f.flavor + "'s" : "a new one"}?`)) return;
+    if (edited && !confirm(`Replace the recipe you are editing with ${f ? f.edition + "'s" : "a new one"}?`)) return;
     load(f ? plainRecipe(JSON.parse(f.recipe)) : edit.fromScratch());
   }
 
@@ -118,13 +118,13 @@
   });
 
   /** The design, or the compiler's error. */
-  function attempt(r: Recipe, t: Parameters<typeof design>[1], fs: Flavor[]) {
+  function attempt(r: Recipe, t: Parameters<typeof design>[1], fs: Edition[]) {
     try { return { d: design(r, t, fs), error: null }; } catch (e) { return { d: null, error: e }; }
   }
 
-  /** How each cataloged flavor differs from the design, sequence by sequence. */
+  /** How each cataloged edition differs from the design, sequence by sequence. */
   function differences(rows: ManifestRow[], manifests: Map<string, ManifestRow[]>) {
-    return new Map([...manifests].map(([flavor, m]) => [flavor, pairs(rows, m).filter((p) => p.kind !== "same")]));
+    return new Map([...manifests].map(([edition, m]) => [edition, pairs(rows, m).filter((p) => p.kind !== "same")]));
   }
 
   /** A file the recipe makes, or why it can't be made yet. */
@@ -194,9 +194,9 @@
           <p class="status band" class:match={!!d?.equals} aria-live="polite">
             <span class="label">Recipe:</span>
             {#if attempted.error}<span class="bad">doesn't compile</span>
-            {:else if d?.equals}<Icon name="check" /><a href={href("flavor", d.equals)}>{d.equals}</a>
+            {:else if d?.equals}<Icon name="check" /><a href={href("edition", d.equals)}>{d.equals}</a>
             {:else if d}not in catalog{/if}
-            <button type="button" class="icon reset" disabled={fresh} onclick={() => loadFlavor(null)}
+            <button type="button" class="icon reset" disabled={fresh} onclick={() => loadEdition(null)}
                     title={fresh ? "A new recipe: the GRCh38 chromosomes" : "Start over: a new recipe, the GRCh38 chromosomes"}
                     aria-label="Start over with a new recipe"><Icon name="reset" /></button>
           </p>
@@ -280,23 +280,23 @@
 
           {#if tab === "catalog"}
             <div class="table-wrap flat">
-              <table class="flavors">
+              <table class="editions">
                 <thead>
-                  <tr><th class="edit"><span class="sr">Edit</span></th><th>Flavor</th><th class="num">Sequences</th><th class="num">Length</th><th>Operations</th><th>Published by</th>
+                  <tr><th class="edit"><span class="sr">Edit</span></th><th>Edition</th><th class="num">Sequences</th><th class="num">Length</th><th>Operations</th><th>Published by</th>
                     <th class="num" title="Sequences that differ from your recipe's">Differ</th></tr>
                 </thead>
                 <tbody>
-                  {#each listed as f (f.flavor)}
-                    {@const x = diffs?.get(f.flavor)}
-                    <tr class:here={d?.equals === f.flavor}>
-                      <td class="edit"><button type="button" class="icon" title={`Edit ${f.flavor}'s recipe`} aria-label={`Edit ${f.flavor}'s recipe`}
-                                  onclick={() => loadFlavor(f)}><Icon name="load" /></button></td>
-                      <td class="flavor"><a href={href("flavor", f.flavor)} target="_blank" rel="noopener" title={`${f.flavor}, in a new tab`}>{f.flavor}</a>{#if f.patch_release !== null}<span class="tag">p{f.patch_release}</span>{/if}</td>
+                  {#each listed as f (f.edition)}
+                    {@const x = diffs?.get(f.edition)}
+                    <tr class:here={d?.equals === f.edition}>
+                      <td class="edit"><button type="button" class="icon" title={`Edit ${f.edition}'s recipe`} aria-label={`Edit ${f.edition}'s recipe`}
+                                  onclick={() => loadEdition(f)}><Icon name="load" /></button></td>
+                      <td class="edition"><a href={href("edition", f.edition)} target="_blank" rel="noopener" title={`${f.edition}, in a new tab`}>{f.edition}</a>{#if f.patch_release !== null}<span class="tag">p{f.patch_release}</span>{/if}</td>
                       <td class="num">{n(f.n_sequences)}</td>
                       <td class="num">{bp(f.total_length, true)}</td>
                       <td>{#each f.operations as o (o)}<span class="op">{OPERATION_LABELS[o] ?? o}</span>{:else}<span class="muted">none</span>{/each}</td>
-                      <td class="muted">{(publishers.get(f.flavor) ?? []).join(", ")}</td>
-                      <td class="num">{#if !x}<span class="muted">–</span>{:else if !x.length}<span class="ok" title="Your recipe makes this flavor"><Icon name="check" /></span>{:else}{n(x.length)}{/if}</td>
+                      <td class="muted">{(publishers.get(f.edition) ?? []).join(", ")}</td>
+                      <td class="num">{#if !x}<span class="muted">–</span>{:else if !x.length}<span class="ok" title="Your recipe makes this edition"><Icon name="check" /></span>{:else}{n(x.length)}{/if}</td>
                     </tr>
                   {/each}
                 </tbody>
@@ -374,7 +374,7 @@
                   <dt>Digests</dt><dd class="bad">{n(d.novel.length)} sequences the catalog has never built, so their digests need their bases:
                     {d.novel.slice(0, 5).map((r) => `${r.name} (${r.root_id} ${ops(r.operations)})`).join(", ")}{d.novel.length > 5 ? ", …" : ""}</dd>
                 {:else}
-                  <dt>Flavor digest</dt><dd><Digest value={d.id!} /><div class="muted">doesn't depend on the order of the sequences</div></dd>
+                  <dt>Edition digest</dt><dd><Digest value={d.id!} /><div class="muted">doesn't depend on the order of the sequences</div></dd>
                   <dt>Seqcol digest</dt><dd><Digest value={d.seqcolDigest!} /><div class="muted">with the sequences in order by name</div></dd>
                 {/if}
               </dl>

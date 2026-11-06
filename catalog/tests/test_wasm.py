@@ -43,7 +43,7 @@ def random_sequences(n: int, seed: int = 13):
 def test_wasm_agrees_on_sequences_and_collections(tmp_path):
     seqs = [_core.remove_whitespace(s) for s in random_sequences(1000)]
     collections = [json.loads(p.read_text()) for p in sorted(
-        (BUILD / "41_flavors" / "collections").glob("*.json"))]
+        (BUILD / "41_editions" / "collections").glob("*.json"))]
     collections = [{k: c[k] for k in ("names", "lengths", "sequences")} for c in collections]
     collections.append({"names": ["chr1", "é\"x"], "lengths": [1, 2], "sequences": ["SQ.a", "SQ.b"]})
     got = run_wasm(tmp_path, {"sequences": [base64.b64encode(s).decode() for s in seqs],
@@ -89,7 +89,7 @@ def test_wasm_compiles_every_recipe_like_python(tmp_path):
     assert len(got["compiled"]) == len(recipes) == 17
     for r in recipes:
         want = [{"name": n, "root_id": acc, "operations": ops} for n, acc, ops in engine.compile(r, t)]
-        assert got["compiled"][r["flavor"]] == {"ok": want}, r["flavor"]
+        assert got["compiled"][r["target"]] == {"ok": want}, r["target"]
 
 
 @pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
@@ -104,7 +104,7 @@ def test_wasm_identifies_like_python(tmp_path):
                       for sq, r in cat.sequence.items()],
         "roots": [{"root_id": r, "length": n} for r, n in cat.root_length.items()],
         "aliases": aliases,
-        "manifests": [{"flavor": f, "name": s.name, "sha512t24u": s.sha512t24u}
+        "manifests": [{"edition": f, "name": s.name, "sha512t24u": s.sha512t24u}
                       for f, seqs in cat.manifests.items() for s in seqs],
     }
     seqs = [s for seqs in cat.manifests.values() for s in seqs]

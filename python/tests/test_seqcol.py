@@ -32,10 +32,10 @@ def test_compliance_digests(name):
 
 
 def test_named_set_digest_ignores_order_only():
-    flavor = {name: seqcol.named_set_digest(*level2(name)[::2]) for name in BUNDLES}
-    assert flavor["different_order.fa"] == flavor["base.fa"]     # same pairs, reordered
+    edition = {name: seqcol.named_set_digest(*level2(name)[::2]) for name in BUNDLES}
+    assert edition["different_order.fa"] == edition["base.fa"]     # same pairs, reordered
     for other in ("different_names.fa", "pair_swap.fa", "subset.fa", "swap_wo_coords.fa"):
-        assert flavor[other] != flavor["base.fa"], other
+        assert edition[other] != edition["base.fa"], other
 
 
 def test_named_set_digest_catches_what_the_sorted_attributes_miss():

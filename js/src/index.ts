@@ -85,7 +85,7 @@ export interface Ancillary {
 export const seqcolAncillary = (names: string[], lengths: number[], sequences: string[]): Ancillary =>
   core.seqcolAncillary(names, lengths, sequences);
 
-/** The order-independent identifier of a named sequence set (a flavor's id). */
+/** The order-independent identifier of a named sequence set (an edition's id). */
 export const namedSetDigest = (names: string[], sequences: string[]): string =>
   core.namedSetDigest(names, sequences);
 
@@ -184,7 +184,7 @@ export interface IdentifyInput {
   /** aliases.parquet rows. */
   aliases: { root_id: string; alias: string }[];
   /** manifests.parquet rows. */
-  manifests: { flavor: string; name: string; sha512t24u: string }[];
+  manifests: { edition: string; name: string; sha512t24u: string }[];
 }
 
 export const IdentifyTables = core.IdentifyTables;
@@ -220,7 +220,7 @@ export interface Identity {
   operations: string[] | null;
   /** Without a known digest: the stored sequences of the root it could be. */
   cognates: string[];
-  flavors: { flavor: string; name: string; sequence: string }[];
+  editions: { edition: string; name: string; sequence: string }[];
   notes: Note[];
 }
 

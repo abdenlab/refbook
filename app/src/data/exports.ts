@@ -1,5 +1,5 @@
-// Files made in the browser from a flavor's manifest, in a chosen order.
-import type { ManifestRow } from "./flavors.ts";
+// Files made in the browser from an edition's manifest, in a chosen order.
+import type { ManifestRow } from "./editions.ts";
 
 export function chromSizes(rows: ManifestRow[]): string {
   return rows.map((r) => `${r.name}\t${r.length}\n`).join("");
@@ -53,7 +53,7 @@ export function inOrder(rows: ManifestRow[], names?: string[]): ManifestRow[] {
   const by = new Map(rows.map((r) => [r.name, r]));
   return names.map((n) => {
     const r = by.get(n);
-    if (!r) throw new Error(`${n} is not in the flavor`);
+    if (!r) throw new Error(`${n} is not in the edition`);
     return r;
   });
 }

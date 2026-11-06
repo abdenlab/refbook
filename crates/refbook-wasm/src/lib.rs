@@ -411,7 +411,7 @@ struct AliasRow {
 
 #[derive(Deserialize)]
 struct ManifestUse {
-    flavor: String,
+    edition: String,
     name: String,
     sha512t24u: String,
 }
@@ -427,7 +427,7 @@ struct IdentifyIn {
 /// The catalog tables identify reads, built once. From {sequences, roots,
 /// aliases, manifests}: rows of sequences.parquet, of roots (root_id,
 /// length; hosted and external), of aliases.parquet (root_id, alias) and of
-/// manifests.parquet (flavor, name, sha512t24u).
+/// manifests.parquet (edition, name, sha512t24u).
 #[wasm_bindgen]
 pub struct IdentifyTables(identify::IdentifyTables);
 
@@ -454,7 +454,7 @@ impl IdentifyTables {
                 .collect(),
             t.manifests
                 .into_iter()
-                .map(|m| (m.flavor, m.name, m.sha512t24u))
+                .map(|m| (m.edition, m.name, m.sha512t24u))
                 .collect(),
         )))
     }

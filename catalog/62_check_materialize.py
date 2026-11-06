@@ -8,11 +8,11 @@ external roots) through the library, independently of the recipe engine:
    every known way of making a sequence from it is applied
    (refbook.materialize.apply_operations), and the result must have that
    sequence's MD5 and SQ. digests.
-2. Every flavor and target: resolved through the library, each name must be a
+2. Every edition and target: resolved through the library, each name must be a
    known sequence, and the seqcol digest computed from the store's digests
    must equal the catalog's.
 3. One collection, streamed in full (--stream, default grch38-no-alt; or
-   --stream-all for every flavor and target): schema, batches, and the seqcol
+   --stream-all for every edition and target): schema, batches, and the seqcol
    digest recomputed from the materialized bases.
 
 Step 1 covers every sequence of every collection, since collections are made
@@ -37,7 +37,7 @@ from refbook.materialize import SCHEMA, Bases, apply_operations
 from refbook.seqcol import digests, sha512t24u
 
 STEP = "62_check_materialize"
-INPUTS = ["sequences.parquet", "derivations.parquet", "flavors.parquet", "manifests.parquet",
+INPUTS = ["sequences.parquet", "derivations.parquet", "editions.parquet", "manifests.parquet",
           "targets.parquet", "target_sequences.parquet", "roots.parquet", "roots_external.parquet",
           "root_blocks.parquet", "layer_hardmask_grc.parquet", "collections"]
 
@@ -63,7 +63,7 @@ def check_derivations(cat: Catalog, bases: Bases) -> list[str]:
 
 def check_collections(cat: Catalog) -> list[str]:
     errors = []
-    for name, want in [*((f, r["seqcol_digest"]) for f, r in cat.flavors.items()),
+    for name, want in [*((f, r["seqcol_digest"]) for f, r in cat.editions.items()),
                        *((t, r["seqcol_digest"]) for t, r in cat.targets.items())]:
         try:
             if collection(cat, name).digest != want:
@@ -106,7 +106,7 @@ def main() -> None:
 def run(build: Path, out: Path, stream_one: str, stream_all: bool) -> list[str]:
     cat = Catalog(build)
     bases = Bases(cat)
-    want = {**{f: r["seqcol_digest"] for f, r in cat.flavors.items()},
+    want = {**{f: r["seqcol_digest"] for f, r in cat.editions.items()},
             **{t: r["seqcol_digest"] for t, r in cat.targets.items()}}
 
     t0 = time.time()
@@ -116,7 +116,7 @@ def run(build: Path, out: Path, stream_one: str, stream_all: bool) -> list[str]:
           f"rebuilt, {time.time() - t0:.0f} s", flush=True)
     t0 = time.time()
     bad = check_collections(cat)
-    print(f"{'OK  ' if not bad else 'FAIL'} {len(want)} collections (flavors and targets) resolve to "
+    print(f"{'OK  ' if not bad else 'FAIL'} {len(want)} collections (editions and targets) resolve to "
           f"their seqcol digests, {time.time() - t0:.0f} s", flush=True)
     errors += bad
     for name in (sorted(want) if stream_all else [stream_one]):

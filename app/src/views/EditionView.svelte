@@ -1,12 +1,12 @@
 <script lang="ts">
-  // A flavor: its identity, its recipe (roots → operations → names → output),
+  // An edition: its identity, its recipe (roots → operations → names → output),
   // the files that reproduce it, exports, and its sequences.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
   import { designTables, rootPlaces } from "../data/design.ts";
   import { chromSizes, ordered as inOrder, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
   import { inOrder as fileOrder } from "../data/exports.ts";
-  import { flavors, manifest, targetOrder, targets, type ManifestRow } from "../data/flavors.ts";
+  import { editions, manifest, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { bp, download, n } from "../format.ts";
   import Digest from "../components/Digest.svelte";
@@ -23,10 +23,10 @@
     return new Map(members.map((m) => [m.assembly_accession, m.assembly_name]));
   }
 
-  const loaded = $derived(measure(`flavor ${label}`, async () => {
-    const [fs, ts, rows, names, places] = await Promise.all([flavors(cat), targets(cat), manifest(cat, label), assemblyNames(), rootPlaces(cat)]);
-    const f = fs.find((x) => x.flavor === label);
-    return { f, rows, names, places, mine: ts.filter((t) => t.flavor === label), recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
+  const loaded = $derived(measure(`edition ${label}`, async () => {
+    const [fs, ts, rows, names, places] = await Promise.all([editions(cat), targets(cat), manifest(cat, label), assemblyNames(), rootPlaces(cat)]);
+    const f = fs.find((x) => x.edition === label);
+    return { f, rows, names, places, mine: ts.filter((t) => t.edition === label), recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
   }));
 
   // Exports, by name or karyotypic by role.
@@ -35,7 +35,7 @@
   async function ordered(rows: ManifestRow[]) {
     return inOrder(rows, order, (await designTables(cat)).places);
   }
-  // The table: by name, karyotypic by role, or as in one of the flavor's published files (file:<target>).
+  // The table: by name, karyotypic by role, or as in one of the edition's published files (file:<target>).
   let tableOrder = $state("karyotypic");
   let sorted = $state<ManifestRow[] | null>(null);
   const tableOrders = (mine: { target: string; publisher: string; alias: string }[]): [string, string][] => [
@@ -61,7 +61,7 @@
   <section>
     <p class="crumbs"><a href="#/catalog">Catalog</a> / {label}</p>
     {#if !f || !recipe}
-      <h1>No such flavor</h1>
+      <h1>No such edition</h1>
       <p><a href="#/catalog">Back to the catalog</a></p>
     {:else}
       <h1>{label}</h1>
@@ -75,9 +75,9 @@
         <dd>{bp(f.total_length)}</dd>
       </dl>
       <h2 class="act">Identity
-        <a class="action" href={`#/identify?${new URLSearchParams({ from: label, tab: "compare" })}`} title="Compare with another flavor or published file"><Icon name="compare" /> Compare</a></h2>
+        <a class="action" href={`#/identify?${new URLSearchParams({ from: label, tab: "compare" })}`} title="Compare with another edition or published file"><Icon name="compare" /> Compare</a></h2>
       <dl class="ids">
-        <dt>Flavor digest</dt>
+        <dt>Edition digest</dt>
         <dd><Digest value={f.id} /><div class="muted">Identifies the collection of named sequences regardless of sequence order.</div></dd>
         <dt>Seqcol digest</dt>
         <dd><Digest value={f.seqcol_digest} /><div class="muted">Identifies the collection of named sequences ordered by sequence name.</div></dd>
@@ -85,8 +85,8 @@
 
       <h2 class="act">Recipe
         <a class="action" href={`#/?${new URLSearchParams({ from: label, tab: "recipe" })}`} title="Open this recipe in the Editor"><Icon name="load" /> Edit</a></h2>
-      <p class="muted">The recipe builds this flavor from root sequences. The result is uppercase: no soft masking is applied.</p>
-      <RecipeDiagram flavor={f} {recipe} {rows} {names} />
+      <p class="muted">The recipe builds this edition from root sequences. The result is uppercase: no soft masking is applied.</p>
+      <RecipeDiagram edition={f} {recipe} {rows} {names} />
 
       <h2>Publisher's files</h2>
       <p class="muted">Each target file was reproduced by the recipe above, sequence by sequence, and matched (ignoring soft masking).</p>
@@ -107,7 +107,7 @@
       </div>
 
       <h2>Sequences</h2>
-      <SequencesTable flavor={label} rows={sorted ?? rows} {places} orders={tableOrders(mine)} bind:order={tableOrder} />
+      <SequencesTable edition={label} rows={sorted ?? rows} {places} orders={tableOrders(mine)} bind:order={tableOrder} />
     {/if}
   </section>
 {:catch e}

@@ -53,7 +53,7 @@
     "sorted_named_sequences": {
       "type": "array",
       "collated": false,
-      "description": "refbook: named_sequences, sorted lexicographically. Its level-1 digest identifies the named sequence set whatever the order; it is a refbook flavor's id.",
+      "description": "refbook: named_sequences, sorted lexicographically. Its level-1 digest identifies the named sequence set whatever the order; it is a refbook edition's id.",
       "items": {"type": "string"}
     }
   },
