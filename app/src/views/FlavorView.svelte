@@ -3,13 +3,15 @@
   // the files that reproduce it, exports, and its sequences.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
-  import { designTables } from "../data/design.ts";
+  import { designTables, rootPlaces } from "../data/design.ts";
   import { chromSizes, ordered as inOrder, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
-  import { flavors, manifest, targets, type ManifestRow } from "../data/flavors.ts";
+  import { inOrder as fileOrder } from "../data/exports.ts";
+  import { flavors, manifest, targetOrder, targets, type ManifestRow } from "../data/flavors.ts";
   import { measure } from "../data/meter.ts";
   import { bp, download, n } from "../format.ts";
   import Digest from "../components/Digest.svelte";
   import ErrorBox from "../components/ErrorBox.svelte";
+  import Icon from "../components/Icon.svelte";
   import RecipeDiagram from "../components/RecipeDiagram.svelte";
   import SequencesTable from "../components/SequencesTable.svelte";
   import type { Recipe } from "./recipe.ts";
@@ -22,9 +24,9 @@
   }
 
   const loaded = $derived(measure(`flavor ${label}`, async () => {
-    const [fs, ts, rows, names] = await Promise.all([flavors(cat), targets(cat), manifest(cat, label), assemblyNames()]);
+    const [fs, ts, rows, names, places] = await Promise.all([flavors(cat), targets(cat), manifest(cat, label), assemblyNames(), rootPlaces(cat)]);
     const f = fs.find((x) => x.flavor === label);
-    return { f, rows, names, mine: ts.filter((t) => t.flavor === label), recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
+    return { f, rows, names, places, mine: ts.filter((t) => t.flavor === label), recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
   }));
 
   // Exports, by name or karyotypic by role.
@@ -33,13 +35,29 @@
   async function ordered(rows: ManifestRow[]) {
     return inOrder(rows, order, (await designTables(cat)).places);
   }
+  // The table: by name, karyotypic by role, or as in one of the flavor's published files (file:<target>).
+  let tableOrder = $state("karyotypic");
+  let sorted = $state<ManifestRow[] | null>(null);
+  const tableOrders = (mine: { target: string; publisher: string; alias: string }[]): [string, string][] => [
+    ...ORDERS,
+    ...mine.map((t) => [`file:${t.target}`, `as in ${t.publisher}: ${t.alias}`] as [string, string]),
+  ];
+  async function sortRows(rows: ManifestRow[], o: string): Promise<ManifestRow[]> {
+    if (o.startsWith("file:")) return fileOrder(rows, await targetOrder(cat, o.slice(5)));
+    return inOrder(rows, o as Order, (await designTables(cat)).places);
+  }
+  $effect(() => {
+    const o = tableOrder;
+    loaded.then(({ rows }) => sortRows(rows, o)).then((r) => { if (o === tableOrder) sorted = r; });
+  });
+
   async function seqcol(rows: ManifestRow[]) {
     const r = await ordered(rows);
     return JSON.stringify(rb.seqcolLevel2(r.map((x) => x.name), r.map((x) => x.length), r.map((x) => x.sha512t24u)), null, 1);
   }
 </script>
 
-{#await loaded then { f, rows, names, mine, recipe }}
+{#await loaded then { f, rows, names, places, mine, recipe }}
   <section>
     <p class="crumbs"><a href="#/catalog">Catalog</a> / {label}</p>
     {#if !f || !recipe}
@@ -47,29 +65,34 @@
       <p><a href="#/catalog">Back to the catalog</a></p>
     {:else}
       <h1>{label}</h1>
-      <p class="lede">
-        {f.assembly}{f.patch_release !== null ? `, patch release ${f.patch_release}` : ""}:
-        {n(f.n_sequences)} sequences, {bp(f.total_length)}. Published as {n(mine.length)} file{mine.length === 1 ? "" : "s"}.
-      </p>
-      <p><a href={`#/identify?${new URLSearchParams({ from: label, tab: "compare" })}`}>Compare with another flavor or file →</a>
-        &nbsp; <a href={`#/?${new URLSearchParams({ from: label, tab: "recipe" })}`}>Edit its recipe →</a></p>
-
-      <h2>Identity</h2>
+      <h2>Assembly</h2>
       <dl class="ids">
-        <dt>Flavor ID</dt>
-        <dd><Digest value={f.id} /><div class="muted">The named sequence set, whatever the order: the level-1 digest of sorted_named_sequences.</div></dd>
+        <dt>Release</dt>
+        <dd>{f.assembly}{f.patch_release !== null ? `.p${f.patch_release}` : ""}</dd>
+        <dt>Sequences</dt>
+        <dd>{n(f.n_sequences)}</dd>
+        <dt>Total length</dt>
+        <dd>{bp(f.total_length)}</dd>
+      </dl>
+      <h2 class="act">Identity
+        <a class="action" href={`#/identify?${new URLSearchParams({ from: label, tab: "compare" })}`} title="Compare with another flavor or published file"><Icon name="compare" /> Compare</a></h2>
+      <dl class="ids">
+        <dt>Flavor digest</dt>
+        <dd><Digest value={f.id} /><div class="muted">Identifies the collection of named sequences regardless of sequence order.</div></dd>
         <dt>Seqcol digest</dt>
-        <dd><Digest value={f.seqcol_digest} /><div class="muted">GA4GH sequence collection, with the sequences in order by name. Each published file has its own, for its own order.</div></dd>
+        <dd><Digest value={f.seqcol_digest} /><div class="muted">Identifies the collection of named sequences ordered by sequence name.</div></dd>
       </dl>
 
-      <h2>Recipe</h2>
+      <h2 class="act">Recipe
+        <a class="action" href={`#/?${new URLSearchParams({ from: label, tab: "recipe" })}`} title="Open this recipe in the Editor"><Icon name="load" /> Edit</a></h2>
+      <p class="muted">The recipe builds this flavor from root sequences. The result is uppercase: no soft masking is applied.</p>
       <RecipeDiagram flavor={f} {recipe} {rows} {names} />
 
-      <h2>Published files</h2>
-      <p class="muted">Each file was rebuilt from the roots by the recipe, sequence by sequence, and matched.</p>
+      <h2>Publisher's files</h2>
+      <p class="muted">Each target file was reproduced by the recipe above, sequence by sequence, and matched (ignoring soft masking).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Publisher</th><th>File</th><th>Checked by</th><th>Seqcol digest (its order)</th></tr></thead>
+          <thead><tr><th>Publisher</th><th>File</th><th>Checked by</th><th>Seqcol digest (from file's order)</th></tr></thead>
           <tbody>
             {#each mine as t (t.target)}
               <tr>
@@ -83,19 +106,8 @@
         </table>
       </div>
 
-      <h2>Export</h2>
-      <div class="exports">
-        <select aria-label="Order" bind:value={order}>
-          {#each ORDERS as [k, label] (k)}<option value={k}>{label}</option>{/each}
-        </select>
-        <button type="button" onclick={async () => download(`${stem()}.chrom.sizes`, chromSizes(await ordered(rows)))}>chrom.sizes</button>
-        <button type="button" onclick={async () => download(`${stem()}.dict`, sequenceDictionary(await ordered(rows)))}>.dict (with MD5)</button>
-        <button type="button" onclick={async () => download(`${stem()}.seqcol.json`, await seqcol(rows), "application/json")}>seqcol (level 2)</button>
-        <button type="button" onclick={() => download(`${label}.recipe.json`, JSON.stringify(recipe, null, 2), "application/json")}>recipe</button>
-      </div>
-
       <h2>Sequences</h2>
-      <SequencesTable flavor={label} {rows} />
+      <SequencesTable flavor={label} rows={sorted ?? rows} {places} orders={tableOrders(mine)} bind:order={tableOrder} />
     {/if}
   </section>
 {:catch e}

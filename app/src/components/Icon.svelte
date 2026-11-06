@@ -1,6 +1,6 @@
 <script lang="ts">
   // A small line icon (24-unit strokes, after Feather), sized to the text.
-  let { name }: { name: "copy" | "download" | "link" | "load" | "check" | "reset" | "sort" } = $props();
+  let { name }: { name: "copy" | "download" | "link" | "load" | "check" | "reset" | "sort" | "compare" } = $props();
 </script>
 
 <svg class="icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2"
@@ -15,6 +15,8 @@
     <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
   {:else if name === "sort"}
     <path d="m3 16 4 4 4-4" /><path d="M7 20V4" /><path d="M11 4h10" /><path d="M11 8h7" /><path d="M11 12h4" />
+  {:else if name === "compare"}
+    <path d="m17 3 4 4-4 4" /><path d="M3 7h18" /><path d="m7 21-4-4 4-4" /><path d="M21 17H3" />
   {:else if name === "check"}
     <polyline points="20 6 9 17 4 12" />
   {:else}

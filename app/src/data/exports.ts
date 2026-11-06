@@ -11,7 +11,9 @@ export function sequenceDictionary(rows: ManifestRow[]): string {
 }
 
 /** Where a root goes in karyotypic order: an assembly member's role and molecule, or an external root's rank. */
-export type Place = { grch38: boolean; role: string; molecule: string } | { collection: string; rank: number };
+export type Place =
+  | { grch38: boolean; assembly: string; role: string; unit: string; molecule: string }
+  | { collection: string; rank: number };
 
 /** The two orders offered for exports. Neither is an identity: digests don't depend on order. */
 export type Order = "name" | "karyotypic";

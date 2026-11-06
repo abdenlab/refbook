@@ -42,11 +42,35 @@ const GRCH38 = "GCA_000001405.";
 
 let loaded: Promise<DesignTables> | null = null;
 
+type PlaceMember = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string; assembly_unit: string; assigned_molecule: string | null };
+
+/** Where each root belongs: its assembly, role, unit and molecule (the first record; none differs), or its external collection. */
+function placesOf(members: PlaceMember[], external: { root_id: string; collection: string; rank: number }[]): Map<string, Place> {
+  const places = new Map<string, Place>();
+  for (const m of members) {
+    if (places.has(m.genbank_accession)) continue;
+    const grch38 = m.assembly_accession.startsWith(GRCH38);
+    places.set(m.genbank_accession, { grch38, assembly: grch38 ? "GRCh38" : m.assembly_name, role: m.role, unit: m.assembly_unit, molecule: m.assigned_molecule ?? "" });
+  }
+  for (const e of external) places.set(e.root_id, { collection: e.collection, rank: e.rank });
+  return places;
+}
+
+let placed: Promise<Map<string, Place>> | null = null;
+
+/** Just the places (about 0.1 MB, once): for showing roles and units without the compiler's tables. */
+export function rootPlaces(cat: Catalog): Promise<Map<string, Place>> {
+  return (placed ??= Promise.all([
+    cat.table<PlaceMember>("assembly_members.parquet"),
+    cat.table<{ root_id: string; collection: string; rank: number }>("roots_external.parquet"),
+  ]).then(([m, e]) => placesOf(m, e)));
+}
+
 /** The tables the compiler and the digests need (about 0.4 MB, once). */
 export function designTables(cat: Catalog): Promise<DesignTables> {
   return (loaded ??= measure("design tables", async () => {
     type Member = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
-      assigned_molecule: string | null; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
+      assigned_molecule: string | null; assembly_unit: string; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
     const [members, placements, hardmask, iupac, external, sequences, derivations] = await Promise.all([
       cat.table<Member>("assembly_members.parquet"),
       cat.table<{ root_id: string; parent_type: string }>("layer_placements.parquet"),
@@ -80,12 +104,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       if (!g.includes(e.group)) g.push(e.group);
       collections.set(e.collection, g);
     }
-    const places = new Map<string, Place>();
-    for (const m of members) {
-      if (places.has(m.genbank_accession)) continue;
-      places.set(m.genbank_accession, { grch38: m.assembly_accession.startsWith(GRCH38), role: m.role, molecule: m.assigned_molecule ?? "" });
-    }
-    for (const e of ext) places.set(e.root_id, { collection: e.collection, rank: e.rank });
+    const places = placesOf(members, ext);
     return {
       compiler, rootLength, collections, roleCounts, places, layers: ["hardmask_grc"],
       derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
