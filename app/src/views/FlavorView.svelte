@@ -3,8 +3,9 @@
   // the files that reproduce it, exports, and its sequences.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
-  import { chromSizes, inOrder, sequenceDictionary } from "../data/exports.ts";
-  import { flavors, manifest, targetOrder, targets } from "../data/flavors.ts";
+  import { designTables } from "../data/design.ts";
+  import { chromSizes, ordered as inOrder, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
+  import { flavors, manifest, targets, type ManifestRow } from "../data/flavors.ts";
   import { measure } from "../data/meter.ts";
   import { bp, download, n } from "../format.ts";
   import Digest from "../components/Digest.svelte";
@@ -26,13 +27,13 @@
     return { f, rows, names, mine: ts.filter((t) => t.flavor === label), recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
   }));
 
-  // Exports, in canonical order or in one published file's order.
-  let order = $state("");
-  const stem = () => order || label;
-  async function ordered(rows: Parameters<typeof inOrder>[0]) {
-    return inOrder(rows, order ? await targetOrder(cat, order) : undefined);
+  // Exports, by name or karyotypic by role.
+  let order = $state<Order>("name");
+  const stem = () => label;
+  async function ordered(rows: ManifestRow[]) {
+    return inOrder(rows, order, (await designTables(cat)).places);
   }
-  async function seqcol(rows: Parameters<typeof inOrder>[0]) {
+  async function seqcol(rows: ManifestRow[]) {
     const r = await ordered(rows);
     return JSON.stringify(rb.seqcolLevel2(r.map((x) => x.name), r.map((x) => x.length), r.map((x) => x.sha512t24u)), null, 1);
   }
@@ -51,14 +52,14 @@
         {n(f.n_sequences)} sequences, {bp(f.total_length)}. Published as {n(mine.length)} file{mine.length === 1 ? "" : "s"}.
       </p>
       <p><a href={`#/compare?${new URLSearchParams({ a: label, b: "" })}`}>Compare with another flavor or file →</a>
-        &nbsp; <a href={`#/design?${new URLSearchParams({ from: label })}`}>Design a variant →</a></p>
+        &nbsp; <a href={`#/?${new URLSearchParams({ from: label, tab: "recipe" })}`}>Edit its recipe →</a></p>
 
       <h2>Identity</h2>
       <dl class="ids">
         <dt>Flavor ID</dt>
         <dd><Digest value={f.id} /><div class="muted">The named sequence set, whatever the order: the level-1 digest of sorted_named_sequences.</div></dd>
         <dt>Seqcol digest</dt>
-        <dd><Digest value={f.seqcol_digest} /><div class="muted">GA4GH sequence collection, in canonical order (by name). Each published file has its own, for its own order.</div></dd>
+        <dd><Digest value={f.seqcol_digest} /><div class="muted">GA4GH sequence collection, with the sequences in order by name. Each published file has its own, for its own order.</div></dd>
       </dl>
 
       <h2>Recipe</h2>
@@ -85,8 +86,7 @@
       <h2>Export</h2>
       <div class="exports">
         <select aria-label="Order" bind:value={order}>
-          <option value="">canonical order (by name)</option>
-          {#each mine as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}
+          {#each ORDERS as [k, label] (k)}<option value={k}>{label}</option>{/each}
         </select>
         <button type="button" onclick={async () => download(`${stem()}.chrom.sizes`, chromSizes(await ordered(rows)))}>chrom.sizes</button>
         <button type="button" onclick={async () => download(`${stem()}.dict`, sequenceDictionary(await ordered(rows)))}>.dict (with MD5)</button>

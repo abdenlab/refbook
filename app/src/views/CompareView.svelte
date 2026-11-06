@@ -22,7 +22,7 @@
     location.hash = `#/compare?${p}`;
   }
 
-  /** A flavor's sequences in canonical order, or a published file's in its own. */
+  /** A flavor's sequences by name, or a published file's in its own order. */
   async function rows(choice: string): Promise<ManifestRow[]> {
     const t = (await targets(cat)).find((x) => x.target === choice);
     if (!t) return manifest(cat, choice);
@@ -55,7 +55,7 @@
         <label>{which.toUpperCase()}
           <select value={value} onchange={(e) => choose(which as "a" | "b", e.currentTarget.value)}>
             <option value="">choose…</option>
-            <optgroup label="Flavors (canonical order)">{#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}</optgroup>
+            <optgroup label="Flavors (by name)">{#each fs as f (f.flavor)}<option value={f.flavor}>{f.flavor}</option>{/each}</optgroup>
             <optgroup label="Published files (their order)">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
           </select>
         </label>

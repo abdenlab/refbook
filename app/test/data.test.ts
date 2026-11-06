@@ -10,7 +10,7 @@ import * as rb from "@abdenlab/refbook";
 import { catalogHandler } from "../server/catalog.ts";
 import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { chromSizes, inOrder, sequenceDictionary } from "../src/data/exports.ts";
+import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
 import { flavors, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/flavors.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
 import { identifyTables, level2, pairs, parseHeader } from "../src/data/identify.ts";
@@ -56,6 +56,31 @@ test("exports in a target's order", { skip }, async () => {
   assert.equal(rb.seqcolDigests(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u)).digest, t.seqcol_digest);
   assert.match(chromSizes(rows), /^chr1\t248956422\n/);
   assert.match(sequenceDictionary(rows), /^@HD\tVN:1\.6\n@SQ\tSN:chr1\tLN:248956422\tM5:[0-9a-f]{32}\n/);
+});
+
+test("the two export orders: by name, and karyotypic by role", { skip }, async () => {
+  const { places } = await designTables(cat);
+  const rows = await manifest(cat, "hs38dh");
+  const byName = ordered(rows, "name", places).map((r) => r.name);
+  assert.deepEqual(byName, [...byName].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+  const k = ordered(rows, "karyotypic", places);
+  assert.equal(k.length, rows.length);
+  assert.deepEqual(k.slice(0, 25).map((r) => r.name),
+    [...Array.from({ length: 22 }, (_, i) => `chr${i + 1}`), "chrX", "chrY", "chrM"]);
+  // The blocks, in order: as GRC's own files have them.
+  const block = (r: (typeof k)[number]) => {
+    const p = places.get(r.root_id);
+    return !p ? "ebv" : "rank" in p ? "hla" : p.grch38 ? p.role : "decoy";
+  };
+  const runs = k.map(block).filter((b, i, xs) => i === 0 || b !== xs[i - 1]);
+  assert.deepEqual(runs, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "ebv", "decoy", "hla"]);
+  // Within a role: by chromosome, then accession.
+  assert.deepEqual(k.slice(25, 29).map((r) => r.name), ["chr1_KI270706v1_random", "chr1_KI270707v1_random", "chr1_KI270708v1_random", "chr1_KI270709v1_random"]);
+  assert.equal(k.at(-1)!.name, ordered(rows.filter((r) => r.name.startsWith("HLA-")), "karyotypic", places).at(-1)!.name);
+  // The published GRC-style file has the same blocks.
+  const t = (await targets(cat)).find((x) => x.target === "Broad_Homo_sapiens_assembly38")!;
+  const pub = inOrder(rows, await targetOrder(cat, t.target)).map(block).filter((b, i, xs) => i === 0 || b !== xs[i - 1]);
+  assert.deepEqual(pub, runs);
 });
 
 test("root_blocks: opening reads only the footer", { skip }, () => {
@@ -221,7 +246,7 @@ test("the form's edits rebuild published flavors from scratch", { skip }, async 
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "EBV"));
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "A*01:01:01:01"));
   assert.deepEqual([edit.releaseLabel("GRCh38", false), edit.releaseLabel("GRCh38.p14", true), edit.releaseLabel("GRCh38.p3", false)],
-    ["p0 (the original release, no patches)", "p14 (latest)", "p3"]);
+    ["p0 (original)", "p14 (latest)", "p3"]);
   assert.equal(t.roleCounts.get("GCA_000001405.15")!.get("fix-patch") ?? 0, 0);
   assert.equal(t.roleCounts.get("GCA_000001405.29")!.get("fix-patch"), 164);
   // Filters: leaving out patches placed on scaffolds is Ensembl's toplevel recipe; on again, back to all.

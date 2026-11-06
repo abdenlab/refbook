@@ -3,6 +3,7 @@
 // the catalog's derivations, and say what the result is.
 import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
+import type { Place } from "./exports.ts";
 import type { Flavor, ManifestRow } from "./flavors.ts";
 import { measure } from "./meter.ts";
 
@@ -32,9 +33,12 @@ export interface DesignTables {
   layers: string[];
   /** Assembly accession -> role -> how many sequences it has. */
   roleCounts: Map<string, Map<string, number>>;
+  /** root_id -> where it goes in karyotypic order (exports.ts). */
+  places: Map<string, Place>;
 }
 
 const key = (root: string, ops: string[]) => [root, ...ops].join(" ");
+const GRCH38 = "GCA_000001405.";
 
 let loaded: Promise<DesignTables> | null = null;
 
@@ -42,7 +46,7 @@ let loaded: Promise<DesignTables> | null = null;
 export function designTables(cat: Catalog): Promise<DesignTables> {
   return (loaded ??= measure("design tables", async () => {
     type Member = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
-      ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
+      assigned_molecule: string | null; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
     const [members, placements, hardmask, iupac, external, sequences, derivations] = await Promise.all([
       cat.table<Member>("assembly_members.parquet"),
       cat.table<{ root_id: string; parent_type: string }>("layer_placements.parquet"),
@@ -76,8 +80,14 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       if (!g.includes(e.group)) g.push(e.group);
       collections.set(e.collection, g);
     }
+    const places = new Map<string, Place>();
+    for (const m of members) {
+      if (places.has(m.genbank_accession)) continue;
+      places.set(m.genbank_accession, { grch38: m.assembly_accession.startsWith(GRCH38), role: m.role, molecule: m.assigned_molecule ?? "" });
+    }
+    for (const e of ext) places.set(e.root_id, { collection: e.collection, rank: e.rank });
     return {
-      compiler, rootLength, collections, roleCounts, layers: ["hardmask_grc"],
+      compiler, rootLength, collections, roleCounts, places, layers: ["hardmask_grc"],
       derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
       assemblies: new Map(members.map((m) => [m.assembly_accession, m.assembly_name])),
     };
@@ -94,7 +104,7 @@ export interface Design {
   rows: DesignRow[];
   /** Rows whose (root, operations) the catalog has never built: digests unknown without their bases. */
   novel: DesignRow[];
-  /** With every digest known: the flavor ID and seqcol digest (canonical order). */
+  /** With every digest known: the flavor ID and seqcol digest (the seqcol digest's order is by name). */
   id: string | null;
   seqcolDigest: string | null;
   /** The cataloged flavor it is, if any. */

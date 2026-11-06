@@ -9,7 +9,6 @@
   import { bytes } from "./format.ts";
   import { route } from "./route.svelte.ts";
   import ErrorBox from "./components/ErrorBox.svelte";
-  import CatalogView from "./views/CatalogView.svelte";
   import CompareView from "./views/CompareView.svelte";
   import DesignView from "./views/DesignView.svelte";
   import IdentifyView from "./views/IdentifyView.svelte";
@@ -43,12 +42,11 @@
 
 <header class="top">
   <a class="brand" href="#/">refbook</a>
-  <span class="tagline">every published GRCh38, how it was made, and its bases</span>
+  <span class="tagline">Genome: get the book, in any edition.</span>
   <nav>
-    <a href="#/" class:here={!parts.length || parts[0] === "flavor"}>Catalog</a>
+    <a href="#/" class:here={!parts.length || parts[0] === "flavor" || parts[0] === "design"}>Catalog</a>
     <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
     <a href="#/compare" class:here={parts[0] === "compare"}>Compare</a>
-    <a href="#/design" class:here={parts[0] === "design"}>Design</a>
   </nav>
 </header>
 <main>
@@ -60,14 +58,13 @@
         <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
       {:else if parts[0] === "identify"}
         <IdentifyView {cat} />
-      {:else if parts[0] === "design"}
-        <DesignView {cat} query={route.current.query} />
       {:else if parts[0] === "compare"}
         <CompareView {cat} query={route.current.query} />
       {:else if parts[0] === "flavor" && parts[1]}
         <FlavorView {cat} label={parts[1]} />
       {:else}
-        <CatalogView {cat} />
+        <!-- The catalog and the recipe editor are one page; #/design is its old address. -->
+        <DesignView {cat} query={route.current.query} />
       {/if}
     {/key}
   {:catch e}

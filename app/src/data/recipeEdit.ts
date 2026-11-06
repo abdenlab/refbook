@@ -214,7 +214,7 @@ export const setChromosomeNames = (r: Recipe, namespace: string | null) => setRo
 export function releaseLabel(name: string, latest: boolean): string {
   const m = /^GRCh38(?:\.p(\d+))?$/.exec(name);
   if (!m) return name;
-  if (!m[1]) return "p0 (the original release, no patches)";
+  if (!m[1]) return "p0 (original)";
   return `p${m[1]}${latest ? " (latest)" : ""}`;
 }
 
