@@ -80,13 +80,15 @@ ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.
 name = "GRCh38.p14"
 roles = ["input"]
 ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.29_GRCh38.p14"
-also = ["GCA_000001405.29_GRCh38.p14_genomic.fna.gz"]   # the sequences: 709 of GRCh38's 711
+also = ["GCA_000001405.29_GRCh38.p14_genomic.fna.gz"]
+sequences = ["GCA_000001405.29_GRCh38.p14_genomic.fna.gz"]   # 709 of GRCh38's 711 sequences
 
 [[source]]
 name = "GRCh38-withdrawn-fix-patches"
 roles = ["input"]
 note = "The 2 fix patches p14 replaced with new versions: in p13, in no p14 file."
 efetch = { accessions = ["KQ759759.1", "KQ759762.1"], rettypes = ["fasta"] }
+sequences = ["eutils.ncbi.nlm.nih.gov/efetch/nuccore_KQ759759.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_KQ759762.1.fasta"]
 
 [[source]]
 name = "GRCh38-analysis-sets"
@@ -113,12 +115,15 @@ roles = ["input"]
 note = "The decoys of the GRC analysis sets, an assembly of their own (GCA_000786075.2)."
 ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
 also = ["GCA_000786075.2_hs38d1_genomic.fna.gz"]
+sequences = ["GCA_000786075.2_hs38d1_genomic.fna.gz"]
 
 [[source]]
 name = "EBV"
 roles = ["input"]
 note = "The Epstein-Barr virus genome, in no assembly: its sequence, and its GenBank record (topology, source)."
 efetch = { accessions = ["AJ507799.2"], rettypes = ["fasta", "gb"] }
+sequences = ["eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.fasta"]
+loose_roots = { "AJ507799.2" = "eutils.ncbi.nlm.nih.gov/efetch/nuccore_AJ507799.2.gb" }
 
 [[source]]
 name = "IMGT-HLA-3.18.0"

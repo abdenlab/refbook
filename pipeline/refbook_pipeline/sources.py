@@ -13,6 +13,10 @@ raw/<host>/<url path>, so a file's path is its URL. A source declares its files 
 - `github_tree`: files of a repository tree (`repo`, `ref`, a `prefix` and `suffix` filter), listed by GitHub's
   API at fetch time and fetched from `base` (raw.githubusercontent.com/<repo>/<ref>).
 
+`sequences` lists the source's files that hold roots (FASTA, gzipped or not; paths under `base`, or under raw/ for
+an efetch source), and `loose_roots` the roots in no assembly report, each with the GenBank record that gives its
+length (EBV). Every other root is a member of an assembly report.
+
 `checksums` names checksum lists outside the source (raw paths, in another source's lock) that also cover its
 files: NCBI's list for a release directory covers its subdirectories, which can be sources of their own.
 
@@ -60,6 +64,8 @@ class Source:
     efetch: tuple[tuple[str, str], ...] = ()         # (accession, rettype)
     github_tree: dict = field(default_factory=dict)  # repo, ref, prefix, suffix
     checksums: tuple[str, ...] = ()                  # checksum lists elsewhere that cover these files
+    sequences: tuple[str, ...] = ()                  # raw paths of the files that hold roots
+    loose_roots: tuple[tuple[str, str], ...] = ()    # (accession, raw path of its GenBank record)
     note: str = ""
 
 
@@ -85,12 +91,22 @@ def load(path: Path) -> dict[str, Source]:
         out[name] = Source(name=name, roles=tuple(s["roles"]), base=base, files=tuple(files),
                            optional=tuple(optional), trees=tuple(trees), efetch=efetch,
                            github_tree=dict(s.get("github_tree", {})), checksums=tuple(s.get("checksums", [])),
-                           note=s.get("note", ""))
+                           sequences=tuple(_join(base, f) for f in s.get("sequences", [])),
+                           loose_roots=tuple(sorted(s.get("loose_roots", {}).items())), note=s.get("note", ""))
     return out
 
 
 def _join(base: str, rel: str) -> str:
     return f"{base}/{rel}" if base else rel
+
+
+def reports(source: Source) -> list[str]:
+    """The assembly report of an NCBI assembly source (raw path), if it is one."""
+    if not source.base.startswith("ftp.ncbi.nlm.nih.gov/genomes/all/") or not any(
+            t.path.endswith("_assembly_structure/") for t in source.trees):
+        return []
+    asm = source.base.rsplit("/", 1)[-1]
+    return [f"{source.base}/{asm}_assembly_report.txt"]
 
 
 def efetch_path(acc: str, rettype: str) -> str:
