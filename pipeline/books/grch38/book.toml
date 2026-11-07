@@ -60,3 +60,9 @@ namespace = "ucsc"
 targets = ["GRCh38_full_plus_hs38d1_analysis_set"]
 roots = "outside_releases"
 label = "GRC analysis sets (reproduced)"
+
+# The checks' book-specific choices: the GRC analysis set whose deflines give an M5 for each root (check_roots:
+# the full set with hs38d1 covers the decoys and EBV too), and the edition streamed in full (check_materialize).
+[checks]
+analysis_set = { source = "GRCh38-analysis-sets", file = "GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set.fna.gz" }
+stream = "grch38-no-alt"

@@ -17,6 +17,7 @@ The build: output/build/books/<book>/ for what is built per book, output/build/c
 """
 
 import json
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -24,8 +25,10 @@ from refbook_pipeline import (
     Refused,
     aliases,
     books,
+    checks,
     editions,
     engine,
+    export,
     external,
     layers,
     layout,
@@ -45,7 +48,8 @@ BOOKS = books.load(layout.BOOKS, SOURCES)
 
 DOIT_CONFIG = {
     "default_tasks": ["lock", "members", "assembly_members", "roots", "external_roots", "layers", "catalog_layers",
-                      "observe", "reproduce", "editions", "catalog_editions", "aliases", "compare_v1"],
+                      "observe", "reproduce", "editions", "catalog_editions", "aliases", "index", "check_gaps",
+                      "check_roots", "check_materialize", "compare_v1"],
     "dep_file": str(BUILD.parent / ".doit.db"),
     "verbosity": 2,
 }
@@ -371,6 +375,135 @@ def task_aliases():
             "targets": [out / "aliases.parquet", out / "sequence_aliases.parquet", out / "notes.json"]}
 
 
+CHECKS = BUILD / "checks"
+PUBLISHED = export.published(CATALOG)
+
+
+def task_index():
+    """The build's catalog.json: every published table by its release name (refbook.Catalog opens the build)."""
+    files = [p for name, p in PUBLISHED.items() if name != "collections"]
+    return {"actions": [call(export.write_index, CATALOG)], "file_dep": files + code("export"),
+            "targets": [CATALOG / "catalog.json"]}
+
+
+def task_check_gaps():
+    """Every run of N explained by the published AGP, and the GRC's genomic_gaps.txt agreeing (checks.py)."""
+    out = CHECKS / "gaps"
+    names = ["layer_agp.parquet", "layer_n_runs.parquet", "roots.parquet", "assembly_members.parquet"]
+    releases = [layers.Release.of(RAW, SOURCES[n].base) for b in BOOKS.values() for n in b.releases]
+    gg = {r.name: r.directory / f"{r.directory.name}_genomic_gaps.txt.gz" for r in releases
+          if (r.directory / f"{r.directory.name}_genomic_gaps.txt.gz").exists()}
+
+    def action():
+        t = {n: pq.read_table(PUBLISHED[n]) for n in names}
+        lengths = dict(zip(t["roots.parquet"]["root_id"].to_pylist(), t["roots.parquet"]["length"].to_pylist()))
+        passed, details, report = checks.check_gaps(t["layer_agp.parquet"].to_pylist(),
+                                                    t["layer_n_runs.parquet"].to_pylist(), lengths,
+                                                    t["assembly_members.parquet"].to_pylist(), gg)
+        details["genomic_gaps_releases"] = sorted(gg)
+        with layout.output(out) as tmp:
+            (tmp / "check_gaps.tsv").write_text("root_id\tstart\tend\tkind\tgap_types\n"
+                                                + "".join("\t".join(map(str, r)) + "\n" for r in report))
+            checks.record(tmp, "check_gaps", passed, {n: PUBLISHED[n] for n in names}, details)
+        print("PASSED" if passed else "FAILED", details)
+        if not passed:
+            raise Refused(f"check_gaps failed: {details['errors'][:3]}")
+
+    return {"actions": [action], "file_dep": [PUBLISHED[n] for n in names] + list(gg.values()) + code("checks"),
+            "targets": [out / "check_gaps.json", out / "check_gaps.tsv"]}
+
+
+def roots_check(ena: bool):
+    out = CHECKS / ("roots_ena" if ena else "roots")
+    names = ["roots.parquet", "layer_hardmask_grc.parquet"]
+    sets = [(b.checks["analysis_set"]["source"], b.checks["analysis_set"]["file"]) for b in BOOKS.values() if b.checks]
+    files = [RAW / SOURCES[s].base / f for s, f in sets]
+
+    def action():
+        roots_ = pq.read_table(PUBLISHED["roots.parquet"]).to_pylist()
+        masked = set(pq.read_table(PUBLISHED["layer_hardmask_grc.parquet"], columns=["root_id"])["root_id"].to_pylist())
+        m5 = {}
+        for f in files:
+            m5.update(checks.grc_m5(f))
+        lengths = checks.ena_lengths([r["md5"] for r in roots_]) if ena else None
+        passed, details, rows = checks.check_roots(roots_, masked, m5, ", ".join(f.name for f in files), lengths)
+        with layout.output(out) as tmp:
+            (tmp / "verify_roots.tsv").write_text("root_id\tlength\tmd5\tena\tgrc_analysis_set\n"
+                                                  + "".join("\t".join(map(str, r)) + "\n" for r in rows))
+            checks.record(tmp, "check_roots", passed, {n: PUBLISHED[n] for n in names}, details)
+        print("PASSED" if passed else "FAILED", details["counts"])
+        if not passed:
+            raise Refused(f"check_roots failed: {details['failed'][:5]}")
+
+    return {"actions": [action], "file_dep": [PUBLISHED[n] for n in names] + files + code("checks"),
+            "targets": [out / "check_roots.json", out / "verify_roots.tsv"]}
+
+
+def task_check_roots():
+    """The roots' MD5s against the GRC analysis set's deflines (ENA not consulted: see check_roots_ena)."""
+    return roots_check(ena=False)
+
+
+def task_check_roots_ena():
+    """check_roots, consulting ENA's refget server too (3,097 requests; a release needs it; never run unless asked,
+    or by an export)."""
+    return roots_check(ena=True)
+
+
+def task_check_materialize():
+    """From the bases, through the library: every derivation, every collection's digest, one stream (checks.py)."""
+    out = CHECKS / "materialize"
+    names = ["sequences.parquet", "derivations.parquet", "editions.parquet", "manifests.parquet", "targets.parquet",
+             "target_sequences.parquet", "roots.parquet", "roots_external.parquet", "root_blocks.parquet",
+             "layer_hardmask_grc.parquet", "collections"]
+    stream = [b.checks["stream"] for b in BOOKS.values() if b.checks]
+
+    def action():
+        passed, details, log = checks.check_materialize(CATALOG, stream)
+        with layout.output(out) as tmp:
+            checks.record(tmp, "check_materialize", passed, {n: PUBLISHED[n] for n in names}, details)
+        print("PASSED" if passed else "FAILED", *log, sep="\n  ")
+        if not passed:
+            raise Refused(f"check_materialize failed: {details['errors'][:3]}")
+
+    return {"actions": [action], "task_dep": ["index"],
+            "file_dep": [PUBLISHED[n] for n in names if n != "collections"] + [CATALOG / "catalog.json"]
+                        + code("checks"),
+            "targets": [out / "check_materialize.json"]}
+
+
+def task_export():
+    """A release: `doit export --version 0.2.0 --out DIR` (a development export: add --development, which accepts a
+    root check without ENA). Never run unless asked. See refbook_pipeline/export.py."""
+    def action(version, out, development):
+        if not version or not out:
+            raise Refused("export needs --version and --out")
+        roots_json = CHECKS / ("roots" if development and not (CHECKS / "roots_ena").exists() else "roots_ena")
+        checks_ = {"check_gaps": CHECKS / "gaps" / "check_gaps.json", "check_roots": roots_json / "check_roots.json",
+                   "check_materialize": CHECKS / "materialize" / "check_materialize.json"}
+        locks_ = sorted(layout.LOCKS.glob("*.lock")) + sorted(layout.LOCKS.glob("*.exceptions.tsv"))
+        evidence = [(p, f"evidence/observed/{p.name}") for b in BOOKS for p in
+                    sorted((BUILD / "books" / b / "observed").glob("*.parquet"))]
+        evidence += [(roots_json / "verify_roots.tsv", "evidence/verify_roots.tsv"),
+                     (CHECKS / "gaps" / "check_gaps.tsv", "evidence/check_gaps.tsv")]
+        evidence += [(p, f"evidence/{p.name}") for p in checks_.values()]
+        evidence += [(p, f"evidence/locks/{p.name}") for p in locks_]
+        members_ = pq.read_table(PUBLISHED["assembly_members.parquet"]).to_pylist()
+        releases = {layers.Release.of(RAW, SOURCES[n].base).name for b in BOOKS.values() for n in b.releases}
+        text = export.card(layout.PIPELINE / "catalog_card.md", CATALOG, version,
+                           {m["genbank_accession"] for m in members_ if m["assembly_name"] in releases},
+                           {m["genbank_accession"] for m in members_ if m["assembly_name"] not in releases})
+        print(export.export(CATALOG, Path(out), version, checks_, evidence,
+                            sorted(layout.LOCKS.glob("*.lock")), text, development))
+
+    return {"actions": [action], "uptodate": [False], "verbosity": 2,
+            "task_dep": ["check_gaps", "check_roots", "check_materialize"],
+            "params": [{"name": "version", "long": "version", "default": "", "help": "the release's version"},
+                       {"name": "out", "long": "out", "default": "", "help": "the directory to create"},
+                       {"name": "development", "long": "development", "type": bool, "default": False,
+                        "help": "accept a root check that didn't consult ENA (not a release)"}]}
+
+
 LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_hardmask_grc"]
 
 
@@ -514,6 +647,14 @@ def task_compare_v1():
         new, report = CATALOG / "aliases" / f"{name}.parquet", here / f"{name}.json"
         yield {"name": name, "actions": [call(v1.compare_table, old_al / f"{name}.parquet", new, keys, report, only_new)],
                "file_dep": [old_al / f"{name}.parquet", new] + code("v1"), "targets": [report]}
+    old_b = layout.REPO / v1.V1_BUILD
+    for check, old_dir, new_dir, report in (("check_gaps", "60_check_gaps", CHECKS / "gaps", "check_gaps.tsv"),
+                                            ("check_roots", "61_check_roots", CHECKS / "roots", "verify_roots.tsv"),
+                                            ("check_materialize", "62_check_materialize", CHECKS / "materialize", None)):
+        olds = [old_b / old_dir / f"{check}.json"] + ([old_b / old_dir / report] if report else [])
+        news = [new_dir / f"{check}.json"] + ([new_dir / report] if report else [])
+        yield {"name": check, "actions": [call(v1.compare_check, olds, news, here / f"{check}.json")],
+               "file_dep": olds + news + code("v1"), "targets": [here / f"{check}.json"]}
     old_layers = layout.REPO / v1.V1_BUILD / "20_layers"
     layer_keys = {"layer_agp": (["root_id", "part_number"], ()),
                   "layer_regions": (["root_id", "region_name", "first_release", "book"], ("book",)),

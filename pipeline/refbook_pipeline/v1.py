@@ -145,3 +145,25 @@ def compare_dirs(old: Path, new: Path, out: Path) -> None:
     out.write_text(json.dumps(result, indent=1) + "\n")
     if not result["matches"]:
         raise Refused(f"{new.name} differs from the first pipeline's (see {out})")
+
+
+# What this pipeline records that the first didn't, in a check's details.
+NEW_DETAILS = {"genomic_gaps_releases"}
+
+
+def compare_check(old: list[Path], new: list[Path], out: Path) -> None:
+    """A check's result here against the first pipeline's: both passed, with the same details (but for what only
+    this one records), and the same report rows (in any order)."""
+    a, b = json.loads(old[0].read_text()), json.loads(new[0].read_text())
+    da = {k: v for k, v in a["details"].items()}
+    db = {k: v for k, v in b["details"].items() if k not in NEW_DETAILS}
+    result = {"passed_v1": a["passed"], "passed": b["passed"], "details_equal": da == db,
+              "details_v1": da, "details": db}
+    if len(old) > 1:
+        ra, rb = sorted(old[1].read_text().splitlines()), sorted(new[1].read_text().splitlines())
+        result.update(report_rows_v1=len(ra), report_rows=len(rb), report_equal=ra == rb)
+    result["matches"] = a["passed"] and b["passed"] and da == db and result.get("report_equal", True)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result, indent=1) + "\n")
+    if not result["matches"]:
+        raise Refused(f"{new[0].name} differs from the first pipeline's (see {out})")

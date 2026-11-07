@@ -25,6 +25,7 @@ class Book:
     region_quirks: tuple[tuple[int, str, str], ...] = ()   # (release, region, root): known report disagreements
     hardmask_grc: dict | None = None         # source, file, par_root (see the book's book.toml)
     aliases: tuple[dict, ...] = ()           # where names come from beyond the reports (see aliases.py)
+    checks: dict | None = None               # analysis_set (source, file), stream (see checks.py)
 
 
 def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
@@ -46,7 +47,7 @@ def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
         out[b["name"]] = Book(b["name"], tuple(b["sources"]), b.get("assembly", ""),
                               tuple(b.get("releases", [])), tuple(b.get("addons", [])),
                               tuple((q["release"], q["region"], q["root"]) for q in b.get("region_quirks", [])),
-                              b.get("hardmask_grc"), tuple(b.get("aliases", [])))
+                              b.get("hardmask_grc"), tuple(b.get("aliases", [])), b.get("checks"))
     return out
 
 
