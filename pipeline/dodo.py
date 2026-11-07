@@ -22,7 +22,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from refbook_pipeline import (
     Refused,
+    aliases,
     books,
+    editions,
+    engine,
+    external,
     layers,
     layout,
     locks,
@@ -40,8 +44,8 @@ SOURCES = sources.load(layout.SOURCES)
 BOOKS = books.load(layout.BOOKS, SOURCES)
 
 DOIT_CONFIG = {
-    "default_tasks": ["lock", "members", "assembly_members", "roots", "layers", "catalog_layers", "observe",
-                      "compare_v1"],
+    "default_tasks": ["lock", "members", "assembly_members", "roots", "external_roots", "layers", "catalog_layers",
+                      "observe", "reproduce", "editions", "catalog_editions", "aliases", "compare_v1"],
     "dep_file": str(BUILD.parent / ".doit.db"),
     "verbosity": 2,
 }
@@ -178,6 +182,195 @@ def task_observe():
                    "file_dep": [RAW / rel, lock_path(src.name)] + code("observe"), "targets": [out]}
 
 
+def task_external_roots():
+    """External roots: the sources that declare them (see refbook_pipeline/external.py)."""
+    srcs = [s for s in books.sources_of(BOOKS, SOURCES) if s.external]
+    out = CATALOG / "external"
+
+    def action():
+        rows = []
+        for s in srcs:
+            if s.external["format"] != "imgt_hla":
+                raise Refused(f"{s.name}: no reader for external format {s.external['format']!r}")
+            files = [f for f in sources.files(s, RAW)[0] if f.endswith(s.github_tree.get("suffix", ""))
+                     and f.startswith(f"{s.base}/{s.github_tree.get('prefix', '')}")]
+            rows += external.imgt_hla(s.external["collection"], s.external["prefix"],
+                                      [(RAW / f, sources.url_of(f)) for f in files])
+        with layout.output(out) as tmp:
+            pq.write_table(external.table(rows), tmp / "roots_external.parquet", compression="zstd")
+            layout.record_inputs(tmp, [lock_path(s.name) for s in srcs])
+            print(f"{len(rows)} external roots")
+
+    dep = reads(srcs)
+    return {"actions": [action], "task_dep": dep["task_dep"],
+            "file_dep": [RAW / f for s in srcs for f in sources.files(s, RAW)[0]] + dep["file_dep"] + code("external"),
+            "targets": [out / "roots_external.parquet", out / "inputs.json"]}
+
+
+def catalog_tables(recipes: list[dict]) -> dict:
+    """The catalog tables the recipe engine reads, by name (engine.load_tables)."""
+    paths = {"assembly_members": CATALOG / "members" / "assembly_members.parquet",
+             "roots": CATALOG / "roots" / "roots.parquet", "root_blocks": CATALOG / "roots" / "root_blocks.parquet",
+             "layer_iupac": CATALOG / "roots" / "layer_iupac.parquet",
+             "roots_external": CATALOG / "external" / "roots_external.parquet",
+             "layer_placements": CATALOG / "layers" / "layer_placements.parquet"}
+    for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
+        paths[f"layer_{name}"] = CATALOG / "layers" / f"layer_{name}.parquet"
+    return paths
+
+
+def task_reproduce():
+    """Apply a book's recipes and check each against its target's observation (order-free, by name: the same
+    names, lengths and digests). Writes each target's sequences in its own order; writes nothing unless every
+    target reproduces."""
+    for book in BOOKS.values():
+        recipes = books.recipes(layout.BOOKS, book.name)
+        paths = catalog_tables(recipes)
+        observed = BUILD / "books" / book.name / "observed"
+        out = BUILD / "books" / book.name / "reproduced"
+
+        def action(recipes=recipes, paths=paths, observed=observed, out=out):
+            t = engine.load_tables(paths, recipes)
+            rows, failed = [], []
+            for recipe in recipes:
+                got = engine.run(recipe, t)
+                seen = pq.read_table(observed / f"{recipe['target']}.parquet").to_pylist()
+                errs = engine.compare(got, seen)
+                print(f"{recipe['target']}: {len(got)} sequences, "
+                      f"{'REPRODUCES' if not errs else f'{len(errs)} MISMATCHES: ' + '; '.join(errs[:5])}")
+                (failed.append(recipe["target"]) if errs else rows.extend(engine.in_observed_order(got, seen)))
+            if failed:
+                raise Refused(f"not reproduced: {failed}")
+            with layout.output(out) as tmp:
+                pq.write_table(pa.Table.from_pylist(rows), tmp / "reproduced.parquet", compression="zstd")
+
+        recipe_files = sorted((layout.BOOKS / book.name / "recipes").glob("*.json"))
+        yield {"name": book.name, "actions": [action],
+               "file_dep": list(paths.values()) + [observed / f"{r['target']}.parquet" for r in recipes]
+                           + recipe_files + code("engine"),
+               "targets": [out / "reproduced.parquet"]}
+
+
+EDITION_TABLES = ["editions", "manifests", "targets", "target_sequences"]
+
+
+def task_editions():
+    """A book's editions, manifests, targets and their seqcol collections (see refbook_pipeline/editions.py)."""
+    for book in BOOKS.values():
+        recipes = books.recipes(layout.BOOKS, book.name)
+        paths = catalog_tables(recipes)
+        here = BUILD / "books" / book.name
+        labels = layout.BOOKS / book.name / "editions.json"
+        loose = {acc: s.name for s in (SOURCES[n] for n in book.sources) for acc, _ in s.loose_roots}
+        out = here / "editions"
+
+        def action(book=book, recipes=recipes, paths=paths, here=here, labels=labels, loose=loose, out=out):
+            t = engine.load_tables(paths, recipes)
+            prov = {r["target"]: observe.read_provenance(here / "observed" / f"{r['target']}.parquet") for r in recipes}
+            releases = {layers.Release.of(RAW, SOURCES[n].base).name for n in book.releases}
+            with layout.output(out) as tmp:
+                tables = editions.build(book.assembly, recipes, json.loads(labels.read_text())["editions"],
+                                        pq.read_table(here / "reproduced" / "reproduced.parquet").to_pylist(),
+                                        t, prov, releases, loose, tmp)
+                for name, rows in tables.items():
+                    pq.write_table(pa.Table.from_pylist(rows), tmp / f"{name}.parquet", compression="zstd")
+                print(f"{len(tables['editions'])} editions, {len(tables['targets'])} targets")
+
+        yield {"name": book.name, "actions": [action],
+               "file_dep": list(paths.values()) + [here / "reproduced" / "reproduced.parquet", labels]
+                           + [here / "observed" / f"{r['target']}.parquet" for r in recipes]
+                           + code("editions", "engine", "observe", "layers"),
+               "targets": [out / f"{n}.parquet" for n in EDITION_TABLES]}
+
+
+def task_catalog_editions():
+    """The catalog's editions, manifests, targets and collections, every book's (editions with their book), and
+    the sequence store made from every manifest and every root (editions.sequence_store)."""
+    out = CATALOG / "editions"
+    parts = {b: BUILD / "books" / b / "editions" for b in BOOKS}
+    roots_paths = [CATALOG / "roots" / "roots.parquet", CATALOG / "external" / "roots_external.parquet"]
+
+    def action():
+        with layout.output(out) as tmp:
+            combined = {}
+            for name in EDITION_TABLES:
+                tables = [pq.read_table(d / f"{name}.parquet") for d in parts.values()]
+                if name == "editions":
+                    tables = [t.add_column(0, "book", pa.array([b] * t.num_rows, pa.string()))
+                              for b, t in zip(parts, tables)]
+                combined[name] = pa.concat_tables(tables)
+                pq.write_table(combined[name], tmp / f"{name}.parquet", compression="zstd")
+            labels = combined["editions"]["edition"].to_pylist()
+            if len(labels) != len(set(labels)):
+                raise Refused(f"an edition label is used in two books: {sorted({x for x in labels if labels.count(x) > 1})}")
+            cols = ["root_id", "length", "md5", "sha512t24u"]
+            roots = {r["root_id"]: r for p in roots_paths for r in pq.read_table(p, columns=cols).to_pylist()}
+            seqs, ders = editions.sequence_store(combined["manifests"].to_pylist(), roots)
+            pq.write_table(pa.Table.from_pylist(seqs), tmp / "sequences.parquet", compression="zstd")
+            pq.write_table(pa.Table.from_pylist(ders), tmp / "derivations.parquet", compression="zstd")
+            (tmp / "collections").mkdir()
+            for d in parts.values():
+                for f in (d / "collections").iterdir():
+                    dest = tmp / "collections" / f.name
+                    if dest.exists() and dest.read_bytes() != f.read_bytes():
+                        raise Refused(f"collection {f.name}: two books wrote it differently")
+                    dest.write_bytes(f.read_bytes())
+
+    return {"actions": [action],
+            "file_dep": [d / f"{n}.parquet" for d in parts.values() for n in EDITION_TABLES] + roots_paths
+                        + code("editions"),
+            "targets": [out / f"{n}.parquet" for n in EDITION_TABLES + ["sequences", "derivations"]]}
+
+
+def task_aliases():
+    """Every root's names, by book where a name's meaning depends on it, and every stored sequence's refget aliases
+    (see refbook_pipeline/aliases.py)."""
+    out = CATALOG / "aliases"
+    chromalias = {f"{d['chromalias']['source']}/{d['chromalias']['file']}":
+                  RAW / SOURCES[d["chromalias"]["source"]].base / d["chromalias"]["file"]
+                  for b in BOOKS.values() for d in b.aliases if "chromalias" in d}
+    srcs = sorted({k.split("/", 1)[0] for k in chromalias})
+    reproduced = [BUILD / "books" / b / "reproduced" / "reproduced.parquet" for b in BOOKS]
+    tables = [CATALOG / "members" / "assembly_members.parquet", CATALOG / "roots" / "roots.parquet",
+              CATALOG / "external" / "roots_external.parquet", CATALOG / "editions" / "manifests.parquet",
+              CATALOG / "editions" / "sequences.parquet"]
+
+    def action():
+        members_all = pq.read_table(tables[0]).to_pylist()
+        rows, notes = set(), []
+        for book in BOOKS.values():
+            releases = {layers.Release.of(RAW, SOURCES[n].base).name for n in book.releases}
+            by_target = {}
+            for r in pq.read_table(BUILD / "books" / book.name / "reproduced" / "reproduced.parquet").to_pylist():
+                by_target.setdefault(r["target"], []).append(r)
+            got, n = aliases.book_aliases(book.name, [m for m in members_all if m["book"] == book.name], releases,
+                                          list(book.aliases), by_target, chromalias)
+            rows |= got
+            notes += n
+        rows |= aliases.global_aliases(pq.read_table(tables[1], columns=["root_id", "source"]).to_pylist(),
+                                       pq.read_table(tables[2]).to_pylist())
+        seq = aliases.sequence_aliases(rows, pq.read_table(tables[3], columns=["name", "sha512t24u"]).to_pylist(),
+                                       pq.read_table(tables[4], columns=["sha512t24u", "root_id", "operations"]).to_pylist())
+        key = lambda r: tuple("" if x is None else x for x in r)
+        with layout.output(out) as tmp:
+            pq.write_table(pa.Table.from_pylist(
+                [dict(zip(("book", "root_id", "namespace", "alias", "source"), r)) for r in sorted(rows, key=key)],
+                schema=pa.schema([(c, pa.string()) for c in ("book", "root_id", "namespace", "alias", "source")])),
+                tmp / "aliases.parquet", compression="zstd")
+            pq.write_table(pa.Table.from_pylist(
+                [dict(zip(("sha512t24u", "naming_authority", "alias"), r)) for r in sorted(seq)]),
+                tmp / "sequence_aliases.parquet", compression="zstd")
+            (tmp / "notes.json").write_text(json.dumps(notes, indent=1) + "\n")
+            layout.record_inputs(tmp, [lock_path(s) for s in srcs])
+            print(f"{len(rows)} aliases, {len(seq)} sequence aliases", notes)
+
+    dep = reads([SOURCES[s] for s in srcs])
+    return {"actions": [action], "task_dep": dep["task_dep"],
+            "file_dep": tables + reproduced + list(chromalias.values()) + dep["file_dep"]
+                        + [layout.BOOKS / b / "book.toml" for b in BOOKS] + code("aliases", "layers"),
+            "targets": [out / "aliases.parquet", out / "sequence_aliases.parquet", out / "notes.json"]}
+
+
 LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_hardmask_grc"]
 
 
@@ -288,6 +481,39 @@ def task_compare_v1():
     yield {"name": "book-inputs", "actions": [call(v1.compare_files, layout.REPO, copied, layout.BOOKS / "grch38",
                                                     here / "book-inputs.json")],
            "file_dep": code("v1"), "uptodate": [False], "targets": [here / "book-inputs.json"]}
+    old_ext = layout.REPO / v1.V1_BUILD / "11_external_roots" / "roots_external.parquet"
+    yield {"name": "roots_external",
+           "actions": [call(v1.compare_table, old_ext, CATALOG / "external" / "roots_external.parquet", ["root_id"],
+                            here / "roots_external.json")],
+           "file_dep": [old_ext, CATALOG / "external" / "roots_external.parquet"] + code("v1"),
+           "targets": [here / "roots_external.json"]}
+    for book in BOOKS:
+        old_rep = layout.REPO / v1.V1_BUILD / "40_recipes" / "reproduced.parquet"
+        new_rep = BUILD / "books" / book / "reproduced" / "reproduced.parquet"
+        yield {"name": f"reproduced:{book}",
+               "actions": [call(v1.compare_table, old_rep, new_rep, ["target", "position"], here / f"reproduced-{book}.json",
+                                (), True)],
+               "file_dep": [old_rep, new_rep] + code("v1"), "targets": [here / f"reproduced-{book}.json"]}
+    old_ed = layout.REPO / v1.V1_BUILD / "41_editions"
+    edition_keys = {"editions": (["edition"], ("book",)), "manifests": (["edition", "name"], ()),
+                    "targets": (["target"], ()), "target_sequences": (["target", "position"], ()),
+                    "sequences": (["sha512t24u"], ()), "derivations": (["sha512t24u", "root_id"], ())}
+    for name, (keys, only_new) in edition_keys.items():
+        new, report = CATALOG / "editions" / f"{name}.parquet", here / f"{name}.json"
+        rowwise = name in ("editions", "derivations", "targets")
+        yield {"name": name, "actions": [call(v1.compare_table, old_ed / f"{name}.parquet", new, keys, report, only_new,
+                                              rowwise)],
+               "file_dep": [old_ed / f"{name}.parquet", new] + code("v1"), "targets": [report]}
+    yield {"name": "collections",
+           "actions": [call(v1.compare_dirs, old_ed / "collections", CATALOG / "editions" / "collections",
+                            here / "collections.json")],
+           "file_dep": [CATALOG / "editions" / "derivations.parquet"] + code("v1"), "targets": [here / "collections.json"]}
+    old_al = layout.REPO / v1.V1_BUILD / "50_aliases"
+    for name, keys, only_new in (("aliases", ["root_id", "namespace", "alias", "source"], ("book",)),
+                                 ("sequence_aliases", ["sha512t24u", "naming_authority", "alias"], ())):
+        new, report = CATALOG / "aliases" / f"{name}.parquet", here / f"{name}.json"
+        yield {"name": name, "actions": [call(v1.compare_table, old_al / f"{name}.parquet", new, keys, report, only_new)],
+               "file_dep": [old_al / f"{name}.parquet", new] + code("v1"), "targets": [report]}
     old_layers = layout.REPO / v1.V1_BUILD / "20_layers"
     layer_keys = {"layer_agp": (["root_id", "part_number"], ()),
                   "layer_regions": (["root_id", "region_name", "first_release", "book"], ("book",)),

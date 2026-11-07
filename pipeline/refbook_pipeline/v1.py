@@ -51,13 +51,21 @@ def compare_locks(repo: Path, lock_paths: list[Path], out: Path) -> None:
 V1_BUILD = "catalog/output/build/grch38"
 
 
-def compare_table(old: Path, new: Path, keys: list[str], out: Path, only_new: tuple[str, ...] = ()) -> None:
+def compare_table(old: Path, new: Path, keys: list[str], out: Path, only_new: tuple[str, ...] = (),
+                  rowwise: bool = False) -> None:
     """A table here against the first pipeline's: the same columns (but for `only_new`, this pipeline's
-    additions) and the same rows, in any order (both sorted by `keys`)."""
+    additions) and the same rows, in any order: both sorted by `keys`, or (`rowwise`, for a small table whose keys
+    can tie or that has list columns) compared as sorted lists of rows."""
     a, b = pq.read_table(old), pq.read_table(new).drop_columns(list(only_new))
     result = {"v1": str(old), "here": str(new), "v1_rows": a.num_rows, "rows": b.num_rows,
               "only_new_columns": list(only_new), "columns_v1": a.column_names, "columns": b.column_names}
-    if a.column_names == b.column_names:
+    if a.column_names == b.column_names and rowwise:
+        ra = sorted(json.dumps(r, sort_keys=True, default=str) for r in a.to_pylist())
+        rb = sorted(json.dumps(r, sort_keys=True, default=str) for r in b.to_pylist())
+        result["matches"] = ra == rb
+        if not result["matches"]:
+            result["first_differences"] = {"only_v1": sorted(set(ra) - set(rb))[:3], "only_here": sorted(set(rb) - set(ra))[:3]}
+    elif a.column_names == b.column_names:
         sort = [(k, "ascending") for k in keys]
         a, b = a.sort_by(sort), b.sort_by(sort).cast(a.schema)
         result["matches"] = a.equals(b)
@@ -124,3 +132,16 @@ def compare_files(repo: Path, copied: dict[str, str], book_dir: Path, out: Path)
     out.write_text(json.dumps({"matches": not differ, "differ": differ}, indent=1) + "\n")
     if differ:
         raise Refused(f"the book's inputs differ from the first pipeline's: {differ}")
+
+
+def compare_dirs(old: Path, new: Path, out: Path) -> None:
+    """Two directories of files (the seqcol collections): the same names, byte for byte."""
+    a = {p.name: p.read_bytes() for p in old.iterdir()}
+    b = {p.name: p.read_bytes() for p in new.iterdir()}
+    result = {"v1_files": len(a), "files": len(b), "only_v1": sorted(set(a) - set(b))[:10],
+              "only_here": sorted(set(b) - set(a))[:10], "differ": sorted(n for n in set(a) & set(b) if a[n] != b[n])[:10]}
+    result["matches"] = not (result["only_v1"] or result["only_here"] or result["differ"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result, indent=1) + "\n")
+    if not result["matches"]:
+        raise Refused(f"{new.name} differs from the first pipeline's (see {out})")

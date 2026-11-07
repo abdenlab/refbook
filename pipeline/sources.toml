@@ -133,6 +133,7 @@ kept for their digests and never hosted (CC BY-ND). One FASTA per gene."""
 base = "raw.githubusercontent.com/ANHIG/IMGTHLA/3180"
 files = ["LICENSE.md", "README.md", "Allelelist.3180.txt"]
 github_tree = { repo = "ANHIG/IMGTHLA", ref = "3180", prefix = "fasta/", suffix = "_gen.fasta" }
+external = { collection = "IMGT/HLA 3.18.0", prefix = "IMGTHLA:3.18.0", format = "imgt_hla" }
 
 # The published GRCh38 editions: recipe targets.
 

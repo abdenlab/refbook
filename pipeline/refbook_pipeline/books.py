@@ -19,10 +19,12 @@ from .sources import Source
 class Book:
     name: str
     sources: tuple[str, ...]                 # every source the book reads
+    assembly: str = ""                       # the assembly's name: GRCh38
     releases: tuple[str, ...] = ()           # its assembly's releases, p0 first (NCBI assembly sources)
     addons: tuple[str, ...] = ()             # other assemblies it draws on (members, AGPs; no regions)
     region_quirks: tuple[tuple[int, str, str], ...] = ()   # (release, region, root): known report disagreements
     hardmask_grc: dict | None = None         # source, file, par_root (see the book's book.toml)
+    aliases: tuple[dict, ...] = ()           # where names come from beyond the reports (see aliases.py)
 
 
 def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
@@ -41,9 +43,10 @@ def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
                 raise Refused(f"{b['name']}: {key} not among its sources: {stray}")
         if b.get("hardmask_grc") and b["hardmask_grc"]["source"] not in b["sources"]:
             raise Refused(f"{b['name']}: hardmask_grc's source is not among its sources")
-        out[b["name"]] = Book(b["name"], tuple(b["sources"]), tuple(b.get("releases", [])), tuple(b.get("addons", [])),
+        out[b["name"]] = Book(b["name"], tuple(b["sources"]), b.get("assembly", ""),
+                              tuple(b.get("releases", [])), tuple(b.get("addons", [])),
                               tuple((q["release"], q["region"], q["root"]) for q in b.get("region_quirks", [])),
-                              b.get("hardmask_grc"))
+                              b.get("hardmask_grc"), tuple(b.get("aliases", [])))
     return out
 
 

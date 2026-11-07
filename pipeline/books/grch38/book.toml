@@ -1,6 +1,7 @@
 # The GRCh38 book: the GRCh38 assembly, every release (p0..p14), with the add-ons its editions draw on (the hs38d1
 # decoys, EBV, the IMGT/HLA alleles), and the published editions its recipes reproduce.
 name = "grch38"
+assembly = "GRCh38"   # the assembly's name, as its editions record it
 
 # The assembly's releases, p0 first: NCBI assembly sources. Their reports give the members; their structure the
 # AGPs, regions and placements.
@@ -39,3 +40,23 @@ why = "only in p13's assembly_regions.txt; no scaffold is placed in it"
 source = "GRCh38-analysis-sets"
 file = "unmasked_cognates_of_masked_CEN_PAR.txt"
 par_root = "CM000686.2"
+
+# Where names come from beyond the assembly reports (aliases.parquet). A chromAlias file gives a namespace's names
+# by GenBank accession; a reproduced target gives the names it uses, for its roots that have none in that
+# namespace yet (`fill`) or only for its roots outside the book's releases (`outside_releases`: add-ons and loose).
+[[aliases]]
+namespace = "ensembl"
+chromalias = { source = "UCSC-hg38", file = "p14/hg38.p14.chromAlias.txt" }
+label = "UCSC hg38.p14.chromAlias.txt"
+
+[[aliases]]
+namespace = "ensembl"
+targets = ["Ensembl116_primary_assembly", "Ensembl116_toplevel"]
+roots = "fill"
+label = "Ensembl 116 FASTA (reproduced)"
+
+[[aliases]]
+namespace = "ucsc"
+targets = ["GRCh38_full_plus_hs38d1_analysis_set"]
+roots = "outside_releases"
+label = "GRC analysis sets (reproduced)"

@@ -17,6 +17,10 @@ raw/<host>/<url path>, so a file's path is its URL. A source declares its files 
 an efetch source), and `loose_roots` the roots in no assembly report, each with the GenBank record that gives its
 length (EBV). Every other root is a member of an assembly report.
 
+`external` declares a source's sequences external roots, listed by identity and digest and never hosted: its
+`collection` (what recipes select by), the `prefix` of its root IDs, and its `format` (imgt_hla: one FASTA per
+gene, the source's github_tree files).
+
 `checksums` names checksum lists outside the source (raw paths, in another source's lock) that also cover its
 files: NCBI's list for a release directory covers its subdirectories, which can be sources of their own.
 
@@ -66,6 +70,7 @@ class Source:
     checksums: tuple[str, ...] = ()                  # checksum lists elsewhere that cover these files
     sequences: tuple[str, ...] = ()                  # raw paths of the files that hold roots
     loose_roots: tuple[tuple[str, str], ...] = ()    # (accession, raw path of its GenBank record)
+    external: dict = field(default_factory=dict)     # collection, prefix, format
     note: str = ""
 
 
@@ -92,7 +97,8 @@ def load(path: Path) -> dict[str, Source]:
                            optional=tuple(optional), trees=tuple(trees), efetch=efetch,
                            github_tree=dict(s.get("github_tree", {})), checksums=tuple(s.get("checksums", [])),
                            sequences=tuple(_join(base, f) for f in s.get("sequences", [])),
-                           loose_roots=tuple(sorted(s.get("loose_roots", {}).items())), note=s.get("note", ""))
+                           loose_roots=tuple(sorted(s.get("loose_roots", {}).items())),
+                           external=dict(s.get("external", {})), note=s.get("note", ""))
     return out
 
 
