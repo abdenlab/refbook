@@ -1,0 +1,35 @@
+{
+  "_doc": "The cataloged editions: refbook's label for each, and the targets that reproduce it. A target is keyed by its recipe's id in recipes/*.json; `publisher` and `alias` are who made the file and the name they give it (an alias of the edition). Labels follow each edition's most common target. build_catalog.py checks that the targets listed under an edition are exactly those whose named sequence sets have one digest, so a label can't cover two editions or miss a target.",
+  "editions": [
+    {"label": "grch38-no-alt", "targets": {
+      "GRCh38_no_alt_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.15_GRCh38_no_alt_analysis_set"},
+      "iGenomes_NCBI_GRCh38": {"publisher": "Illumina iGenomes", "alias": "NCBI/GRCh38"}}},
+    {"label": "grch38-no-alt-hs38d1", "targets": {
+      "GRCh38_no_alt_plus_hs38d1_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set"}}},
+    {"label": "grch38-no-alt-hs38d1-igenomes", "targets": {
+      "iGenomes_NCBI_GRCh38Decoy": {"publisher": "Illumina iGenomes", "alias": "NCBI/GRCh38Decoy"}}},
+    {"label": "grch38-full", "targets": {
+      "GRCh38_full_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.15_GRCh38_full_analysis_set"}}},
+    {"label": "grch38-full-hs38d1", "targets": {
+      "GRCh38_full_plus_hs38d1_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set"}}},
+    {"label": "hs38dh", "targets": {
+      "Broad_Homo_sapiens_assembly38": {"publisher": "Broad Institute", "alias": "Homo_sapiens_assembly38"},
+      "1000G_GRCh38_full_analysis_set_plus_decoy_hla": {"publisher": "1000 Genomes", "alias": "GRCh38_full_analysis_set_plus_decoy_hla"},
+      "iGenomes_GATK_GRCh38": {"publisher": "Illumina iGenomes", "alias": "GATK/GRCh38"}}},
+    {"label": "hg38", "targets": {
+      "UCSC_hg38": {"publisher": "UCSC", "alias": "hg38"}}},
+    {"label": "hg38-p14", "targets": {
+      "UCSC_hg38.p14": {"publisher": "UCSC", "alias": "hg38.p14"}}},
+    {"label": "hg38-analysis-set", "targets": {
+      "UCSC_hg38.analysisSet": {"publisher": "UCSC", "alias": "hg38.analysisSet"},
+      "iGenomes_UCSC_hg38": {"publisher": "Illumina iGenomes", "alias": "UCSC/hg38"}}},
+    {"label": "ensembl-grch38-primary", "targets": {
+      "Ensembl116_primary_assembly": {"publisher": "Ensembl 116", "alias": "Homo_sapiens.GRCh38.dna.primary_assembly"}}},
+    {"label": "ensembl-grch38-toplevel", "targets": {
+      "Ensembl116_toplevel": {"publisher": "Ensembl 116", "alias": "Homo_sapiens.GRCh38.dna.toplevel"}}},
+    {"label": "gencode-grch38-primary", "targets": {
+      "GENCODE50_primary_assembly": {"publisher": "GENCODE 50", "alias": "GRCh38.primary_assembly.genome"}}},
+    {"label": "gencode-grch38-p14", "targets": {
+      "GENCODE50_p14": {"publisher": "GENCODE 50", "alias": "GRCh38.p14.genome"}}}
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "_doc": "bwakit-0.7.12 hs38DH as published by Broad (Homo_sapiens_assembly38) and 1000 Genomes (GRCh38_full_analysis_set_plus_decoy_hla): the GRC full_plus_hs38d1 analysis set, then every genomic allele of HLA-A, B, C, DQA1, DQB1 and DRB1 from IPD-IMGT/HLA 3.18.0 (gene files A, B, C, DQA, DQB, DRB1), in release order. The HLA alleles are external roots (not hosted). Broad is checked against its FASTA content (observe_fasta.py): uppercase except the hs38d1 decoys, which keep NCBI's soft-mask; 1000G against its .dict M5s (observe_dict.py). Applied by catalog/40_recipes.py.",
+  "recipes": [
+    {
+      "target": "Broad_Homo_sapiens_assembly38",
+      "published": "https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta",
+      "select": [
+        {
+          "assembly": "GCA_000001405.15",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2"
+          ]
+        },
+        {
+          "assembly": "GCA_000786075.2",
+          "roles": [
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "collection": "IMGT/HLA 3.18.0",
+          "groups": [
+            "A",
+            "B",
+            "C",
+            "DQA",
+            "DQB",
+            "DRB1"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "hardmask_grc",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "AJ507799.2": "chrEBV"
+        },
+        "template": {
+          "GCA_000786075.2": "chrUn_{accession_v}_decoy",
+          "IMGT/HLA 3.18.0": "HLA-{name}"
+        }
+      }
+    },
+    {
+      "target": "1000G_GRCh38_full_analysis_set_plus_decoy_hla",
+      "published": "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa",
+      "observed_from": "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.15",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2"
+          ]
+        },
+        {
+          "assembly": "GCA_000786075.2",
+          "roles": [
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "collection": "IMGT/HLA 3.18.0",
+          "groups": [
+            "A",
+            "B",
+            "C",
+            "DQA",
+            "DQB",
+            "DRB1"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "hardmask_grc",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "AJ507799.2": "chrEBV"
+        },
+        "template": {
+          "GCA_000786075.2": "chrUn_{accession_v}_decoy",
+          "IMGT/HLA 3.18.0": "HLA-{name}"
+        }
+      }
+    }
+  ]
+}

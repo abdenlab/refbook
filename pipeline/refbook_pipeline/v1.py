@@ -93,3 +93,34 @@ def compare_blocks(old: Path, new: Path, out: Path) -> None:
     out.write_text(json.dumps(result, indent=1) + "\n")
     if not result["matches"]:
         raise Refused(f"root_blocks differs from the first pipeline's (see {out})")
+
+
+def compare_observed(old: Path, new: Path, targets: list[str], out: Path) -> None:
+    """Each target's observation here against the first pipeline's: the same rows, and the same provenance
+    (the locked file's path, URL, size, sha256, Last-Modified and the evidence) in the schema metadata."""
+    result = {}
+    for t in targets:
+        a, b = pq.read_table(old / f"{t}.parquet"), pq.read_table(new / f"{t}.parquet")
+        result[t] = {"rows": b.num_rows, "rows_equal": a.equals(b, check_metadata=False),
+                     "provenance_equal": (a.schema.metadata or {}) == (b.schema.metadata or {})}
+    matches = all(r["rows_equal"] and r["provenance_equal"] for r in result.values())
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"matches": matches, "targets": result}, indent=1) + "\n")
+    if not matches:
+        raise Refused(f"observations differ from the first pipeline's (see {out})")
+
+
+def compare_files(repo: Path, copied: dict[str, str], book_dir: Path, out: Path) -> None:
+    """The book's declarative inputs copied from the first pipeline (recipes, editions.json) must stay identical
+    to theirs until the switch: a change made in one place only would make the builds differ for no reason."""
+    differ = []
+    for name, rel in copied.items():
+        a, b = repo / rel, book_dir / name
+        pairs = [(a / p.name, p) for p in sorted(b.glob("*.json"))] if b.is_dir() else [(a, b)]
+        if b.is_dir() and sorted(p.name for p in a.glob("*.json")) != [p.name for _, p in pairs]:
+            differ.append(f"{name}: other files")
+        differ += [str(q.relative_to(book_dir)) for p, q in pairs if not p.exists() or p.read_bytes() != q.read_bytes()]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"matches": not differ, "differ": differ}, indent=1) + "\n")
+    if differ:
+        raise Refused(f"the book's inputs differ from the first pipeline's: {differ}")

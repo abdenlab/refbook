@@ -16,9 +16,22 @@ The build: output/build/books/<book>/ for what is built per book, output/build/c
 (one directory per task, written whole or not at all).
 """
 
+import json
+
 import pyarrow as pa
 import pyarrow.parquet as pq
-from refbook_pipeline import books, layout, locks, members, roots, sources, v1
+from refbook_pipeline import (
+    Refused,
+    books,
+    layers,
+    layout,
+    locks,
+    members,
+    observe,
+    roots,
+    sources,
+    v1,
+)
 
 RAW, BUILD = layout.raw_dir(), layout.build_dir()
 BUILD.mkdir(parents=True, exist_ok=True)  # doit keeps its state beside it, and doesn't make the directory
@@ -27,7 +40,8 @@ SOURCES = sources.load(layout.SOURCES)
 BOOKS = books.load(layout.BOOKS, SOURCES)
 
 DOIT_CONFIG = {
-    "default_tasks": ["lock", "members", "assembly_members", "roots", "compare_v1"],
+    "default_tasks": ["lock", "members", "assembly_members", "roots", "layers", "catalog_layers", "observe",
+                      "compare_v1"],
     "dep_file": str(BUILD.parent / ".doit.db"),
     "verbosity": 2,
 }
@@ -123,7 +137,7 @@ def task_roots():
         expected = members.lengths(pq.read_table(table))
         for acc, record in loose:
             if acc in expected:
-                raise roots.Refused(f"{acc} is declared a loose root, but an assembly report lists it")
+                raise Refused(f"{acc} is declared a loose root, but an assembly report lists it")
             expected[acc] = roots.genbank_length(record)
         with layout.output(out) as tmp:
             print(roots.build(expected, fastas, tmp))
@@ -134,6 +148,117 @@ def task_roots():
     return {"actions": [action], "task_dep": dep["task_dep"],
             "file_dep": [table] + [p for p, _ in fastas] + [r for _, r in loose] + dep["file_dep"] + code("roots", "members"),
             "targets": [out / f"{n}.parquet" for n in names] + [out / "inputs.json"]}
+
+
+def task_observe():
+    """What each target (a published file a recipe reproduces) was found to contain, per sequence: from its FASTA
+    (digests computed) or its .dict (MD5s as published), with the locked file's provenance (observe.py)."""
+    for book in BOOKS.values():
+        srcs = [SOURCES[n] for n in book.sources]
+        owner = {rel: s for s in srcs for rel in sources.files(s, RAW)[0]}
+        for r in books.recipes(layout.BOOKS, book.name):
+            rel = books.target_of(r)
+            if rel not in owner:
+                raise Refused(f"{r['target']}: {rel} is in none of {book.name}'s sources")
+            src, out = owner[rel], BUILD / "books" / book.name / "observed" / f"{r['target']}.parquet"
+
+            def action(rel=rel, src=src, out=out, target=r["target"]):
+                entry = locks.read(lock_path(src.name))[rel]
+                # The lock task has just checked the bytes (it runs first); this guards the size only.
+                if (RAW / rel).stat().st_size != int(entry["bytes"]):
+                    raise Refused(f"{target}: {rel} does not match its lock")
+                table = observe.observe(RAW / rel)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                tmp = out.with_name(f".{out.name}.partial")
+                pq.write_table(table.replace_schema_metadata(observe.provenance(entry)), tmp, compression="zstd")
+                tmp.replace(out)
+                print(f"{target}: {table.num_rows} sequences from {(RAW / rel).name}")
+
+            yield {"name": r["target"], "actions": [action], "task_dep": [f"lock:{src.name}"],
+                   "file_dep": [RAW / rel, lock_path(src.name)] + code("observe"), "targets": [out]}
+
+
+LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_hardmask_grc"]
+
+
+def task_layers():
+    """A book's layers, from its releases' and add-ons' assembly structure (see refbook_pipeline/layers.py)."""
+    for book in BOOKS.values():
+        srcs = [SOURCES[n] for n in book.releases + book.addons]
+        rels = [layers.Release.of(RAW, SOURCES[n].base) for n in book.releases]
+        dirs = [RAW / s.base for s in srcs]
+        mask = book.hardmask_grc
+        mask_src = [SOURCES[mask["source"]]] if mask else []
+        mask_file = RAW / SOURCES[mask["source"]].base / mask["file"] if mask else None
+        table = BUILD / "books" / book.name / "members" / "assembly_members.parquet"
+        lengths = CATALOG / "roots" / "roots.parquet"
+        out = BUILD / "books" / book.name / "layers"
+
+        def action(book=book, rels=rels, dirs=dirs, mask=mask, mask_file=mask_file, srcs=srcs + mask_src,
+                   table=table, lengths=lengths, out=out):
+            ms = pq.read_table(table).to_pylist()
+            r = pq.read_table(lengths, columns=["root_id", "length"])
+            length = dict(zip(r["root_id"].to_pylist(), r["length"].to_pylist()))
+            with layout.output(out) as tmp:
+                agp = layers.build_agp(RAW, dirs, {m["genbank_accession"] for m in ms})
+                regions, spans = layers.build_regions(rels, ms, set(book.region_quirks))
+                placements, notes = layers.build_placements(rels, ms, length, spans)
+                tables = {"layer_agp": agp, "layer_regions": regions, "layer_placements": placements}
+                if mask:
+                    tables["layer_hardmask_grc"] = layers.build_hardmask_grc(mask_file, length, regions,
+                                                                           mask["par_root"])
+                for name, t in tables.items():
+                    pq.write_table(t, tmp / f"{name}.parquet", compression="zstd")
+                (tmp / "notes.json").write_text(json.dumps(notes, indent=1) + "\n")
+                layout.record_inputs(tmp, [lock_path(s.name) for s in srcs])
+                print({name: t.num_rows for name, t in tables.items()}, notes)
+
+        files = [RAW / f for s in srcs for f in sources.files(s, RAW)[0]] + ([mask_file] if mask else [])
+        dep = reads(srcs + mask_src)
+        yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
+               "file_dep": [table, lengths] + files + dep["file_dep"] + code("layers", "members"),
+               "targets": [out / f"{n}.parquet" for n in LAYERS[:3] + (LAYERS[3:] if mask else [])]
+                          + [out / "notes.json", out / "inputs.json"]}
+
+
+def task_catalog_layers():
+    """The catalog's layers: every book's. A root-keyed layer (AGP, hard-mask) has each root once, the same in
+    every book that has it; regions and placements, numbered by release, carry their book."""
+    out = CATALOG / "layers"
+    parts = {b: BUILD / "books" / b / "layers" for b in BOOKS}
+
+    def action():
+        with layout.output(out) as tmp:
+            for name in LAYERS:
+                found = [(b, d / f"{name}.parquet") for b, d in parts.items() if (d / f"{name}.parquet").exists()]
+                tables = [pq.read_table(p) for _, p in found]
+                if name in ("layer_regions", "layer_placements"):
+                    tables = [t.add_column(0, "book", pa.array([b] * t.num_rows, pa.string()))
+                              for (b, _), t in zip(found, tables)]
+                    combined = pa.concat_tables(tables)
+                else:
+                    combined, seen = [], {}
+                    for t in tables:
+                        for root, rows in sorted(_by_root(t).items()):
+                            if root in seen and seen[root] != rows:
+                                raise Refused(f"{name}: {root} differs between books")
+                            if root not in seen:
+                                seen[root] = rows
+                                combined += rows
+                    combined = pa.Table.from_pylist(combined, schema=tables[0].schema)
+                pq.write_table(combined, tmp / f"{name}.parquet", compression="zstd")
+
+    deps = [d / f"{n}.parquet" for b, d in parts.items() for n in LAYERS
+            if n != "layer_hardmask_grc" or BOOKS[b].hardmask_grc]
+    return {"actions": [action], "file_dep": deps + code("layers"),
+            "targets": [out / f"{n}.parquet" for n in LAYERS]}
+
+
+def _by_root(t: pa.Table) -> dict[str, list[dict]]:
+    out = {}
+    for row in t.to_pylist():
+        out.setdefault(row["root_id"], []).append(row)
+    return out
 
 
 def task_compare_v1():
@@ -151,6 +276,29 @@ def task_compare_v1():
         "layer_n_runs": (CATALOG / "roots", ["root_id", "start"], ()),
         "layer_iupac": (CATALOG / "roots", ["root_id", "pos"], ()),
     }
+    for book in BOOKS:
+        old_observed = layout.REPO / v1.V1_BUILD / "30_observe" / "observed"
+        new_observed = BUILD / "books" / book / "observed"
+        targets = [r["target"] for r in books.recipes(layout.BOOKS, book)]
+        yield {"name": f"observed:{book}", "actions": [call(v1.compare_observed, old_observed, new_observed, targets,
+                                                             here / f"observed-{book}.json")],
+               "file_dep": [d / f"{t}.parquet" for t in targets for d in (old_observed, new_observed)] + code("v1"),
+               "targets": [here / f"observed-{book}.json"]}
+    copied = {"recipes": "catalog/assemblies/grch38/recipes", "editions.json": "catalog/assemblies/grch38/editions.json"}
+    yield {"name": "book-inputs", "actions": [call(v1.compare_files, layout.REPO, copied, layout.BOOKS / "grch38",
+                                                    here / "book-inputs.json")],
+           "file_dep": code("v1"), "uptodate": [False], "targets": [here / "book-inputs.json"]}
+    old_layers = layout.REPO / v1.V1_BUILD / "20_layers"
+    layer_keys = {"layer_agp": (["root_id", "part_number"], ()),
+                  "layer_regions": (["root_id", "region_name", "first_release", "book"], ("book",)),
+                  "layer_placements": (["root_id", "first_release", "book"], ("book",)),
+                  "layer_hardmask_grc": (["root_id", "start"], ())}
+    for name, (keys, only_new) in layer_keys.items():
+        new, report = CATALOG / "layers" / f"{name}.parquet", here / f"{name}.json"
+        keys = [k for k in keys if k not in only_new]
+        yield {"name": name, "actions": [call(v1.compare_table, old_layers / f"{name}.parquet", new, keys, report,
+                                              only_new)],
+               "file_dep": [old_layers / f"{name}.parquet", new] + code("v1"), "targets": [report]}
     for name, (where, keys, only_new) in tables.items():
         new, report = where / f"{name}.parquet", here / f"{name}.json"
         keys = [k for k in keys if k not in only_new]

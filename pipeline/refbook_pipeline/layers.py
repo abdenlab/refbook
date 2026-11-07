@@ -1,0 +1,260 @@
+"""The annotation layers of a book, from its assembly sources:
+
+- layer_agp            one row per AGP part of each member root's component-level AGP (*.comp.agp.gz,
+                       *.scaf.agp.gz of its releases and add-ons), 0-based half-open on the root and on the component.
+                       Gap rows have null component columns and vice versa. `object_rank` is the root's position
+                       among the objects of its `source` file (editions order by it). A root's AGP must be the same
+                       in every release (and every book) that has it, so each root appears once.
+- layer_regions        named regions (alt loci regions, CEN, PAR, HET) on the chromosomes, and on the alt scaffolds
+                       patches are placed on: one row per distinct span, with the releases it holds for
+- layer_placements     where each alt scaffold and patch sits on its parent, one row per distinct placement, with
+                       the releases it holds for
+- layer_hardmask_grc   the spans the GRC's analysis sets replace with N, each with its unmasked cognate
+
+Regions and placements are numbered by release, which means something only within a book, so the catalog's
+tables carry the book. Each function refuses what the reports don't bear out, and returns its notes (what it
+accepted and why) for the record.
+"""
+
+from __future__ import annotations
+
+import gzip
+from dataclasses import dataclass
+from pathlib import Path
+
+import pyarrow as pa
+
+from . import Refused
+from .members import release_of
+
+
+@dataclass(frozen=True)
+class Release:
+    number: int          # the patch number: 0 for GRCh38
+    name: str            # GRCh38.p2
+    directory: Path      # its NCBI directory under raw/, e.g. raw/.../GCA_000001405.17_GRCh38.p2
+    url: str             # that directory's URL
+
+    @classmethod
+    def of(cls, raw: Path, base: str) -> Release:
+        name = base.rsplit("/", 1)[-1].split("_", 2)[2]
+        return cls(release_of(name), name, raw / base, f"https://{base}")
+
+
+def agp_files(directory: Path) -> list[Path]:
+    return sorted(p for p in directory.glob("*_assembly_structure/**/AGP/*.agp.gz")
+                  if p.name.endswith((".comp.agp.gz", ".scaf.agp.gz")))
+
+
+def read_agp(path: Path) -> dict[str, list[tuple]]:
+    """object -> AGP rows, as tuples of the (string) columns after `object`."""
+    objs = {}
+    with gzip.open(path, "rt") as f:
+        for line in f:
+            if line.startswith("#") or not line.strip():
+                continue
+            cols = line.rstrip("\n").split("\t")
+            objs.setdefault(cols[0], []).append(tuple(cols[1:]))
+    return objs
+
+
+def agp_record(r: tuple) -> dict:
+    """One AGP row (the columns after `object`) as a layer_agp record."""
+    gap = r[3] in ("N", "U")
+    return {
+        "part_number": int(r[2]), "start": int(r[0]) - 1, "end": int(r[1]),
+        "component_type": r[3],
+        "component_id": None if gap else r[4],
+        "component_start": None if gap else int(r[5]) - 1,
+        "component_end": None if gap else int(r[6]),
+        "orientation": None if gap else r[7],
+        "gap_length": int(r[4]) if gap else None,
+        "gap_type": r[5] if gap else None,
+        "linkage": (r[6] == "yes") if gap else None,
+        "linkage_evidence": (None if r[7] == "na" else r[7]) if gap else None,
+    }
+
+
+AGP_COLUMNS = ["root_id", "part_number", "start", "end", "component_type", "component_id", "component_start",
+               "component_end", "orientation", "gap_length", "gap_type", "linkage", "linkage_evidence", "source",
+               "object_rank"]
+
+
+def build_agp(raw: Path, directories: list[Path], roots: set[str]) -> pa.Table:
+    """The AGP of every root in `roots` (the members; a loose root has none), from the directories in order: a
+    root's source is the first file that has it."""
+    agp, source, rank = {}, {}, {}
+    for d in directories:
+        for path in agp_files(d):
+            for i, (obj, rows) in enumerate(read_agp(path).items()):
+                if obj not in roots:
+                    continue  # placed scaffolds are AGP objects but not roots
+                if obj in agp and agp[obj] != rows:
+                    raise Refused(f"{obj}: AGP in {path} differs from {source[obj]}")
+                if obj not in agp:
+                    agp[obj], source[obj], rank[obj] = rows, path, i
+    if roots - set(agp):
+        raise Refused(f"no AGP for: {sorted(roots - set(agp))[:10]}")
+    cols = {k: [] for k in AGP_COLUMNS}
+    for obj in sorted(agp):
+        url = "https://" + source[obj].relative_to(raw).as_posix()
+        for r in agp[obj]:
+            rec = agp_record(r)
+            rec.update(root_id=obj, source=url, object_rank=rank[obj])
+            for k, v in cols.items():
+                v.append(rec[k])
+    return pa.table(cols)
+
+
+def read_tsv(path: Path, header_prefix: str) -> list[dict]:
+    """Rows of a tab-separated file whose header is the `#` line starting with header_prefix."""
+    rows, header = [], None
+    for line in path.read_text().splitlines():
+        if line.startswith(header_prefix):
+            header = line.lstrip("# ").split("\t")
+        elif line and not line.startswith("#"):
+            rows.append(dict(zip(header, line.split("\t"))))
+    return rows
+
+
+def constant(table: dict, key, value, where: str) -> None:
+    """Record value under key, refusing if a previous release gave a different one."""
+    if table.setdefault(key, value) != value:
+        raise Refused(f"{key}: {where} disagrees with an earlier release (was {table[key]}, now {value})")
+
+
+def release_ranges(by_release: dict) -> list[tuple]:
+    """{(key, release): value} -> [(key, value, first_release, last_release)], one entry per run of consecutive
+    releases with the same value."""
+    out = []
+    for (key, n), value in sorted(by_release.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])):
+        if out and out[-1][0] == key and out[-1][1] == value and out[-1][3] == n - 1:
+            out[-1] = (key, value, out[-1][2], n)
+        else:
+            out.append((key, value, n, n))
+    return out
+
+
+def build_regions(releases: list[Release], members: list[dict],
+                  quirks: set[tuple[int, str, str]]) -> tuple[pa.Table, dict]:
+    """Named regions, keyed by (region_name, root): the PARs share a name across X and Y. A region's span can change
+    between releases (they grow to fit new patches): one row per distinct span, with its releases. Also returns
+    {(name, root, release): span}. genomic_regions_definitions.txt is authoritative; its release's
+    assembly_regions.txt must agree, but for the book's `quirks`."""
+    by_release, rtype = {}, {}
+    for rel in releases:
+        d, n = rel.directory, rel.number
+        # The report's "Chromosome" is a chromosome name, or an alt scaffold's sequence name (patches to alts).
+        chrom = {m["sequence_name"]: m["genbank_accession"] for m in members if m["assembly_name"] == rel.name}
+        chrom.update({m["assigned_molecule"]: m["genbank_accession"] for m in members
+                      if m["assembly_name"] == rel.name and m["role"] == "assembled-molecule"})
+        for r in read_tsv(d / f"{d.name}_assembly_structure" / "genomic_regions_definitions.txt", "#region_name"):
+            key = (r["region_name"], r["chromosome"], n)
+            if key in by_release:
+                raise Refused(f"{key}: defined twice")
+            by_release[key] = (int(r["start"]) - 1, int(r["stop"]))
+        reported = set()
+        for r in read_tsv(d / f"{d.name}_assembly_regions.txt", "# Region-Name"):
+            key = (r["Region-Name"], chrom[r["Chromosome"]])
+            reported.add(key)
+            if (n,) + key in quirks:
+                continue
+            span = (int(r["Chromosome-Start"]) - 1, int(r["Chromosome-Stop"]))
+            if by_release.get(key + (n,)) != span:
+                raise Refused(f"{key}: assembly_regions != definitions in {d.name}")
+            role = r["Scaffold-Role"]
+            if role in ("CEN", "PAR", "HET"):
+                constant(rtype, key, role, d.name)
+            elif role in ("alt-scaffold", "fix-patch", "novel-patch", "na"):
+                rtype.setdefault(key, None)
+            else:
+                raise Refused(f"{key}: unknown Scaffold-Role {role!r}")
+        for name, c, m in by_release:
+            if m == n and (name, c) not in reported and (n, name, c) not in quirks:
+                raise Refused(f"{(name, c)}: in definitions but not assembly_regions in {d.name}")
+    rows = release_ranges({((name, c), n): span for (name, c, n), span in by_release.items()})
+    rows.sort(key=lambda r: (r[0][1], r[1], r[0][0], r[2]))
+    table = pa.table({
+        "region_name": [k[0] for k, *_ in rows],
+        "root_id": [k[1] for k, *_ in rows],
+        "start": [v[0] for _, v, *_ in rows],
+        "end": [v[1] for _, v, *_ in rows],
+        "region_type": [rtype.get(k) for k, *_ in rows],
+        "first_release": [f for *_, f, _ in rows],
+        "last_release": [last for *_, last in rows],
+    })
+    return table, by_release
+
+
+PLACEMENT_COLUMNS = ["root_id", "assembly_unit", "scaffold_name", "parent_type", "parent_id", "region_name",
+                     "orientation", "start", "end", "parent_start", "parent_end", "start_tail", "end_tail",
+                     "patch_type", "first_release", "last_release"]
+
+
+def build_placements(releases: list[Release], members: list[dict], length: dict[str, int],
+                     region_spans: dict) -> tuple[pa.Table, list[str]]:
+    """Where each alt scaffold and patch sits on its parent (a chromosome, or an alt scaffold for patches to alts).
+    NCBI revises some placements between releases: one row per distinct placement, with its releases. Also returns
+    the notes: members a release leaves unplaced."""
+    place, ptype, notes = {}, {}, []
+    for rel in releases:
+        d = rel.directory
+        s = d / f"{d.name}_assembly_structure"
+        rows = read_tsv(s / "all_alt_scaffold_placement.txt", "#alt_asm_name")
+        role = {m["genbank_accession"]: m["role"] for m in members if m["assembly_name"] == rel.name}
+        want = {a for a, r in role.items() if r in ("alt-scaffold", "fix-patch", "novel-patch")}
+        got = [r["alt_scaf_acc"] for r in rows]
+        if len(got) != len(set(got)) or set(got) != want:
+            raise Refused(f"{d.name}: placements != the report's alt and patch members")
+        for r in rows:
+            if r["parent_acc"] == "na":
+                # A member but not placed (KI270825.1 in p14: withdrawn by editing p14's files in 2025, after
+                # FCS flagged a bacterial end; the cause is inferred): its placement ends at the release before.
+                notes.append(f"{r['alt_scaf_acc']}: no placement in {rel.name}")
+                continue
+            rs = region_spans.get((r["region_name"], r["parent_acc"], rel.number))
+            if rs is None or int(r["parent_start"]) - 1 < rs[0] or int(r["parent_stop"]) > rs[1]:
+                raise Refused(f"{r['alt_scaf_acc']}: placement outside region {r['region_name']} in {d.name}")
+            place[r["alt_scaf_acc"], rel.number] = (
+                r["alt_asm_name"], r["alt_scaf_name"], r["parent_type"].lower(), r["parent_acc"], r["region_name"],
+                r["ori"], int(r["alt_scaf_start"]) - 1, int(r["alt_scaf_stop"]),
+                int(r["parent_start"]) - 1, int(r["parent_stop"]), int(r["alt_start_tail"]), int(r["alt_stop_tail"]))
+        pt = s / "PATCHES" / "alt_scaffolds" / "patch_type"
+        for r in read_tsv(pt, "#alt_scaf_name") if pt.exists() else []:
+            constant(ptype, r["alt_scaf_acc"], r["patch_type"], d.name)
+            if role[r["alt_scaf_acc"]] != r["patch_type"].lower() + "-patch":
+                raise Refused(f"{r['alt_scaf_acc']}: patch_type != report role in {d.name}")
+    cols = {k: [] for k in PLACEMENT_COLUMNS}
+    for acc, p, first, last in release_ranges(place):
+        unit, s, e, st, et = p[0], p[6], p[7], p[10], p[11]
+        if st + (e - s) + et != length[acc]:
+            raise Refused(f"{acc}: tails + aligned span != length")
+        if (unit == "PATCHES") != (acc in ptype):
+            raise Refused(f"{acc}: patch_type missing, or on a non-patch")
+        for k, v in zip(cols, (acc, *p, ptype.get(acc), first, last)):
+            cols[k].append(v)
+    return pa.table(cols), notes
+
+
+def build_hardmask_grc(path: Path, length: dict[str, int], regions: pa.Table, par_root: str) -> pa.Table:
+    """The GRC analysis-set hard masks, from unmasked_cognates_of_masked_CEN_PAR.txt. Each masked span is an exact
+    duplicate of its unmasked cognate, so the two must have the same length; the spans on `par_root` (chrY) must
+    be its PAR regions in the first release."""
+    cols = {k: [] for k in ("root_id", "start", "end", "name", "cognate_root_id", "cognate_start", "cognate_end",
+                            "cognate_name")}
+    for r in read_tsv(path, "#masked_copy_chr_accn"):
+        span = (r["masked_copy_chr_accn"], int(r["masked_copy_start"]) - 1, int(r["masked_copy_stop"]))
+        cog = (r["unmasked_cognate_chr_accn"], int(r["unmasked_cognate_start"]) - 1, int(r["unmasked_cognate_stop"]))
+        if span[2] - span[1] != cog[2] - cog[1]:
+            raise Refused(f"{span}: masked span and cognate {cog} differ in length")
+        if span[2] > length[span[0]] or cog[2] > length[cog[0]]:
+            raise Refused(f"{span}: past the end of the root")
+        for k, v in zip(cols, (*span, r["masked_scaf_or_region_name"], *cog, r["unmasked_scaf_or_region_name"])):
+            cols[k].append(v)
+    par = sorted((s, e) for n, a, s, e, t, f in zip(*(regions[c].to_pylist() for c in (
+        "region_name", "root_id", "start", "end", "region_type", "first_release")))
+        if t == "PAR" and a == par_root and f == 0)
+    masked = sorted((s, e) for a, s, e in zip(cols["root_id"], cols["start"], cols["end"]) if a == par_root)
+    if par != masked:
+        raise Refused(f"{par_root}'s masks {masked} != its PAR regions {par}")
+    return pa.table(cols)
