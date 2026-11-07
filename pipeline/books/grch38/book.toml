@@ -1,0 +1,10 @@
+# The GRCh38 book: the GRCh38 assembly, every release (p0..p14), with the add-ons its editions draw on (the hs38d1
+# decoys, EBV, the IMGT/HLA alleles), and the published editions its recipes reproduce.
+name = "grch38"
+sources = [
+  "GRCh38", "GRCh38.p1", "GRCh38.p2", "GRCh38.p3", "GRCh38.p4", "GRCh38.p5", "GRCh38.p6", "GRCh38.p7",
+  "GRCh38.p8", "GRCh38.p9", "GRCh38.p10", "GRCh38.p11", "GRCh38.p12", "GRCh38.p13", "GRCh38.p14",
+  "GRCh38-withdrawn-fix-patches", "GRCh38-analysis-sets",
+  "hs38d1", "EBV", "IMGT-HLA-3.18.0",
+  "UCSC-hg38", "Ensembl-116", "GENCODE-50", "Broad-hg38-v0", "1000G-GRCh38", "iGenomes-GRCh38",
+]

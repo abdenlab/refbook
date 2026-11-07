@@ -1,0 +1,5 @@
+path	bytes	sha256	last_modified	url
+ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.p14.genome.fa.gz	897322567	3c28e7bcc390d40970455c657565799ed37c2146c26beebb96e8fd729405e93a	2026-06-09T12:55:34+00:00	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.p14.genome.fa.gz
+ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.primary_assembly.genome.fa.gz	845635028	b760d18dbb651dd14dfc290083371b3ef3bff122d43a9cefb13ca4ecf38f05ca	2026-06-09T12:55:38+00:00	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.primary_assembly.genome.fa.gz
+ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/MD5SUMS	3074	b681a9bbebc0a6ea3d05370ab8511efc12aa806738013f45ffb473730ecc3b36	2026-06-09T12:56:03+00:00	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/MD5SUMS
+ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/_README.TXT	69086	ea687e13394011dfa5734e89047513b4b6120ca9d4914c695045a5af605d4ae6	2026-06-09T12:55:56+00:00	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/_README.TXT

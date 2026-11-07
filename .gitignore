@@ -8,6 +8,7 @@ _scratch/
 __pycache__/
 .nfs*
 /catalog/output/
+/pipeline/output/
 /target
 python/refbook/*.so
 node_modules/

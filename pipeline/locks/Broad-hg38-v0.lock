@@ -1,0 +1,4 @@
+path	bytes	sha256	last_modified	url
+storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.dict	581712	07523b4a0afd1127ae909f92f8b3911aff096461aed7eff3f1acf5bdfc1dc103	2019-12-06T23:55:16+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.dict
+storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta	3249912778	93157a161863464c9435062fd67c173fdaf99cb8b32f1455018361387ffa5564	2019-12-06T23:55:16+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta
+storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai	160928	edefd93c489dc1baefad312f40388089f8db5cf6dcc3ba0955669ead274e8b6b	2019-12-06T23:55:16+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai

@@ -1,0 +1,3 @@
+path	bytes	sha256	last_modified	url
+eutils.ncbi.nlm.nih.gov/efetch/nuccore_KQ759759.1.fasta	199866	1c8df77c850e51469b7c5fdd416c82cb81cb61c4daa024971b367d99a5f92bc4	2026-10-29T19:26:08.067686+00:00	https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=KQ759759.1&rettype=fasta&retmode=text
+eutils.ncbi.nlm.nih.gov/efetch/nuccore_KQ759762.1.fasta	102594	dc348f9a0086a20437fe52ba116e348ef6ec787ec8192ea82161900925c4ea48	2026-10-29T19:26:08.315686+00:00	https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=KQ759762.1&rettype=fasta&retmode=text

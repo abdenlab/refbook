@@ -1,0 +1,191 @@
+# Every source the catalog downloads, declared as data (see refbook_pipeline/sources.py for the keys). One lock
+# each, in locks/<name>.lock. A book (books/<book>/book.toml) lists the sources it draws on; a source can serve
+# several books.
+
+# GRCh38, p0..p14 (GCA_000001405.15..29): each release's reports, checksums and assembly_structure tree (AGPs,
+# placements, alignments, join certificates), without the per-unit FASTA (about 1 GB a release): p14's
+# genomic.fna.gz has every sequence but two.
+
+[[source]]
+name = "GRCh38"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38"
+
+[[source]]
+name = "GRCh38.p1"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.16_GRCh38.p1"
+
+[[source]]
+name = "GRCh38.p2"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.17_GRCh38.p2"
+
+[[source]]
+name = "GRCh38.p3"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.18_GRCh38.p3"
+
+[[source]]
+name = "GRCh38.p4"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.19_GRCh38.p4"
+
+[[source]]
+name = "GRCh38.p5"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.20_GRCh38.p5"
+
+[[source]]
+name = "GRCh38.p6"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.21_GRCh38.p6"
+
+[[source]]
+name = "GRCh38.p7"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.22_GRCh38.p7"
+
+[[source]]
+name = "GRCh38.p8"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.23_GRCh38.p8"
+
+[[source]]
+name = "GRCh38.p9"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.24_GRCh38.p9"
+
+[[source]]
+name = "GRCh38.p10"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.25_GRCh38.p10"
+
+[[source]]
+name = "GRCh38.p11"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.26_GRCh38.p11"
+
+[[source]]
+name = "GRCh38.p12"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.27_GRCh38.p12"
+
+[[source]]
+name = "GRCh38.p13"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.28_GRCh38.p13"
+
+[[source]]
+name = "GRCh38.p14"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.29_GRCh38.p14"
+also = ["GCA_000001405.29_GRCh38.p14_genomic.fna.gz"]   # the sequences: 709 of GRCh38's 711
+
+[[source]]
+name = "GRCh38-withdrawn-fix-patches"
+roles = ["input"]
+note = "The 2 fix patches p14 replaced with new versions: in p13, in no p14 file."
+efetch = { accessions = ["KQ759759.1", "KQ759762.1"], rettypes = ["fasta"] }
+
+[[source]]
+name = "GRCh38-analysis-sets"
+roles = ["input", "target"]
+note = """The GRC analysis sets: recipe targets, the GRC's hard-mask definitions (unmasked_cognates_of_masked_CEN_PAR),
+and M5s per sequence (a check on the roots). Without the annotation files and aligner indexes."""
+base = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids"
+# The GRCh38 release directory's list covers this subdirectory too (README_analysis_sets.txt: its own list doesn't).
+checksums = ["ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/md5checksums.txt"]
+files = [
+  "README_analysis_sets.txt", "md5checksums.txt", "unmasked_cognates_of_masked_CEN_PAR.txt",
+  "GCA_000001405.15_GRCh38_GRC_exclusions.bed",
+  "GCA_000001405.15_GRCh38_full_analysis_set.fna.gz", "GCA_000001405.15_GRCh38_full_analysis_set.fna.fai",
+  "GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set.fna.gz", "GCA_000001405.15_GRCh38_full_plus_hs38d1_analysis_set.fna.fai",
+  "GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz", "GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai",
+  "GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.gz", "GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.fai",
+]
+
+# Sequences outside GRCh38 that GRCh38 editions add.
+
+[[source]]
+name = "hs38d1"
+roles = ["input"]
+note = "The decoys of the GRC analysis sets, an assembly of their own (GCA_000786075.2)."
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/786/075/GCA_000786075.2_hs38d1"
+also = ["GCA_000786075.2_hs38d1_genomic.fna.gz"]
+
+[[source]]
+name = "EBV"
+roles = ["input"]
+note = "The Epstein-Barr virus genome, in no assembly: its sequence, and its GenBank record (topology, source)."
+efetch = { accessions = ["AJ507799.2"], rettypes = ["fasta", "gb"] }
+
+[[source]]
+name = "IMGT-HLA-3.18.0"
+roles = ["input"]
+note = """IPD-IMGT/HLA release 3.18.0, the HLA alleles in bwakit's hs38DH (Broad, 1000 Genomes): external roots,
+kept for their digests and never hosted (CC BY-ND). One FASTA per gene."""
+base = "raw.githubusercontent.com/ANHIG/IMGTHLA/3180"
+files = ["LICENSE.md", "README.md", "Allelelist.3180.txt"]
+github_tree = { repo = "ANHIG/IMGTHLA", ref = "3180", prefix = "fasta/", suffix = "_gen.fasta" }
+
+# The published GRCh38 editions: recipe targets.
+
+[[source]]
+name = "UCSC-hg38"
+roles = ["target", "input"]
+note = """hg38's bigZips: the initial release (455 sequences), p14/ (711, with the 2 withdrawn fix patches),
+analysisSet/ (UCSC's copy of the GRC no-alt analysis set). p14's chromAlias.txt is an input (Ensembl names)."""
+base = "hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips"
+files = [
+  "hg38.fa.gz", "hg38.chrom.sizes", "md5sum.txt",
+  "p14/hg38.p14.fa.gz", "p14/hg38.p14.chrom.sizes", "p14/hg38.p14.chromAlias.txt", "p14/md5sum.txt",
+  "analysisSet/hg38.analysisSet.fa.gz", "analysisSet/md5sum.txt",
+]
+optional = ["analysisSet/README.txt"]
+
+[[source]]
+name = "Ensembl-116"
+roles = ["target"]
+note = "Ensembl 116 (a pinned release): the unmasked primary assembly and toplevel."
+base = "ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna"
+files = ["Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz", "Homo_sapiens.GRCh38.dna.toplevel.fa.gz", "CHECKSUMS", "README"]
+
+[[source]]
+name = "GENCODE-50"
+roles = ["target"]
+note = "GENCODE 50 (a pinned release): the primary assembly and the full p14 genome."
+base = "ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50"
+files = ["GRCh38.primary_assembly.genome.fa.gz", "GRCh38.p14.genome.fa.gz", "MD5SUMS", "_README.TXT"]
+
+[[source]]
+name = "Broad-hg38-v0"
+roles = ["target"]
+note = """Broad/GATK's hg38 (bwakit hs38DH: the full analysis set, hs38d1 and HLA). The .dict carries M5 per sequence;
+the FASTA (3.2 GB) checks the content too. Broad publishes no checksum list: the lock alone covers these."""
+base = "storage.googleapis.com/gcp-public-data--broad-references/hg38/v0"
+files = ["Homo_sapiens_assembly38.dict", "Homo_sapiens_assembly38.fasta.fai", "Homo_sapiens_assembly38.fasta"]
+
+[[source]]
+name = "1000G-GRCh38"
+roles = ["target"]
+note = "1000 Genomes' GRCh38 reference (hs38DH): metadata only, its .dict checked."
+base = "ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome"
+files = [
+  "README.20150309.GRCh38_full_analysis_set_plus_decoy_hla", "GRCh38_full_analysis_set_plus_decoy_hla.dict",
+  "GRCh38_full_analysis_set_plus_decoy_hla.fa.fai", "GRCh38_full_analysis_set_plus_decoy_hla.fa.alt",
+  "GRCh38_full_analysis_set_plus_decoy_hla-extra.fa",
+]
+
+[[source]]
+name = "iGenomes-GRCh38"
+roles = ["target"]
+note = "Illumina iGenomes (on AWS): metadata only, each genome.dict checked."
+base = "ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens"
+files = [
+  "NCBI/GRCh38/Sequence/WholeGenomeFasta/genome.dict", "NCBI/GRCh38/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "NCBI/GRCh38Decoy/Sequence/WholeGenomeFasta/genome.dict", "NCBI/GRCh38Decoy/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "UCSC/hg38/Sequence/WholeGenomeFasta/genome.dict", "UCSC/hg38/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.dict",
+  "GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta.fai",
+]

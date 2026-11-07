@@ -1,0 +1,5 @@
+path	bytes	sha256	last_modified	url
+ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/CHECKSUMS	4979	f413b69588fe36008a61ac509d02c09fe0f3b967b4838b4a172fa5d237af26c8	2026-08-07T20:16:37+00:00	https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/CHECKSUMS
+ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz	881964081	d8c3af0094a7bba6125763bad779ec18a81483c739c6ed122094bdf86c187b92	2026-03-23T13:53:05+00:00	https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.toplevel.fa.gz	936478864	a9b98f01b34057693db124a8e276f7d62822c3380e538c386c98512e0f6211d1	2026-03-23T13:53:16+00:00	https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.toplevel.fa.gz
+ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/README	4988	ddfb3c095d0f50d3f678f339bc8e20f7fa9c72bd3ec7aa9d883c17717eeb53e4	2026-03-23T13:53:10+00:00	https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/README
