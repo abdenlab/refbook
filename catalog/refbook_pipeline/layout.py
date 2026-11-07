@@ -1,10 +1,11 @@
 """Where everything is.
 
-- raw/: the downloads, at raw/<host>/<url path>. $REFBOOK_RAW, else the first pipeline's raw directory
-  (catalog/output/raw, a symlink to the shared mirror), which both pipelines read until the switch.
-- pipeline/sources.toml: every source, declared (see sources.py); pipeline/locks/<source>.lock its lock.
-- pipeline/books/<book>/book.toml: a book and the sources it draws on.
-- pipeline/output/build/: what the tasks write ($REFBOOK_BUILD overrides). Gitignored.
+- catalog/output/raw/: the downloads, at raw/<host>/<url path> ($REFBOOK_RAW overrides; a symlink to a shared
+  mirror is fine).
+- catalog/sources.toml: every source, declared (see sources.py); catalog/locks/<source>.lock its lock.
+- catalog/books/<book>/: a book (book.toml), its recipes and its labels (editions.json).
+- catalog/output/build/: what the tasks write ($REFBOOK_BUILD overrides): books/<book>/ per book, catalog/ the
+  shared catalog (with its index, catalog.json), checks/ the checks' results. catalog/output/ is gitignored.
 """
 
 import hashlib
@@ -22,7 +23,7 @@ BOOKS = PIPELINE / "books"
 
 
 def raw_dir() -> Path:
-    return Path(os.environ.get("REFBOOK_RAW") or REPO / "catalog" / "output" / "raw")
+    return Path(os.environ.get("REFBOOK_RAW") or PIPELINE / "output" / "raw")
 
 
 def build_dir() -> Path:

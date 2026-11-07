@@ -1,9 +1,8 @@
-# The repository's uv workspace: the library (python/, the refbook package),
-# the catalog's pipeline (catalog/) and its replacement, built beside it
-# (pipeline/). One uv.lock and .venv here; `uv sync` installs every member
-# and the dev tools. Not a project itself.
+# The repository's uv workspace: the library (python/, the refbook package)
+# and the catalog's pipeline (catalog/). One uv.lock and .venv here; `uv sync`
+# installs both members and the dev tools. Not a project itself.
 [tool.uv.workspace]
-members = ["python", "catalog", "pipeline"]
+members = ["python", "catalog"]
 
 [dependency-groups]
 dev = [
@@ -14,8 +13,8 @@ dev = [
 # Each member tests itself: python/tests the library (against a catalog when
 # there is one), catalog/tests the pipeline and everything it produces.
 [tool.pytest.ini_options]
-testpaths = ["python/tests", "catalog/tests", "pipeline/tests"]
-pythonpath = ["catalog", "pipeline"]
+testpaths = ["python/tests", "catalog/tests"]
+pythonpath = ["catalog"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["refbook"]

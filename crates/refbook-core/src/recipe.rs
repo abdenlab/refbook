@@ -1,7 +1,7 @@
 //! The recipe compiler: a recipe and the catalog's tables in, an edition's
 //! manifest rows out (name, root, nucleotide operations), in canonical order.
 //!
-//! A recipe (catalog/assemblies/<assembly>/recipes/*.json) is data:
+//! A recipe (catalog/books/<book>/recipes/*.json) is data:
 //!
 //! - `select`: entries, each one of
 //!   - `{"assembly": <accession.version>, "roles": [...], "accessions": [...]?,

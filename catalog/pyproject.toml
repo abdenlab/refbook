@@ -1,6 +1,5 @@
-# The pipeline that builds, checks and exports the catalog: numbered steps run
-# directly (`uv run python -I catalog/<step>.py`, from the repository root),
-# with their shared modules and tests (tests/). Not a package.
+# The catalog's pipeline: one shared catalog built from every book's sources, run by doit (catalog/dodo.py,
+# `uv run doit` from catalog/). Its code is refbook_pipeline/, its tests tests/.
 [project]
 name = "refbook-catalog"
 version = "0.0.0"
@@ -8,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "refbook[datafusion]",
     "pyarrow>=25",
+    "doit>=0.37",
 ]
 
 [tool.uv]

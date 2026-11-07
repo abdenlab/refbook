@@ -17,7 +17,7 @@ import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, pars
 import * as edit from "../src/data/recipeEdit.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
 
-const dir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../../catalog/output/build/grch38", import.meta.url));
+const dir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../../catalog/output/build/catalog", import.meta.url));
 const skip = existsSync(`${dir}/catalog.json`) ? false : "no build";
 const wasm = new URL(import.meta.resolve("@abdenlab/refbook")).pathname.replace(/dist\/index\.js$/, "pkg/refbook_wasm_bg.wasm");
 rb.initSync({ module: readFileSync(wasm) });

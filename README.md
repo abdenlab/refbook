@@ -199,7 +199,7 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
   and checked against ENA's refget server.
 - **Layers** annotate roots in their own coordinates.
 - **Recipes** turn roots into a published file: select, mask, change the
-  alphabet (IUPAC→N) and rename. They are data, in `catalog/assemblies/grch38/recipes/*.json`. Order
+  alphabet (IUPAC→N) and rename. They are data, in `catalog/books/<book>/recipes/*.json`. Order
   isn't part of a recipe: each published file's order is recorded as observed.
 - **Reconstruction is the verification.** A file counts as cataloged only when
   its recipe reproduces it, sequence by sequence: names, lengths, MD5 and `SQ.`
@@ -212,57 +212,55 @@ and digests only, and the library reads their bases from the IMGT/HLA release.
 
 ## Building the catalog
 
-The pipeline in `catalog/` builds a catalog from the original downloads; it
-runs on the lab server and needs about 15 GB.
+The pipeline in `catalog/` builds one catalog from every book's original
+downloads; it runs on the lab server and needs about 15 GB. It is a set of
+[doit](https://pydoit.org) tasks (`catalog/dodo.py`), each calling plain
+functions in `catalog/refbook_pipeline/`, and doit reruns a task only when the
+bytes of something it reads (the code included) have changed.
 
 ```bash
-mkdir -p catalog/output && ln -s /path/to/a/mirror catalog/output/raw   # optional: share the downloads between checkouts
-catalog/00_fetch_inputs.sh           # INSDC assemblies, hs38d1, EBV, GRC analysis sets, IMGT/HLA; checks the inputs lock
-catalog/01_fetch_targets.sh          # published files used as reproduction targets; checks the targets lock
-uv run python -I catalog/10_roots.py
-uv run python -I catalog/11_external_roots.py
-uv run python -I catalog/20_layers.py
-uv run python -I catalog/30_observe.py
-uv run python -I catalog/40_recipes.py
-uv run python -I catalog/41_editions.py
-uv run python -I catalog/50_aliases.py
-uv run python -I catalog/60_check_gaps.py
-uv run python -I catalog/61_check_roots.py
-uv run python -I catalog/62_check_materialize.py
-uv run python -I catalog/70_export.py catalog/output/releases/<version> <version>
+cd catalog
+mkdir -p output && ln -s /path/to/a/mirror output/raw   # optional: share the downloads between checkouts
+uv run doit fetch:GRCh38.p14         # download a source into output/raw/ (each is fetched only when asked)
+uv run doit                          # lock every source, build the catalog, run the checks
+uv run doit check_roots_ena          # the root check against ENA's refget server (3,097 requests; a release needs it)
+uv run doit export --version <version> --out output/releases/<version>
+uv run doit list                     # every task; `uv run doit info roots` says why one would run
 ```
 
-Steps read the downloads in `catalog/output/raw/` and write
-`catalog/output/build/<assembly>/` (`catalog/output/` is gitignored; override
-with `--raw`/`--build` or `REFBOOK_RAW`/`REFBOOK_BUILD`).
-Their declarative inputs are in `catalog/assemblies/<assembly>/`: the recipes, the
-cataloged editions, and the locks.
+What the catalog is built from is data:
 
-Each step writes its own directory, `catalog/output/build/grch38/<NN_step>/`,
-assembled under
-a temporary name and renamed into place when it finishes, so a rerun replaces
-exactly that step's outputs. A step finds earlier steps' tables by name, and
-`catalog/output/build/grch38/catalog.json` indexes them all, so
-`Catalog("catalog/output/build/grch38")` opens a build directly. Every step takes `--assembly` (only `grch38` is defined so
-far). `catalog/layout.py` holds the layout and the GRCh38 releases, and
-`catalog/engine.py` the recipe engine.
+- `catalog/sources.toml` declares every **source**: a set of files from one
+  publisher (an NCBI assembly directory, files on a host, GenBank records,
+  a GitHub tree), what it's used for (an input, a reproduction target, or
+  both), which of its files hold sequences, and any external collection.
+- `catalog/books/<book>/` is a **book**: an assembly, every release of it, and
+  its add-ons (`book.toml`), the recipes that reproduce its published
+  editions (`recipes/`, one file per publisher) and their labels
+  (`editions.json`). `book.toml` also holds what is particular to the book:
+  the report disagreements accepted, where its hard-mask is defined, where
+  names come from beyond the assembly reports, and the checks' choices.
+- `catalog/locks/<source>.lock` pins each source to exact bytes: every file's
+  size, sha256, Last-Modified and URL. Locking checks each file against its
+  publisher's checksum list, where there is one, and against the lock;
+  anything new or changed refuses until you accept it with
+  `uv run doit lock:<source> --update`. On the first run there is no lock,
+  so the files are trusted and the lock is written. Publisher checksums that
+  disagree with what the publisher serves are listed, with the reason, in
+  `<source>.exceptions.tsv` beside the lock. A task reads a source only after
+  its lock passes, and records the locks it read.
 
-The checks (60-62) record their results with the hashes of the tables they
-read, and the export refuses unless every check passed on exactly the files it
-ships.
+The build is in `catalog/output/build/` (gitignored; `REFBOOK_RAW` and
+`REFBOOK_BUILD` override the paths): `books/<book>/` for what is built per
+book, `catalog/` for the shared catalog, one directory per task, each written
+whole or not at all, with `catalog/catalog.json` indexing it, so
+`Catalog("catalog/output/build/catalog")` opens a build directly; and
+`checks/` for the checks' results. The checks run on the tables the catalog
+publishes and record the hash of each, and the export refuses unless every
+check passed on exactly the files it ships, every task read the current
+locks, and (for a release) the root check consulted ENA.
 
-The fetch steps pin their downloads with **locks**
-(`catalog/assemblies/grch38/locks/inputs.lock` and `targets.lock`): every file's size,
-sha256, Last-Modified and URL. A fetch checks each file against its publisher's
-checksum list where there is one, and against the lock; anything new or
-changed fails until you accept it with `--update`. On the first run there is no
-lock, so the files are trusted and the lock is written. Publisher checksums
-that disagree with what the publisher actually serves are listed, with the
-reason, in `checksum_exceptions.tsv` next to the locks. Each observation records
-the exact target file it was made from, and a release records the hash of each
-lock.
-
-Each script's docstring says what it reads, writes and checks.
+Each module's docstring says what it reads, writes and checks.
 
 ## Repository layout
 
@@ -272,10 +270,9 @@ Each script's docstring says what it reads, writes and checks.
 | `python/` | The Python package (`pyproject.toml`, `README.md`, and `tests/`, with real ENCODE, gnomAD and GIAB headers as fixtures) |
 | `python/refbook/` | The Python library: `catalog`, `resolve`, `identify`, `materialize`, `fetch`, `refcache`, `parse`, `refget`, `seqcol`, `store`, `service`, `blocks`, `remote` |
 | `js/` | The npm package `@abdenlab/refbook`: the TypeScript front end (`js/src/`) over the core's wasm bindings (`crates/refbook-wasm`). Built with `pnpm build` at the root (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.130) |
-| `app/` | The web app (Svelte 5, Vite, TypeScript; the data layer in `app/src/data/` is plain TypeScript): the catalog, each edition's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations; identify (paste a `.fai`, `.dict`, SAM header, VCF contigs or FASTA: each sequence identified by the core, in the browser); compare (two editions or published files: seqcol's comparison, and what differs sequence by sequence); and design (a recipe editor: the choices always in view, with a naming convention per sequence group; tabs for analysis goals, the JSON, details, and the catalog ranked by closeness to load an edition's recipe; compiled live in the browser by the core, with a strip saying whether it is a cataloged edition, its ID and exports, and a link that carries it). `pnpm dev` at the root serves it with the build in `catalog/output/build/grch38` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere |
-| `catalog/` | The numbered steps that build, check and export the catalog, their shared modules (`layout`, `engine`, `observe`, `lock`), and their tests |
-| `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the steps' outputs) |
-| `catalog/assemblies/grch38/` | The declarative inputs: `recipes/` (one JSON file per publisher), `editions.json` (labels, and the targets that reproduce each edition) and `locks/` |
+| `app/` | The web app (Svelte 5, Vite, TypeScript; the data layer in `app/src/data/` is plain TypeScript): the catalog, each edition's recipe, identity, files and exports, and its sequences' bases, built in the browser from the roots with the core's operations; identify (paste a `.fai`, `.dict`, SAM header, VCF contigs or FASTA: each sequence identified by the core, in the browser); compare (two editions or published files: seqcol's comparison, and what differs sequence by sequence); and design (a recipe editor: the choices always in view, with a naming convention per sequence group; tabs for analysis goals, the JSON, details, and the catalog ranked by closeness to load an edition's recipe; compiled live in the browser by the core, with a strip saying whether it is a cataloged edition, its ID and exports, and a link that carries it). `pnpm dev` at the root serves it with the build in `catalog/output/build/catalog` at `/catalog/`; `VITE_CATALOG_URL` (or `?catalog=` on the page) points it elsewhere |
+| `catalog/` | The pipeline: `dodo.py` (the doit tasks), `refbook_pipeline/` (the functions they call), `sources.toml`, `locks/`, `books/<book>/` (each book's declaration, recipes and labels), `tests/` |
+| `catalog/output/` | Gitignored: `raw/` (the downloads, or a symlink to a mirror) and `build/` (the tasks' outputs) |
 | `docs/` | `SCOPE.md` (the design document) and `GLOSSARY.md` |
 
 ## Development
@@ -287,7 +284,7 @@ pnpm install && pnpm build && pnpm test   # js/ and app/: a pnpm workspace (pnpm
 ```
 
 Tests that need a catalog read `$REFBOOK_CATALOG` (default: the build in
-`catalog/output/build/grch38`) and are skipped without one. The wasm
+`catalog/output/build/catalog`; a release works too) and are skipped without one. The wasm
 cross-check (`catalog/tests/test_wasm.py`) is skipped until `js/` is built.
 
 ## License

@@ -1,9 +1,25 @@
 """The recipe engine: compile a recipe into its sequences, and compare them with a target's observation.
 
 Compiling is the Rust core's (crates/refbook-core/src/recipe.rs); this module loads the catalog tables it reads,
-fills in lengths and digests, and compares the result with what a target was observed to hold. A recipe (the
-grammar is in the first pipeline's engine.py and in recipe.rs) defines a named sequence set: no order, no
-formatting.
+fills in lengths and digests, and compares the result with what a target was observed to hold.
+
+A recipe (catalog/books/<book>/recipes/*.json) is data:
+
+- select   a list of entries, each either {"assembly": <GenBank assembly accession.version>, "roles": [...],
+           "accessions": [...]?} (rows of assembly_members, optionally only those accessions, and with
+           "placed_on": [...] only roots placed, if at all, on those parent types: layer_placements.parent_type),
+           {"roots": [...]} (roots in no assembly, e.g. EBV) or {"collection": ..., "groups": [...]} (external
+           roots, roots_external.parquet, in their collection's rank order; never materialized)
+- mask     [{"layer": <name>, "with": "N"}]: hard-mask the spans of layer_<name> that fall on selected roots
+- alphabet {"iupac": "N"}: replace every IUPAC code (layer_iupac) with N
+- rename   {"namespace": "ucsc", "by_role": {role: namespace}, "map": {root: name}, "template": {assembly or
+           collection: "...{accession_v}..."}}; map wins, then template (for that assembly's roots; accession_v is
+           the accession with "." -> "v", name an external root's name), then the by_role namespace for the root's
+           role, then the default namespace. A namespace is a name column of assembly_members: ucsc, sequence
+           (the GRC Sequence-Name), genbank (the accession) or refseq
+
+Other keys (target, published, observed_from) are the recipe's metadata. A recipe defines a named sequence set: it
+has no order and no formatting.
 """
 
 from __future__ import annotations
@@ -141,3 +157,11 @@ def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
         placements=[(acc, p) for acc, ps in parent_types.items() for p in sorted(ps)])
     return {"members": members, "roots": roots, "spans": spans, "iupac": iupac, "external": external,
             "parent_types": parent_types, "compiler": compiler, "blocks": paths["root_blocks"]}
+
+
+def table_paths(published: dict[str, Path], recipes: list[dict]) -> dict[str, Path]:
+    """The tables load_tables reads, by its names, from the catalog's published files (export.published): what a
+    build or a release holds."""
+    names = ["assembly_members", "roots", "root_blocks", "layer_iupac", "roots_external", "layer_placements"]
+    names += sorted({f"layer_{m['layer']}" for r in recipes for m in r.get("mask", [])})
+    return {n: published[f"{n}.parquet"] for n in names}

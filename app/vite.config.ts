@@ -6,7 +6,7 @@ import { catalogHandler } from "./server/catalog.ts";
 // The catalog served at /catalog/ in development: the repository's build, or
 // REFBOOK_CATALOG. The app reads VITE_CATALOG_URL (default /catalog/), so a
 // deployed build points at a published release instead.
-const catalogDir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../catalog/output/build/grch38", import.meta.url));
+const catalogDir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../catalog/output/build/catalog", import.meta.url));
 
 function serveCatalog(): Plugin {
   const handler = catalogHandler(catalogDir);

@@ -2,22 +2,19 @@
 stored collection and every derivation. The core against its reference
 implementations is python/tests/test_core.py.
 
-Needs the build (REFBOOK_CATALOG, by default build/grch38); skipped without it.
+Needs a catalog (REFBOOK_CATALOG, else the repository's build; see under_test.py); skipped without it.
 """
 
 import json
-import os
 import random
-from pathlib import Path
 
-import layout
 import pyarrow.parquet as pq
-import pytest
+from under_test import CATALOG as BUILD
+from under_test import file, needs_catalog
 
 from refbook import _core
 
-BUILD = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
-needs_build = pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
+needs_build = needs_catalog
 
 
 @needs_build
@@ -37,7 +34,7 @@ def test_every_root_digest():
 def test_every_stored_collection():
     """Every collection the build stores: its name is its top-level digest, and it
     is the level-2 representation the core computes (no transient attributes)."""
-    files = sorted(layout.path(BUILD, "collections").glob("*.json"))
+    files = sorted(file("collections").glob("*.json"))
     assert len(files) == 26
     for f in files:
         doc = json.loads(f.read_text())

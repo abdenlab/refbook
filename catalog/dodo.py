@@ -1,6 +1,6 @@
-"""The catalog's pipeline (doit). Run from pipeline/:
+"""The catalog's pipeline (doit). Run from catalog/, as `uv run doit ...`:
 
-    doit                      build everything (locks, members, roots), and compare it with the first pipeline
+    doit                      build everything: lock the sources, build the catalog, run the checks
     doit roots                build the roots and what they need
     doit lock:GRCh38.p14      lock one source
     doit lock:EBV --update    accept a source's changed files (after checking them) and rewrite its lock
@@ -37,7 +37,6 @@ from refbook_pipeline import (
     observe,
     roots,
     sources,
-    v1,
 )
 
 RAW, BUILD = layout.raw_dir(), layout.build_dir()
@@ -49,7 +48,7 @@ BOOKS = books.load(layout.BOOKS, SOURCES)
 DOIT_CONFIG = {
     "default_tasks": ["lock", "members", "assembly_members", "roots", "external_roots", "layers", "catalog_layers",
                       "observe", "reproduce", "editions", "catalog_editions", "aliases", "index", "check_gaps",
-                      "check_roots", "check_materialize", "compare_v1"],
+                      "check_roots", "check_materialize"],
     "dep_file": str(BUILD.parent / ".doit.db"),
     "verbosity": 2,
 }
@@ -213,14 +212,7 @@ def task_external_roots():
 
 def catalog_tables(recipes: list[dict]) -> dict:
     """The catalog tables the recipe engine reads, by name (engine.load_tables)."""
-    paths = {"assembly_members": CATALOG / "members" / "assembly_members.parquet",
-             "roots": CATALOG / "roots" / "roots.parquet", "root_blocks": CATALOG / "roots" / "root_blocks.parquet",
-             "layer_iupac": CATALOG / "roots" / "layer_iupac.parquet",
-             "roots_external": CATALOG / "external" / "roots_external.parquet",
-             "layer_placements": CATALOG / "layers" / "layer_placements.parquet"}
-    for name in {m["layer"] for r in recipes for m in r.get("mask", [])}:
-        paths[f"layer_{name}"] = CATALOG / "layers" / f"layer_{name}.parquet"
-    return paths
+    return engine.table_paths(export.published(CATALOG), recipes)
 
 
 def task_reproduce():
@@ -585,94 +577,3 @@ def _by_root(t: pa.Table) -> dict[str, list[dict]]:
     for row in t.to_pylist():
         out.setdefault(row["root_id"], []).append(row)
     return out
-
-
-def task_compare_v1():
-    """Everything built so far against the first pipeline's build (until the switch)."""
-    here = BUILD / "compare_v1"
-    paths = [lock_path(n) for n in SOURCES]
-    old_locks = [layout.REPO / p for p in v1.V1_LOCKS]
-    yield {"name": "locks", "actions": [call(v1.compare_locks, layout.REPO, paths, here / "locks.json")],
-           "file_dep": paths + old_locks + code("v1", "locks"), "targets": [here / "locks.json"]}
-    old = layout.REPO / v1.V1_BUILD / "10_roots"
-    tables = {  # name: (where it is here, its key, the columns only this pipeline has)
-        "assembly_members": (CATALOG / "members", ["book", "assembly_accession", "genbank_accession"], ("book",)),
-        "roots": (CATALOG / "roots", ["root_id"], ()),
-        "layer_softmask_ncbi": (CATALOG / "roots", ["root_id", "start"], ()),
-        "layer_n_runs": (CATALOG / "roots", ["root_id", "start"], ()),
-        "layer_iupac": (CATALOG / "roots", ["root_id", "pos"], ()),
-    }
-    for book in BOOKS:
-        old_observed = layout.REPO / v1.V1_BUILD / "30_observe" / "observed"
-        new_observed = BUILD / "books" / book / "observed"
-        targets = [r["target"] for r in books.recipes(layout.BOOKS, book)]
-        yield {"name": f"observed:{book}", "actions": [call(v1.compare_observed, old_observed, new_observed, targets,
-                                                             here / f"observed-{book}.json")],
-               "file_dep": [d / f"{t}.parquet" for t in targets for d in (old_observed, new_observed)] + code("v1"),
-               "targets": [here / f"observed-{book}.json"]}
-    copied = {"recipes": "catalog/assemblies/grch38/recipes", "editions.json": "catalog/assemblies/grch38/editions.json"}
-    yield {"name": "book-inputs", "actions": [call(v1.compare_files, layout.REPO, copied, layout.BOOKS / "grch38",
-                                                    here / "book-inputs.json")],
-           "file_dep": code("v1"), "uptodate": [False], "targets": [here / "book-inputs.json"]}
-    old_ext = layout.REPO / v1.V1_BUILD / "11_external_roots" / "roots_external.parquet"
-    yield {"name": "roots_external",
-           "actions": [call(v1.compare_table, old_ext, CATALOG / "external" / "roots_external.parquet", ["root_id"],
-                            here / "roots_external.json")],
-           "file_dep": [old_ext, CATALOG / "external" / "roots_external.parquet"] + code("v1"),
-           "targets": [here / "roots_external.json"]}
-    for book in BOOKS:
-        old_rep = layout.REPO / v1.V1_BUILD / "40_recipes" / "reproduced.parquet"
-        new_rep = BUILD / "books" / book / "reproduced" / "reproduced.parquet"
-        yield {"name": f"reproduced:{book}",
-               "actions": [call(v1.compare_table, old_rep, new_rep, ["target", "position"], here / f"reproduced-{book}.json",
-                                (), True)],
-               "file_dep": [old_rep, new_rep] + code("v1"), "targets": [here / f"reproduced-{book}.json"]}
-    old_ed = layout.REPO / v1.V1_BUILD / "41_editions"
-    edition_keys = {"editions": (["edition"], ("book",)), "manifests": (["edition", "name"], ()),
-                    "targets": (["target"], ()), "target_sequences": (["target", "position"], ()),
-                    "sequences": (["sha512t24u"], ()), "derivations": (["sha512t24u", "root_id"], ())}
-    for name, (keys, only_new) in edition_keys.items():
-        new, report = CATALOG / "editions" / f"{name}.parquet", here / f"{name}.json"
-        rowwise = name in ("editions", "derivations", "targets")
-        yield {"name": name, "actions": [call(v1.compare_table, old_ed / f"{name}.parquet", new, keys, report, only_new,
-                                              rowwise)],
-               "file_dep": [old_ed / f"{name}.parquet", new] + code("v1"), "targets": [report]}
-    yield {"name": "collections",
-           "actions": [call(v1.compare_dirs, old_ed / "collections", CATALOG / "editions" / "collections",
-                            here / "collections.json")],
-           "file_dep": [CATALOG / "editions" / "derivations.parquet"] + code("v1"), "targets": [here / "collections.json"]}
-    old_al = layout.REPO / v1.V1_BUILD / "50_aliases"
-    for name, keys, only_new in (("aliases", ["root_id", "namespace", "alias", "source"], ("book",)),
-                                 ("sequence_aliases", ["sha512t24u", "naming_authority", "alias"], ())):
-        new, report = CATALOG / "aliases" / f"{name}.parquet", here / f"{name}.json"
-        yield {"name": name, "actions": [call(v1.compare_table, old_al / f"{name}.parquet", new, keys, report, only_new)],
-               "file_dep": [old_al / f"{name}.parquet", new] + code("v1"), "targets": [report]}
-    old_b = layout.REPO / v1.V1_BUILD
-    for check, old_dir, new_dir, report in (("check_gaps", "60_check_gaps", CHECKS / "gaps", "check_gaps.tsv"),
-                                            ("check_roots", "61_check_roots", CHECKS / "roots", "verify_roots.tsv"),
-                                            ("check_materialize", "62_check_materialize", CHECKS / "materialize", None)):
-        olds = [old_b / old_dir / f"{check}.json"] + ([old_b / old_dir / report] if report else [])
-        news = [new_dir / f"{check}.json"] + ([new_dir / report] if report else [])
-        yield {"name": check, "actions": [call(v1.compare_check, olds, news, here / f"{check}.json")],
-               "file_dep": olds + news + code("v1"), "targets": [here / f"{check}.json"]}
-    old_layers = layout.REPO / v1.V1_BUILD / "20_layers"
-    layer_keys = {"layer_agp": (["root_id", "part_number"], ()),
-                  "layer_regions": (["root_id", "region_name", "first_release", "book"], ("book",)),
-                  "layer_placements": (["root_id", "first_release", "book"], ("book",)),
-                  "layer_hardmask_grc": (["root_id", "start"], ())}
-    for name, (keys, only_new) in layer_keys.items():
-        new, report = CATALOG / "layers" / f"{name}.parquet", here / f"{name}.json"
-        keys = [k for k in keys if k not in only_new]
-        yield {"name": name, "actions": [call(v1.compare_table, old_layers / f"{name}.parquet", new, keys, report,
-                                              only_new)],
-               "file_dep": [old_layers / f"{name}.parquet", new] + code("v1"), "targets": [report]}
-    for name, (where, keys, only_new) in tables.items():
-        new, report = where / f"{name}.parquet", here / f"{name}.json"
-        keys = [k for k in keys if k not in only_new]
-        yield {"name": name, "actions": [call(v1.compare_table, old / f"{name}.parquet", new, keys, report, only_new)],
-               "file_dep": [old / f"{name}.parquet", new] + code("v1"), "targets": [report]}
-    yield {"name": "root_blocks",
-           "actions": [call(v1.compare_blocks, old / "root_blocks.parquet", CATALOG / "roots" / "root_blocks.parquet",
-                            here / "root_blocks.json")],
-           "file_dep": [old / "root_blocks.parquet", CATALOG / "roots" / "root_blocks.parquet"] + code("v1"),
-           "targets": [here / "root_blocks.json"]}

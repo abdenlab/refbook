@@ -2,7 +2,7 @@
 fetch and the reference cache.
 
 Most need a catalog: REFBOOK_CATALOG, by default the repository's build
-(catalog/output/build/grch38); they are skipped without one. Reading a
+(catalog/output/build/catalog); they are skipped without one. Reading a
 release over HTTP is tested with the export, in catalog/tests.
 """
 
@@ -19,7 +19,7 @@ from refbook.parse import read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CATALOG = Path(os.environ.get("REFBOOK_CATALOG",
-                              Path(__file__).resolve().parents[2] / "catalog" / "output" / "build" / "grch38"))
+                              Path(__file__).resolve().parents[2] / "catalog" / "output" / "build" / "catalog"))
 needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 

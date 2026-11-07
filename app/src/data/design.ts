@@ -7,7 +7,7 @@ import type { Place } from "./exports.ts";
 import type { Edition, ManifestRow } from "./editions.ts";
 import { measure } from "./meter.ts";
 
-/** A recipe, in the grammar the core compiles (docs: catalog/40_recipes.py). */
+/** A recipe, in the grammar the core compiles (crates/refbook-core/src/recipe.rs; catalog/refbook_pipeline/engine.py). */
 export interface Recipe {
   select: SelectEntry[];
   mask?: { layer: string; with: "N" }[];

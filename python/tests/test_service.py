@@ -21,7 +21,7 @@ from refbook import seqcol
 FIXTURES = Path(__file__).parent / "fixtures" / "refget_compliance"
 BUNDLES = json.loads((FIXTURES / "test_fasta_digests.json").read_text())
 CATALOG = Path(os.environ.get("REFBOOK_CATALOG",
-                              Path(__file__).resolve().parents[2] / "catalog" / "output" / "build" / "grch38"))
+                              Path(__file__).resolve().parents[2] / "catalog" / "output" / "build" / "catalog"))
 pytestmark = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 CHR1_MD5 = "6aef897c3d6ff0c78aff06ac189178dd"

@@ -1,6 +1,6 @@
 """Locks: each source's files pinned to exact bytes, and checked against their publisher's checksums.
 
-A lock (pipeline/locks/<source>.lock) lists every file of one source: path under raw/, size, sha256, the
+A lock (catalog/locks/<source>.lock) lists every file of one source: path under raw/, size, sha256, the
 server's Last-Modified (wget keeps it as the file's mtime) and source URL, tab-separated, sorted by path. It is
 committed, so a build is pinned to exact bytes, and a release records the hash of every lock it was built from.
 

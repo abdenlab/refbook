@@ -1,4 +1,4 @@
-"""Books: each a book.toml in pipeline/books/<book>/, naming the sources it draws on.
+"""Books: each a book.toml in catalog/books/<book>/, naming the sources it draws on.
 
 A book is the corpus its editions are made from: one assembly, every release, with its add-ons (sequences from
 other assemblies, or in none). A source can serve several books.

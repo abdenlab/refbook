@@ -1,6 +1,6 @@
-"""Sources: what the catalog downloads, declared as data in pipeline/sources.toml.
+"""Sources: what the catalog downloads, declared as data in catalog/sources.toml.
 
-A source is a set of files from one publisher, locked together (pipeline/locks/<source>.lock). Its files land at
+A source is a set of files from one publisher, locked together (catalog/locks/<source>.lock). Its files land at
 raw/<host>/<url path>, so a file's path is its URL. A source declares its files in one or more of these ways:
 
 - `base` + `files`: files under `base` that must exist; `optional`: files fetched if the publisher has them.
@@ -157,7 +157,7 @@ def files(source: Source, raw: Path) -> tuple[list[str], list[str]]:
     return sorted(found), missing
 
 
-# Fetching. Files are mirrored with wget, as the first pipeline did: --timestamping keeps the server's
+# Fetching. Files are mirrored with wget: --timestamping keeps the server's
 # Last-Modified as the file's mtime and skips a file that hasn't changed. Nothing here runs unless asked.
 
 WGET = ["wget", "--no-verbose", "--timestamping", "--force-directories", "--tries=5", "--waitretry=10",

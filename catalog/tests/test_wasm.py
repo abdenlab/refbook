@@ -13,13 +13,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import layout
 import pytest
+from refbook_pipeline import engine, layout
+from under_test import CATALOG as BUILD
+from under_test import file, published, recipes
 
 from refbook import _core
 
 JS = layout.REPO / "js"
-BUILD = layout.build_dir("grch38")
 pytestmark = pytest.mark.skipif(
     shutil.which("node") is None or not (JS / "pkg" / "refbook_wasm_bg.wasm").exists(),
     reason="no node or no wasm build")
@@ -40,10 +41,11 @@ def random_sequences(n: int, seed: int = 13):
         yield bytes(rng.choice(alphabet) for _ in range(rng.randrange(0, 200)))
 
 
+@pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
 def test_wasm_agrees_on_sequences_and_collections(tmp_path):
     seqs = [_core.remove_whitespace(s) for s in random_sequences(1000)]
     collections = [json.loads(p.read_text()) for p in sorted(
-        (BUILD / "41_editions" / "collections").glob("*.json"))]
+        file("collections").glob("*.json"))]
     collections = [{k: c[k] for k in ("names", "lengths", "sequences")} for c in collections]
     collections.append({"names": ["chr1", "é\"x"], "lengths": [1, 2], "sequences": ["SQ.a", "SQ.b"]})
     got = run_wasm(tmp_path, {"sequences": [base64.b64encode(s).decode() for s in seqs],
@@ -74,10 +76,8 @@ def test_wasm_agrees_on_sequences_and_collections(tmp_path):
 
 @pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
 def test_wasm_compiles_every_recipe_like_python(tmp_path):
-    import engine
-    build = BUILD
-    recipes = layout.recipes("grch38")
-    t = engine.load_tables(build, recipes)
+    rs = recipes()
+    t = engine.load_tables(engine.table_paths(published(), rs), rs)
     tables = {
         "members": t["members"], "roots": list(t["roots"]),
         "iupac": [acc for acc, r in t["roots"].items() if r["n_iupac"]],
@@ -85,9 +85,9 @@ def test_wasm_compiles_every_recipe_like_python(tmp_path):
         "external": t["external"],
         "placements": [{"root_id": acc, "parent_type": p} for acc, ps in t["parent_types"].items() for p in ps],
     }
-    got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": tables, "recipes": recipes})
-    assert len(got["compiled"]) == len(recipes) == 17
-    for r in recipes:
+    got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": tables, "recipes": rs})
+    assert len(got["compiled"]) == len(rs) == 17
+    for r in rs:
         want = [{"name": n, "root_id": acc, "operations": ops} for n, acc, ops in engine.compile(r, t)]
         assert got["compiled"][r["target"]] == {"ok": want}, r["target"]
 

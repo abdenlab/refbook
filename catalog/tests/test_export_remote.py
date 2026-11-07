@@ -1,38 +1,33 @@
 """A release made by the export, served over HTTP and read by the library:
 the same answers as reading it locally, with few requests.
 
-Needs the build (REFBOOK_CATALOG, by default catalog/output/build/grch38).
+Needs a catalog (REFBOOK_CATALOG, else the repository's build; see under_test.py).
 """
 
-import os
 from pathlib import Path
 
-import layout
-import pytest
+from refbook_pipeline import export, layout
+from under_test import needs_catalog, published
 
 from refbook.parse import read_header
 
-CATALOG = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
 FIXTURES = layout.REPO / "python" / "tests" / "fixtures"
-needs_catalog = pytest.mark.skipif(not (CATALOG / "catalog.json").exists(), reason="no catalog")
 
 
 def release_from_build(out: Path) -> Path:
-    """A format-2 release of the build, by symlink: 70_export's file list and
+    """A format-2 release of the catalog, by symlink: the export's file list and
     a catalog.json with real hashes, without copying the bases."""
     import json
 
-    from layout import step_module as step
-    export_catalog = step("70_export")
     files = {}
-    for name, role in export_catalog.FILES.items():
-        src = layout.path(CATALOG, name)
+    for name, src in published().items():
+        role = export.PUBLISHED[name][1]
         for f in ([src] if src.is_file() else sorted(src.glob("*"))):
             rel = f"{name}/{f.name}" if src.is_dir() else name
             (out / rel).parent.mkdir(parents=True, exist_ok=True)
             (out / rel).symlink_to(f)
-            files[rel] = {"bytes": f.stat().st_size, "sha256": export_catalog.sha256(f), "role": role}
-    (out / "catalog.json").write_text(json.dumps({"name": "refbook", "format": export_catalog.FORMAT,
+            files[rel] = {"bytes": f.stat().st_size, "sha256": export.sha256(f), "role": role}
+    (out / "catalog.json").write_text(json.dumps({"name": "refbook", "format": export.FORMAT,
                                                   "version": "test", "files": files}))
     return out
 

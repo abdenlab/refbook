@@ -6,8 +6,8 @@ tables, must give the release's flavor_sequences (as reproduced.parquet is now) 
 recipe must reproduce its observation. These are the conformance tests a
 reimplementation of the engine has to pass.
 
-Needs the build (REFBOOK_CATALOG) and the release (REFBOOK_RELEASE); skipped
-without them.
+Needs a catalog (REFBOOK_CATALOG, else the repository's build; see under_test.py) and
+the release (REFBOOK_RELEASE); skipped without them.
 """
 
 import hashlib
@@ -15,11 +15,13 @@ import json
 import os
 from pathlib import Path
 
-import layout
 import pyarrow.parquet as pq
 import pytest
+from refbook_pipeline import engine
+from under_test import CATALOG as BUILD
+from under_test import observed as observed_path
+from under_test import published, recipes, table
 
-BUILD = Path(os.environ.get("REFBOOK_CATALOG", layout.build_dir("grch38")))
 RELEASE = Path(os.environ.get("REFBOOK_RELEASE", "/net/common/genomes/registry/catalog/0.1.0"))
 pytestmark = pytest.mark.skipif(
     not (BUILD / "catalog.json").exists() or not (RELEASE / "catalog.json").exists(),
@@ -32,10 +34,6 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 22), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def recipes() -> list[dict]:
-    return layout.recipes()
 
 
 def golden(name: str) -> list[dict]:
@@ -51,15 +49,14 @@ def golden(name: str) -> list[dict]:
 
 @pytest.fixture(scope="module")
 def reproduced():
-    import engine
     rs = recipes()
-    tables = engine.load_tables(BUILD, rs)
-    outputs = {r["target"]: engine.run(r, BUILD, tables) for r in rs}
+    tables = engine.load_tables(engine.table_paths(published(), rs), rs)
+    outputs = {r["target"]: engine.run(r, tables) for r in rs}
     return engine, rs, tables, outputs
 
 
 def observed(target: str) -> list[dict]:
-    return pq.read_table(layout.path(BUILD, f"observed/{target}.parquet")).to_pylist()
+    return pq.read_table(observed_path(target)).to_pylist()
 
 
 def test_recipes_give_the_release_target_sequences(reproduced):
@@ -117,10 +114,6 @@ def test_root_bases_match_their_digests(root):
 
 
 # The edition model (41_editions.py) against the release's targets.
-
-def table(name: str) -> list[dict]:
-    return pq.read_table(layout.path(BUILD, name)).to_pylist()
-
 
 
 
