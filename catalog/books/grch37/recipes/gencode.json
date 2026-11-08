@@ -1,0 +1,38 @@
+{
+  "_doc": "GENCODE 19 (ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19), the last release on GRCh37: the GRCh37.p13 genome. Every p13 sequence, IUPAC codes as N, chrY unmasked. The alt scaffolds and patches are in their parents' orientation (orient: reverse-complemented if placed on the minus strand), unpadded: Ensembl's toplevel sequences with the padding taken off. Chromosomes by UCSC name (rCRS as chrM), every other sequence by GenBank accession.",
+  "recipes": [
+    {
+      "target": "GENCODE19_p13",
+      "published": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/GRCh37.p13.genome.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "orient": {
+        "roles": [
+          "alt-scaffold",
+          "fix-patch",
+          "novel-patch"
+        ]
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "ucsc"
+        }
+      }
+    }
+  ]
+}

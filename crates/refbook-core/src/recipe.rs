@@ -17,6 +17,10 @@
 //!   (alt scaffolds, patches) in its parent's coordinates, N-padded
 //!   (layer_padding; see operations.rs). It applies after the masks and the
 //!   alphabet change.
+//! - `orient`: `{"roles": [...]}`, put each selected member with one of the
+//!   roles in its parent's orientation: reverse-complemented if it is placed on
+//!   the minus strand, unpadded (GENCODE 19's patches). Also last; a root can't
+//!   be both padded and oriented.
 //! - `rename`: `{"namespace", "by_role"?, "map"?, "template"?}`. The map wins,
 //!   then the template for the root's assembly or collection (placeholders
 //!   `{accession}`, `{accession_v}` with "." as "v", `{name}` for an external
@@ -24,8 +28,11 @@
 //!
 //! A recipe defines a named sequence set: no order, no formatting. Other keys
 //! of a recipe (`target`, `published`, ...) are its metadata and are ignored;
-//! a key the grammar doesn't know inside `select`, `mask`, `alphabet`, `pad`
-//! or `rename` is an error.
+//! a key the grammar doesn't know inside `select`, `mask`, `alphabet`, `pad`,
+//! `orient` or `rename` is an error.
+//!
+//! The tables are one book's: a root placed in two books (GRCh37's novel
+//! patches are GRCh38's alts) has a placement in each, on another parent.
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -38,6 +45,9 @@ pub const IUPAC_TO_N: &str = "iupac_to_n";
 
 /// The operation `pad` applies.
 pub const PAD: &str = "pad";
+
+/// The operation `orient` applies (to a root placed on the minus strand).
+pub const ORIENT: &str = "orient";
 
 /// Why a recipe doesn't compile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,11 +77,13 @@ pub enum RecipeError {
     UnsupportedAlphabet(String),
     /// An external root (bases not hosted) that an operation would change.
     ExternalChanged(String),
-    /// A root to pad that layer_padding doesn't place.
+    /// A root to pad or orient that layer_padding doesn't place.
     NotPlaced(String),
-    /// A root to pad whose placement was revised between releases, so its
-    /// padded sequence depends on the release.
+    /// A root to pad or orient whose placement was revised between releases,
+    /// so its sequence would depend on the release.
     PlacementRevised(String),
+    /// A role both padded and oriented.
+    PadAndOrient(String),
 }
 
 impl fmt::Display for RecipeError {
@@ -98,11 +110,12 @@ impl fmt::Display for RecipeError {
                     "only the alphabet change iupac -> N is implemented, not {a}"
                 )
             }
-            NotPlaced(r) => write!(f, "{r}: no placement to pad it by"),
+            NotPlaced(r) => write!(f, "{r}: no placement to pad or orient it by"),
             PlacementRevised(r) => write!(
                 f,
-                "{r}: its placement was revised between releases, so padding it is ambiguous"
+                "{r}: its placement was revised between releases, so padding or orienting it is ambiguous"
             ),
+            PadAndOrient(r) => write!(f, "role {r} is both padded and oriented"),
             ExternalChanged(r) => {
                 write!(
                     f,
@@ -208,6 +221,7 @@ pub struct Recipe {
     pub mask: Vec<Mask>,
     pub alphabet: Alphabet,
     pub pad: Option<Pad>,
+    pub orient: Option<Pad>,
     pub rename: Rename,
 }
 
@@ -256,10 +270,19 @@ impl Recipe {
             Some(a) => field(a, "alphabet")?,
             None => Alphabet::default(),
         };
-        let pad = match take(&mut o, "pad") {
+        let pad: Option<Pad> = match take(&mut o, "pad") {
             Some(p) => Some(field(p, "pad")?),
             None => None,
         };
+        let orient: Option<Pad> = match take(&mut o, "orient") {
+            Some(p) => Some(field(p, "orient")?),
+            None => None,
+        };
+        if let (Some(p), Some(q)) = (&pad, &orient)
+            && let Some(r) = p.roles.iter().find(|r| q.roles.contains(r))
+        {
+            return Err(RecipeError::PadAndOrient(r.clone()));
+        }
         let rename = field(
             take(&mut o, "rename").ok_or(RecipeError::Malformed("no rename".into()))?,
             "rename",
@@ -269,6 +292,7 @@ impl Recipe {
             mask,
             alphabet,
             pad,
+            orient,
             rename,
         })
     }
@@ -321,8 +345,16 @@ pub struct Tables {
     pub external: Vec<External>,
     /// Root -> the parent types it is placed on (layer_placements).
     pub parent_types: HashMap<String, HashSet<String>>,
-    /// Root -> whether its placement was revised (layer_padding).
-    pub padding: HashMap<String, bool>,
+    /// Root -> its placement in this book (layer_padding).
+    pub padding: HashMap<String, Placed>,
+}
+
+/// What the compiler needs of a placement: whether it was revised between
+/// releases, and whether it is on the minus strand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Placed {
+    pub revised: bool,
+    pub reverse: bool,
 }
 
 /// A manifest row: a name, its root, and the operations that make it.
@@ -483,7 +515,8 @@ fn name_of(s: &Selected, rename: &Rename) -> Result<String, RecipeError> {
 /// Each row's operations are the recipe's mask layers that have spans on the
 /// root, in recipe order, then `iupac_to_n` if the alphabet change applies and
 /// the root has IUPAC codes, then `pad` if the root is a member with one of
-/// the roles to pad.
+/// the roles to pad, or `orient` if it is one with a role to orient and is
+/// placed on the minus strand (otherwise orienting changes nothing).
 pub fn compile(recipe: &Recipe, t: &Tables) -> Result<Vec<Row>, RecipeError> {
     for m in &recipe.mask {
         if m.with != "N" {
@@ -518,13 +551,18 @@ pub fn compile(recipe: &Recipe, t: &Tables) -> Result<Vec<Row>, RecipeError> {
         if to_n && t.iupac.contains(s.root_id) {
             operations.push(IUPAC_TO_N.into());
         }
-        if let (Some(pad), Via::Member(m)) = (&recipe.pad, &s.via)
-            && pad.roles.contains(&m.role)
-        {
-            match t.padding.get(s.root_id) {
-                None => return Err(RecipeError::NotPlaced(s.root_id.into())),
-                Some(true) => return Err(RecipeError::PlacementRevised(s.root_id.into())),
-                Some(false) => operations.push(PAD.into()),
+        if let Via::Member(m) = &s.via {
+            let wants = |p: &Option<Pad>| p.as_ref().is_some_and(|p| p.roles.contains(&m.role));
+            if wants(&recipe.pad) || wants(&recipe.orient) {
+                match t.padding.get(s.root_id) {
+                    None => return Err(RecipeError::NotPlaced(s.root_id.into())),
+                    Some(p) if p.revised => {
+                        return Err(RecipeError::PlacementRevised(s.root_id.into()));
+                    }
+                    Some(_) if wants(&recipe.pad) => operations.push(PAD.into()),
+                    Some(p) if p.reverse => operations.push(ORIENT.into()),
+                    Some(_) => {}
+                }
             }
         }
         if matches!(s.via, Via::External(_)) && !operations.is_empty() {
@@ -592,9 +630,9 @@ mod tests {
             ]
             .into(),
             padding: [
-                ("A1.1".to_string(), false),
-                ("F1.1".to_string(), false),
-                ("F2.1".to_string(), true),
+                ("A1.1".to_string(), Placed { revised: false, reverse: true }),
+                ("F1.1".to_string(), Placed { revised: false, reverse: false }),
+                ("F2.1".to_string(), Placed { revised: true, reverse: false }),
             ]
             .into(),
         }
@@ -795,5 +833,37 @@ mod tests {
             compiled(r#"{"select": [], "pad": {"role": []}, "rename": {"namespace": "ucsc"}}"#),
             Err(RecipeError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn orient() {
+        let recipe = |key: &str, roles: &str, accessions: &str| {
+            format!(
+                r#"{{"select": [{{"assembly": "GCA_1.1", "roles": ["assembled-molecule", "alt-scaffold", "fix-patch"], "accessions": {accessions}}}],
+                   "{key}": {{"roles": {roles}}}, "rename": {{"namespace": "ucsc"}}}}"#
+            )
+        };
+        // A1.1 is on the minus strand: oriented; F1.1 on the plus strand: as is.
+        assert_eq!(
+            compiled(&recipe("orient", r#"["alt-scaffold", "fix-patch"]"#, r#"["A1.1", "F1.1"]"#))
+                .unwrap(),
+            vec![
+                ("chr1_A1v1_alt".into(), "A1.1".into(), vec!["orient".into()]),
+                ("chr1_F1v1_fix".into(), "F1.1".into(), vec![]),
+            ]
+        );
+        assert_eq!(
+            compiled(&recipe("orient", r#"["fix-patch"]"#, r#"["F2.1"]"#)),
+            Err(RecipeError::PlacementRevised("F2.1".into()))
+        );
+        assert_eq!(
+            compiled(&recipe("orient", r#"["assembled-molecule"]"#, r#"["C1.1"]"#)),
+            Err(RecipeError::NotPlaced("C1.1".into()))
+        );
+        assert_eq!(
+            compiled(r#"{"select": [], "pad": {"roles": ["fix-patch"]}, "orient": {"roles": ["fix-patch"]},
+                        "rename": {"namespace": "ucsc"}}"#),
+            Err(RecipeError::PadAndOrient("fix-patch".into()))
+        );
     }
 }

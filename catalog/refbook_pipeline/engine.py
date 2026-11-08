@@ -14,6 +14,8 @@ A recipe (catalog/books/<book>/recipes/*.json) is data:
 - alphabet {"iupac": "N"}: replace every IUPAC code (layer_iupac) with N
 - pad      {"roles": [...]}: lay each selected member with one of the roles into its parent's coordinates, N-padded
            (layer_padding), after the masks and the alphabet change
+- orient   {"roles": [...]}: reverse-complement each selected member with one of the roles that is placed on the minus
+           strand (layer_padding's orientation), unpadded; also last
 - rename   {"namespace": "ucsc", "by_role": {role: namespace}, "map": {root: name}, "template": {assembly or
            collection: "...{accession_v}..."}}; map wins, then template (for that assembly's roots; accession_v is
            the accession with "." -> "v", name an external root's name), then the by_role namespace for the root's
@@ -40,6 +42,8 @@ from . import Refused
 
 IUPAC_TO_N = "iupac_to_n"
 PAD = "pad"
+ORIENT = "orient"
+LAYOUT = (PAD, ORIENT)  # the operations that lay a root out by its placement (layer_padding)
 
 
 @functools.cache
@@ -92,11 +96,14 @@ def _derived(blocks: Path, acc: str, spans: tuple, to_n: bool, padding: tuple | 
 
 
 def padding_of(t: dict, acc: str, ops: list[str]) -> tuple | None:
-    """The (before, root_length, after, reverse) a row's `pad` lays its root out by, or None without `pad`."""
-    if PAD not in ops:
+    """The (before, root_length, after, reverse) a row's `pad` or `orient` lays its root out by (orient: no Ns), or
+    None without either; from the book's layer_padding."""
+    if not set(LAYOUT) & set(ops):
         return None
-    p = t["padding"][acc]
-    return (p["parent_start"], t["roots"][acc]["length"], p["parent_length"] - p["parent_end"], p["orientation"] == "-")
+    p, n = t["padding"][acc], t["roots"][acc]["length"]
+    if ORIENT in ops:
+        return (0, n, 0, p["orientation"] == "-")
+    return (p["parent_start"], n, p["parent_length"] - p["parent_end"], p["orientation"] == "-")
 
 
 def compile(recipe: dict, t: dict) -> list[tuple[str, str, list[str]]]:
@@ -116,7 +123,7 @@ def run(recipe: dict, t: dict) -> list[dict]:
         md5, sq = r["md5"], r["sha512t24u"]
         padding = padding_of(t, acc, ops)
         if ops:
-            spans = tuple(s for op in ops if op not in (IUPAC_TO_N, PAD) for s in t["spans"][op].get(acc, ()))
+            spans = tuple(s for op in ops if op not in (IUPAC_TO_N, *LAYOUT) for s in t["spans"][op].get(acc, ()))
             md5, sq = _derived(t["blocks"], acc, spans, IUPAC_TO_N in ops, padding)
         out.append({"target": recipe["target"], "name": name, "root_id": acc, "operations": ops,
                     "length": sum(padding[:3]) if padding else r["length"], "md5": md5, "sha512t24u": sq})
@@ -152,10 +159,16 @@ def in_observed_order(got: list[dict], observed: list[dict]) -> list[dict]:
             for o in sorted(observed, key=lambda o: o["position"])]
 
 
-def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
-    """The tables run() needs. `paths` gives assembly_members, roots, roots_external, root_blocks, layer_iupac,
+def _of_book(rows: list[dict], book: str | None) -> list[dict]:
+    """The rows of one book, from a catalog table that has a book column (a book's own layers have none)."""
+    return rows if book is None else [r for r in rows if r.get("book", book) == book]
+
+
+def load_tables(paths: dict[str, Path], recipes: list[dict], book: str | None = None) -> dict:
+    """The tables run() needs, for `book`'s recipes: its members, placements and padding (a root placed in two books
+    has a placement in each). `paths` gives assembly_members, roots, roots_external, root_blocks, layer_iupac,
     layer_placements, layer_padding and layer_<name> for every layer a recipe masks with."""
-    members = pq.read_table(paths["assembly_members"]).to_pylist()
+    members = _of_book(pq.read_table(paths["assembly_members"]).to_pylist(), book)
     cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
     roots = {r["root_id"]: r for r in pq.read_table(paths["roots"], columns=cols).to_pylist()}
     external = pq.read_table(paths["roots_external"]).to_pylist()
@@ -172,9 +185,9 @@ def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
     for acc, p in zip(t["root_id"].to_pylist(), t["pos"].to_pylist()):
         iupac[acc].append(p)
     parent_types = defaultdict(set)
-    for p in pq.read_table(paths["layer_placements"], columns=["root_id", "parent_type"]).to_pylist():
+    for p in _of_book(pq.read_table(paths["layer_placements"]).to_pylist(), book):
         parent_types[p["root_id"]].add(p["parent_type"])
-    padding = {p["root_id"]: p for p in pq.read_table(paths["layer_padding"]).to_pylist()}
+    padding = {p["root_id"]: p for p in _of_book(pq.read_table(paths["layer_padding"]).to_pylist(), book)}
     compiler = _core.RecipeTables(
         members=[(m["assembly_accession"], m["genbank_accession"], m["role"], m["ucsc_name"],
                   m["sequence_name"], m["refseq_accession"]) for m in members],
@@ -182,7 +195,7 @@ def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
         layers={name: list(by_root) for name, by_root in spans.items()},
         external=[(e["root_id"], e["collection"], e["group"], e["name"]) for e in external],
         placements=[(acc, p) for acc, ps in parent_types.items() for p in sorted(ps)],
-        padding=[(acc, p["revised"]) for acc, p in padding.items()])
+        padding=[(acc, p["revised"], p["orientation"] == "-") for acc, p in padding.items()])
     return {"members": members, "roots": roots, "spans": spans, "iupac": iupac, "external": external,
             "parent_types": parent_types, "padding": padding, "compiler": compiler, "blocks": paths["root_blocks"]}
 

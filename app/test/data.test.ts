@@ -37,8 +37,9 @@ after(() => server.close());
 
 test("tables", { skip }, async () => {
   const fs = await editions(cat);
-  assert.equal(fs.length, 13);
-  assert.equal((await targets(cat)).length, 17);
+  assert.equal(fs.length, 30);  // GRCh38's 13 and GRCh37's 17
+  assert.equal((await targets(cat)).length, 37);
+  assert.deepEqual(new Set(fs.map((f) => f.book)), new Set(["grch37", "grch38"]));
   const noAlt = fs.find((f) => f.edition === "grch38-no-alt")!;
   const rows = await manifest(cat, "grch38-no-alt");
   assert.equal(rows.length, noAlt.n_sequences);
@@ -110,32 +111,25 @@ test("a region is the same bases as the whole sequence there", { skip }, async (
   assert.ok(r.requests <= 4 && r.bytes < 4e6, JSON.stringify(r));
 });
 
-test("a padded row: the root in its parent's coordinates, N around it, in any slice", { skip }, async () => {
-  // GRCh38 has no padded edition: pad an alt of hg38-p14 by its layer_padding row, reversed and not.
-  const pads = await cat.table<{ root_id: string; orientation: string; revised: boolean }>("layer_padding.parquet");
-  const rows = await manifest(cat, "hg38-p14");
-  for (const orientation of ["-", "+"]) {
-    const p = pads.filter((x) => x.orientation === orientation && !x.revised).map((x) => rows.find((r) => r.root_id === x.root_id && !r.operations.length))
-      .filter((r) => r !== undefined).sort((a, b) => a.length - b.length)[0]!;
-    const own = (await region(cat, blocks, p, 0, p.length)).bases;
-    const pd = (await cat.table<any>("layer_padding.parquet")).find((x) => x.root_id === p.root_id);
-    const extra = pd.parent_start + pd.parent_length - pd.parent_end;
-    const row = { ...p, operations: ["pad"], length: p.length + extra };
-    const pp = (await padding(cat, row))!;
-    assert.equal(pp.reverse, orientation === "-");
-    assert.deepEqual(onSequence(pp, [0, p.length]), [pp.before, pp.before + p.length]);
-    const comp: Record<string, string> = { A: "T", C: "G", G: "C", T: "A", N: "N" };
-    const mid = pp.reverse ? Uint8Array.from([...own].reverse().map((b) => (comp[String.fromCharCode(b)] ?? "N").charCodeAt(0))) : own;
-    const want = (s: number, e: number) => Uint8Array.from({ length: e - s }, (_, k) => {
-      const i = s + k - pp.before;
-      return i >= 0 && i < p.length ? mid[i] : 78;
-    });
-    for (const [s, e] of [[0, 10], [pp.before - 5, pp.before + 70_000], [pp.before + p.length - 30, pp.before + p.length + 30],
+test("padded and oriented rows: their digests, and any slice agrees with the whole", { skip }, async () => {
+  // GRCh37's Ensembl toplevel pads its alts and patches; GENCODE 19 only turns the minus-strand ones around.
+  for (const [edition, op] of [["ensembl-grch37-toplevel", "pad"], ["gencode-grch37-p13", "orient"]]) {
+    const rows = (await manifest(cat, edition)).filter((r) => r.operations.includes(op));
+    assert.ok(rows.length > 0, edition);
+    const row = rows.sort((a, b) => a.length - b.length)[0];
+    const p = (await padding(cat, row))!;
+    assert.equal(p.before + p.root_length + p.after, row.length);
+    if (op === "orient") assert.ok(p.reverse && p.before === 0 && p.after === 0);
+    assert.ok(await verify(cat, blocks, row), `${edition} ${row.name}`);
+    const whole = (await region(cat, blocks, row, 0, row.length)).bases;
+    const at = p.before + Math.floor(p.root_length / 2);
+    for (const [s, e] of [[0, 10], [Math.max(0, p.before - 5), p.before + 70], [at - 40, at + 40],
                           [row.length - 10, row.length]]) {
       const r = await region(cat, blocks, row, s, e);
-      assert.deepEqual(r.bases, want(s, e), `${orientation} ${s}-${e}`);
+      assert.deepEqual(r.bases, whole.subarray(s, e), `${edition} ${s}-${e}`);
       assert.equal(r.root.length, e - s);
     }
+    assert.deepEqual(onSequence(p, [0, p.root_length]), [p.before, p.before + p.root_length]);
   }
 });
 
@@ -169,7 +163,9 @@ test("identify in the browser, like the catalog says", { skip }, async () => {
   assert.ok(byMd5.editions.some((u) => u.edition === "hg38-analysis-set" && u.name === "chr1"));
   assert.deepEqual([byName.evidence, byName.root_id], ["name_and_length", "CM000663.2"]);
   assert.ok(byName.cognates.includes(chr1.sha512t24u));
-  assert.deepEqual(wrong.notes.map((x) => x.kind), ["length_differs", "no_root_of_this_length"]);
+  // chr1 names GRCh37's root and GRCh38's, so no one expected length: only that neither has length 5.
+  assert.deepEqual(wrong.notes.map((x) => x.kind), ["no_root_of_this_length"]);
+  assert.deepEqual([...(wrong.notes[0] as any).roots].sort(), ["CM000663.1", "CM000663.2"]);
 });
 
 test("two editions compared: seqcol's counts and refbook's pairs", { skip }, async () => {
@@ -218,7 +214,7 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
 test("every edition's recipe, compiled in the browser, is that edition", { skip }, async () => {
   const t = await designTables(cat);
   assert.ok(measured["design tables"].bytes < 1e6, `${measured["design tables"].bytes} bytes`);
-  const fs = await editions(cat);
+  const fs = (await editions(cat)).filter((f) => f.book === "grch38");  // the designer is GRCh38's until the redesign
   for (const f of fs) {
     const d = design(plainRecipe(JSON.parse(f.recipe)), t, fs);
     assert.deepEqual(d.novel, [], f.edition);

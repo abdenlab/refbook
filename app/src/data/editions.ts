@@ -5,7 +5,7 @@ import type { Catalog } from "./catalog.ts";
 import type { Blocks } from "./blocks.ts";
 
 export interface Edition {
-  edition: string; id: string; seqcol_digest: string; n_sequences: number; total_length: number;
+  edition: string; book: string; id: string; seqcol_digest: string; n_sequences: number; total_length: number;
   assembly: string; patch_release: number | null; contents: { kind: string; count: number }[];
   excluded: string[]; operations: string[]; naming: string; recipe: string; n_targets: number;
 }
@@ -23,14 +23,16 @@ export interface Target {
 
 export const IUPAC_TO_N = "iupac_to_n";
 export const PAD = "pad";
+export const ORIENT = "orient";
 
 export const OPERATION_LABELS: Record<string, string> = {
   hardmask_grc: "GRC hard-mask", par_y: "chrY PARs → N", [IUPAC_TO_N]: "IUPAC → N",
-  [PAD]: "N-padding into its parent's coordinates",
+  [PAD]: "N-padding into its parent's coordinates", [ORIENT]: "turned to its parent's strand",
 };
 
-/** The operations that mask a layer's spans (the rest: IUPAC → N and padding). */
-export const maskLayers = (operations: string[]) => operations.filter((op) => op !== IUPAC_TO_N && op !== PAD);
+/** The operations that mask a layer's spans (the rest: IUPAC → N, padding and orienting). */
+export const maskLayers = (operations: string[]) =>
+  operations.filter((op) => op !== IUPAC_TO_N && op !== PAD && op !== ORIENT);
 
 export const editions = (cat: Catalog) => cat.table<Edition>("editions.parquet");
 export const targets = (cat: Catalog) => cat.table<Target>("targets.parquet");
@@ -51,15 +53,23 @@ export async function spans(cat: Catalog, layer: string, root: string): Promise<
   return rows.filter((r) => r.root_id === root).map((r) => [r.start, r.end] as rb.Span);
 }
 
-type PaddingRow = { root_id: string; parent_start: number; parent_end: number; orientation: string; parent_length: number };
+type PaddingRow = {
+  book?: string; root_id: string; parent_start: number; parent_end: number; orientation: string; parent_length: number;
+};
 
-/** How a padded row lays its root out (layer_padding), or null if it isn't padded. */
+/** How a row lays its root out by its placement in its edition's book (layer_padding: a root can be placed in two
+ * books, on other parents): padded (pad), or only turned to its parent's strand (orient: no Ns); null if neither. */
 export async function padding(cat: Catalog, row: ManifestRow): Promise<rb.Padding | null> {
-  if (!row.operations.includes(PAD)) return null;
-  const p = (await cat.table<PaddingRow>("layer_padding.parquet")).find((r) => r.root_id === row.root_id);
-  if (!p) throw new Error(`${row.root_id}: not in layer_padding`);
+  const orient = row.operations.includes(ORIENT);
+  if (!row.operations.includes(PAD) && !orient) return null;
+  const book = (await editions(cat)).find((e) => e.edition === row.edition)?.book;
+  const p = (await cat.table<PaddingRow>("layer_padding.parquet"))
+    .find((r) => r.root_id === row.root_id && (r.book === undefined || r.book === book));
+  if (!p) throw new Error(`${row.root_id}: no placement in layer_padding for ${book}`);
+  const reverse = p.orientation === "-";
+  if (orient) return { before: 0, after: 0, root_length: row.length, reverse };
   const before = p.parent_start, after = p.parent_length - p.parent_end;
-  return { before, after, root_length: row.length - before - after, reverse: p.orientation === "-" };
+  return { before, after, root_length: row.length - before - after, reverse };
 }
 
 /** A span of the root in the sequence's coordinates: where padding puts it. */

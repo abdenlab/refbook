@@ -93,6 +93,17 @@ def test_roots_refuse(tmp_path, records, expected, match):
         build(tmp_path, expected, fasta(tmp_path / "a.fa", records))
 
 
+def test_a_minted_root_is_kept_under_its_id_only_from_its_own_file(tmp_path):
+    d = fasta(tmp_path / "d.fa", [("hs37d5", "ACGTnnACGT")])
+    other = fasta(tmp_path / "o.fa", [("hs37d5", "ACGTnnACGT")])
+    out = tmp_path / "out"
+    out.mkdir()
+    roots.build({"1000G:hs37d5": 10}, [(d, "https://x/d.fa")], out, minted={d: {"hs37d5": "1000G:hs37d5"}})
+    assert pq.read_table(out / "roots.parquet")["root_id"].to_pylist() == ["1000G:hs37d5"]
+    with pytest.raises(Refused, match="hs37d5 in o.fa: in no assembly report"):
+        roots.build({"1000G:hs37d5": 10}, [(other, "https://x/o.fa")], out, minted={d: {"hs37d5": "1000G:hs37d5"}})
+
+
 def test_a_genbank_record_gives_a_loose_roots_length(tmp_path):
     (tmp_path / "ebv.gb").write_text("LOCUS       AJ507799             171823 bp    DNA     linear   VRL 06-DEC-2024\n")
     assert roots.genbank_length(tmp_path / "ebv.gb") == 171823

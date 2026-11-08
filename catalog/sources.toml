@@ -307,6 +307,45 @@ sequences = [
   "eutils.ncbi.nlm.nih.gov/efetch/nuccore_KB021646.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_KB663607.1.fasta",
 ]
 
+[[source]]
+name = "GRCh37-structure-archive"
+roles = ["input"]
+note = """Each GRCh37 release's assembly structure (AGPs, alt scaffold placements, patch types, region definitions), from
+NCBI's old_genbank archive: the release directories under genomes/all keep it only for p13. An archived release
+directory has the layout of an <asm>_assembly_structure tree, without all_alt_scaffold_placement.txt. Without the
+FASTA, RepeatMasker output, alignments and the windowmasker counts. Each release's md5checksums.txt lists only
+what that release changed, so a file unchanged since an earlier release is covered by none: the lock covers it,
+and layer_agp refuses a root whose AGP differs between releases (p13's current tree included)."""
+base = "ftp.ncbi.nlm.nih.gov/genomes/archive/old_genbank/Eukaryotes/vertebrates_mammals/Homo_sapiens"
+trees = [
+  { path = "GRCh37/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p1/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p2/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p3/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p4/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p5/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p6/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p7/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p8/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p9/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p10/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p11/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p12/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+  { path = "GRCh37.p13/", reject = ["index.html*", "*.fa.gz", "*.rm.out.gz", "*.asn", "*.gff", "*.oascii.gz", "README_ANALYSIS_SETS", "*.fna.gz"] },
+]
+
+[[source]]
+name = "GRCh37-analysis-sets"
+roles = ["target"]
+note = """The GRC's GRCh37.p13 analysis sets (chrY's PARs hard-masked, EBV added): recipe targets. Unlike GRCh38's, their
+deflines' M5 tags match none of their sequences, so they are no check on the roots. Only in NCBI's old_genbank
+archive. Its checksum list doesn't cover them: the lock alone does."""
+base = "ftp.ncbi.nlm.nih.gov/genomes/archive/old_genbank/Eukaryotes/vertebrates_mammals/Homo_sapiens/GRCh37.p13/seqs_for_alignment_pipelines"
+files = [
+  "README_ANALYSIS_SETS",
+  "GCA_000001405.14_GRCh37.p13_full_analysis_set.fna.gz", "GCA_000001405.14_GRCh37.p13_no_alt_analysis_set.fna.gz",
+]
+
 # Sequences outside GRCh37 that GRCh37 editions add.
 
 [[source]]
@@ -326,6 +365,8 @@ The decoy has no INSDC record: hs37d5cs.fa.gz is its sequence, hs37d5cs.bed its 
 built from), the README how it was made. 1000 Genomes publishes no checksum list: the lock alone covers these."""
 base = "ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence"
 files = ["README_human_reference_20110707", "hs37d5.fa.gz", "hs37d5.fa.gz.fai", "hs37d5cs.fa.gz", "hs37d5cs.bed"]
+sequences = ["hs37d5cs.fa.gz"]
+minted_roots = [{ name = "hs37d5", root_id = "1000G:hs37d5", fai = "hs37d5.fa.gz.fai", agp_bed = "hs37d5cs.bed" }]
 
 # The published GRCh37 editions: recipe targets.
 

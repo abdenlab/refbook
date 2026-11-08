@@ -1,0 +1,157 @@
+{
+  "_doc": "Illumina iGenomes GRCh37 builds (ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens), checked against each .dict (the FASTA isn't fetched). Ensembl/GRCh37: the chromosomes and MT, chrY's PARs masked, IUPAC codes kept. NCBI/build37.1: the chromosomes with the Yoruba mitochondrion as MT; build37.2: with rCRS. UCSC/hg19: hg19's chromosomes and its Yoruba chrM. GATK/GRCh37 (human_g1k_v37_decoy): hs37d5.",
+  "recipes": [
+    {
+      "target": "iGenomes_Ensembl_GRCh37",
+      "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/Ensembl/GRCh37/Sequence/WholeGenomeFasta/genome.fa",
+      "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/Ensembl/GRCh37/Sequence/WholeGenomeFasta/genome.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "grc"
+      }
+    },
+    {
+      "target": "iGenomes_NCBI_build37.1",
+      "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/build37.1/Sequence/WholeGenomeFasta/genome.fa",
+      "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/build37.1/Sequence/WholeGenomeFasta/genome.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule"
+          ],
+          "accessions": [
+            "CM000663.1",
+            "CM000664.1",
+            "CM000665.1",
+            "CM000666.1",
+            "CM000667.1",
+            "CM000668.1",
+            "CM000669.1",
+            "CM000670.1",
+            "CM000671.1",
+            "CM000672.1",
+            "CM000673.1",
+            "CM000674.1",
+            "CM000675.1",
+            "CM000676.1",
+            "CM000677.1",
+            "CM000678.1",
+            "CM000679.1",
+            "CM000680.1",
+            "CM000681.1",
+            "CM000682.1",
+            "CM000683.1",
+            "CM000684.1",
+            "CM000685.1",
+            "CM000686.1"
+          ]
+        },
+        {
+          "roots": [
+            "AF347015.1"
+          ]
+        }
+      ],
+      "rename": {
+        "namespace": "grc",
+        "map": {
+          "AF347015.1": "MT"
+        }
+      }
+    },
+    {
+      "target": "iGenomes_NCBI_build37.2",
+      "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/build37.2/Sequence/WholeGenomeFasta/genome.fa",
+      "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/NCBI/build37.2/Sequence/WholeGenomeFasta/genome.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule"
+          ]
+        }
+      ],
+      "rename": {
+        "namespace": "grc"
+      }
+    },
+    {
+      "target": "iGenomes_UCSC_hg19",
+      "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa",
+      "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.1",
+          "roles": [
+            "assembled-molecule"
+          ]
+        },
+        {
+          "roots": [
+            "AF347015.1"
+          ]
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "AF347015.1": "chrM"
+        }
+      }
+    },
+    {
+      "target": "iGenomes_GATK_GRCh37",
+      "published": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.fasta",
+      "observed_from": "https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.dict",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2",
+            "1000G:hs37d5"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        },
+        "map": {
+          "AJ507799.2": "NC_007605",
+          "1000G:hs37d5": "hs37d5"
+        }
+      }
+    }
+  ]
+}

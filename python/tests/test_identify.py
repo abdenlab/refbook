@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from refbook import seqcol
-from refbook.parse import read_header
+from refbook.parse import open_compressed, read_header
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CATALOG = Path(os.environ.get("REFBOOK_CATALOG",
@@ -47,6 +47,24 @@ def test_parse_formats(tmp_path):
     assert fa.entries[0].md5 == hashlib.md5(b"ACGTNNNA").hexdigest()  # uppercased, lines joined
     assert fa.entries[1].md5 == hashlib.md5(b"RYA").hexdigest()        # IUPAC codes kept
     assert [e.sq for e in fa.entries] == ["SQ." + seqcol.sha512t24u(b) for b in (b"ACGTNNNA", b"RYA")]
+
+
+def test_gzip_members_and_trailing_bytes(tmp_path):
+    # bgzip-style members in sequence, then bytes that start no member (razip's index): all read, the rest ignored.
+    data = b">chr1\nACGT\n" * 1000
+    path = tmp_path / "x.fa.gz"
+    path.write_bytes(gzip.compress(data[:5000]) + gzip.compress(data[5000:]) + b"\x01wRAZF index")
+    with open_compressed(path) as f:
+        assert f.read() == data
+    with open_compressed(path, "rt") as f:
+        assert sum(1 for line in f if line.startswith(">")) == 1000
+    assert [e.length for e in read_header(path).entries] == [4] * 1000
+    (tmp_path / "plain.fa").write_bytes(data)
+    with open_compressed(tmp_path / "plain.fa") as f:
+        assert f.read() == data
+    path.write_bytes(gzip.compress(data)[:-20])  # a member cut short
+    with pytest.raises(EOFError), open_compressed(path) as f:
+        f.read()
 
 
 def test_parse_bam_binary_reference_list(tmp_path):

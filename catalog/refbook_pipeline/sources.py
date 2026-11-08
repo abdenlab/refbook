@@ -16,7 +16,10 @@ raw/<host>/<url path>, so a file's path is its URL. A source declares its files 
 
 `sequences` lists the source's files that hold roots (FASTA, gzipped or not; paths under `base`, or under raw/ for
 an efetch source), and `loose_roots` the roots in no assembly report, each with the GenBank record that gives its
-length (EBV). Every other root is a member of an assembly report.
+length (EBV). `minted_roots` lists roots with no accession, named by the catalog: each one's `name` in the FASTA,
+its `root_id` (`<publisher>:<name>`), the `fai` whose entry gives its length, and optionally the `agp_bed` that maps
+it to its parts (hs37d5's concatenated decoys: see layers.build_agp_bed). Every other root is a member of an
+assembly report.
 
 `external` declares a source's sequences external roots, listed by identity and digest and never hosted: its
 `collection` (what recipes select by), the `prefix` of its root IDs, and its `format` (imgt_hla: one FASTA per
@@ -71,8 +74,10 @@ class Source:
     checksums: tuple[str, ...] = ()                  # checksum lists elsewhere that cover these files
     sequences: tuple[str, ...] = ()                  # raw paths of the files that hold roots
     loose_roots: tuple[tuple[str, str], ...] = ()    # (accession, raw path of its GenBank record)
+    minted_roots: tuple[dict, ...] = ()              # name, root_id, fai, agp_bed? (raw paths)
     external: dict = field(default_factory=dict)     # collection, prefix, format
     ncbi_assembly: bool = False                      # an NCBI assembly directory
+    structure: bool = True                           # ...with its assembly structure tree
     note: str = ""
 
 
@@ -101,9 +106,28 @@ def load(path: Path) -> dict[str, Source]:
                            github_tree=dict(s.get("github_tree", {})), checksums=tuple(s.get("checksums", [])),
                            sequences=tuple(_join(base, f) for f in s.get("sequences", [])),
                            loose_roots=tuple(sorted(s.get("loose_roots", {}).items())),
+                           minted_roots=tuple(_minted(name, base, m) for m in s.get("minted_roots", [])),
                            external=dict(s.get("external", {})), ncbi_assembly="ncbi_assembly" in s,
+                           structure="ncbi_assembly" in s and s.get("structure", True),
                            note=s.get("note", ""))
     return out
+
+
+def _minted(source: str, base: str, m: dict) -> dict:
+    if set(m) - {"name", "root_id", "fai", "agp_bed"} or not {"name", "root_id", "fai"} <= set(m):
+        raise Refused(f"{source}: a minted root takes name, root_id, fai and optionally agp_bed")
+    if ":" not in m["root_id"]:
+        raise Refused(f"{source}: minted root {m['root_id']}: a minted ID is <publisher>:<name>")
+    return {**m, **{k: _join(base, m[k]) for k in ("fai", "agp_bed") if k in m}}
+
+
+def fai_length(path: Path, name: str) -> int:
+    """A sequence's length from a FASTA index."""
+    for line in path.read_text().splitlines():
+        cols = line.split("\t")
+        if cols[0] == name:
+            return int(cols[1])
+    raise Refused(f"{path.name}: no entry for {name}")
 
 
 def _join(base: str, rel: str) -> str:

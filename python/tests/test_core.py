@@ -148,14 +148,20 @@ def test_materialize_pads_after_the_masks():
         def spans(self, layer):
             return {"R": [(1, 3)]}
 
-        def padding(self, root):
+        def __init__(self):
+            self.root_length = {"R": 6}
+
+        def padding(self, root, book=None):
+            assert book == "B"
             return (4, 6, 2, True)
 
     root = b"ACGTRA"
-    ops = ["hardmask_x", "iupac_to_n", "pad"]
-    whole = apply_operations(Cat(), "R", ops, root)
-    assert whole == reference_pad(b"ANNTNA", 4, 2, True) == b"NNNNTNANNTNN"
-    for start in range(len(whole) + 1):
-        for end in range(start, len(whole) + 1):
-            a, z = root_window(Cat(), "R", ops, start, end)
-            assert apply_operations(Cat(), "R", ops, root[a:z], start, end) == whole[start:end]
+    for ops, want in ((["hardmask_x", "iupac_to_n", "pad"], b"NNNNTNANNTNN"),
+                      (["hardmask_x", "iupac_to_n", "orient"], b"TNANNT")):  # orient: no Ns, reversed
+        whole = apply_operations(Cat(), "R", ops, root, book="B")
+        assert whole == want
+        for start in range(len(whole) + 1):
+            for end in range(start, len(whole) + 1):
+                a, z = root_window(Cat(), "R", ops, start, end, "B")
+                assert apply_operations(Cat(), "R", ops, root[a:z], start, end, "B") == whole[start:end]
+    assert reference_pad(b"ANNTNA", 4, 2, True) == b"NNNNTNANNTNN"

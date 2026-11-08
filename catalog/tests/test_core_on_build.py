@@ -25,7 +25,7 @@ def test_every_root_digest():
     cat = Catalog(BUILD)
     bases = Bases(cat)
     roots = pq.read_table(cat.file("roots.parquet"), columns=["root_id", "md5", "sha512t24u"]).to_pylist()
-    assert len(roots) == 3097
+    assert len(roots) == 3369  # GRCh38's 3,097 and GRCh37's own 272 (65 are in both)
     for r in roots:
         assert _core.digests(bytes(bases.get(r["root_id"]))) == (r["md5"], r["sha512t24u"]), r["root_id"]
 
@@ -35,7 +35,7 @@ def test_every_stored_collection():
     """Every collection the build stores: its name is its top-level digest, and it
     is the level-2 representation the core computes (no transient attributes)."""
     files = sorted(file("collections").glob("*.json"))
-    assert len(files) == 26
+    assert len(files) == 61
     for f in files:
         doc = json.loads(f.read_text())
         names, lengths, sqs = doc["names"], doc["lengths"], doc["sequences"]
@@ -49,21 +49,22 @@ def test_every_derivation():
     """Every known derivation, rebuilt by the core from its root, gives its digest,
     and slices of it agree with the whole."""
     from refbook import Catalog
-    from refbook.materialize import Bases, apply_operations
+    from refbook.materialize import Bases, apply_operations, root_window
     cat = Catalog(BUILD)
     bases = Bases(cat)
     by_root = {}
     for sq, ways in cat.derivations.items():
         for d in ways:
-            by_root.setdefault(d["root_id"], []).append((sq, d["operations"]))
-    assert sum(map(len, by_root.values())) == 3846
+            by_root.setdefault(d["root_id"], []).append((sq, d["operations"], d.get("book")))
+    assert sum(map(len, by_root.values())) == 4354
     rng = random.Random(7)
     for root, ways in by_root.items():
         raw = bytes(bases.get(root))
-        for sq, ops in ways:
-            b = apply_operations(cat, root, ops, raw)
+        for sq, ops, book in ways:
+            b = apply_operations(cat, root, ops, raw, book=book)
             assert _core.digests(b) == (cat.sequence[sq]["md5"], sq), (root, ops)
-            for _ in range(3):
-                lo = rng.randrange(0, len(raw) + 1)
-                hi = min(len(raw), lo + rng.randrange(0, 100_000))
-                assert apply_operations(cat, root, ops, raw[lo:hi], lo) == b[lo:hi], (root, ops, lo)
+            for _ in range(3):  # slices in the sequence's coordinates, from the root bases they are made of
+                lo = rng.randrange(0, len(b) + 1)
+                hi = min(len(b), lo + rng.randrange(0, 100_000))
+                a, z = root_window(cat, root, ops, lo, hi, book)
+                assert apply_operations(cat, root, ops, raw[a:z], lo, hi, book) == b[lo:hi], (root, ops, lo)

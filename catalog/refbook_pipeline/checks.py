@@ -16,7 +16,6 @@ its result with the sha256 of every table it read, so an export can require a pa
 from __future__ import annotations
 
 import bisect
-import gzip
 import hashlib
 import json
 import re
@@ -26,6 +25,8 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from itertools import pairwise
 from pathlib import Path
+
+from refbook.parse import open_compressed
 
 from . import Refused
 
@@ -104,7 +105,7 @@ def check_tiling(root: str, parts: list[dict], length: int) -> list[str]:
 
 def read_genomic_gaps(path: Path) -> dict[str, set[tuple[int, int]]]:
     gaps = defaultdict(set)
-    with gzip.open(path, "rt") as f:
+    with open_compressed(path, "rt") as f:
         for line in f:
             if not line.startswith("#"):
                 acc, start, stop = line.split("\t")[:3]
@@ -186,7 +187,7 @@ def ena_lengths(md5s: list[str]) -> dict[str, int | None]:
 def grc_m5(path: Path) -> dict[str, str]:
     """accession -> M5, from a GRC analysis-set FASTA's deflines (AC: and M5: tags)."""
     out = {}
-    with gzip.open(path, "rt") as f:
+    with open_compressed(path, "rt") as f:
         for line in f:
             if line.startswith(">"):
                 ac, m5 = re.search(r"\bAC:(\S+)", line), re.search(r"\bM5:([0-9a-f]{32})", line)
@@ -244,11 +245,11 @@ def check_materialize(build_catalog: Path, stream_names: list[str]) -> tuple[boo
     by_root = defaultdict(list)
     for sq, ways in cat.derivations.items():
         for d in ways:
-            by_root[d["root_id"]].append((sq, d["operations"]))
+            by_root[d["root_id"]].append((sq, d["operations"], d.get("book")))
     for root, ways in sorted(by_root.items()):
         raw = bytes(bases.get(root))
-        for sq, ops in ways:
-            b = apply_operations(cat, root, ops, raw)
+        for sq, ops, book in ways:
+            b = apply_operations(cat, root, ops, raw, book=book)
             rec = cat.sequence[sq]
             if (hashlib.md5(b).hexdigest(), "SQ." + sha512t24u(b), len(b)) != (rec["md5"], sq, rec["length"]):
                 errors.append(f"{root} {ops}: does not give {sq}")

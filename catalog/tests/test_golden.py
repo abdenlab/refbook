@@ -50,7 +50,7 @@ def golden(name: str) -> list[dict]:
 @pytest.fixture(scope="module")
 def reproduced():
     rs = recipes()
-    tables = engine.load_tables(engine.table_paths(published(), rs), rs)
+    tables = engine.load_tables(engine.table_paths(published(), rs), rs, "grch38")  # release 0.1.0: GRCh38 only
     outputs = {r["target"]: engine.run(r, tables) for r in rs}
     return engine, rs, tables, outputs
 
@@ -127,7 +127,7 @@ def test_targets_are_their_editions_in_some_order():
     for r in golden("flavor_sequences.parquet"):
         target_rows.setdefault(r["target"], []).append(r)
     targets = {t["target"]: t for t in table("targets.parquet")}
-    assert set(targets) == set(target_rows)
+    assert set(target_rows) <= set(targets)  # the release's targets (GRCh38's; the build has GRCh37's too)
     for t, rows in target_rows.items():
         as_set = {(r["name"], r["root_id"], r["length"], r["md5"], r["sha512t24u"]) for r in rows}
         assert as_set == manifest[targets[t]["edition"]], t
@@ -147,7 +147,8 @@ def test_target_orders_rebuild_the_release_collections():
     for r in table("target_sequences.parquet"):
         order.setdefault(r["target"], []).append(r)
     released = {r["target"]: r["seqcol_digest"] for r in golden("recipes.parquet")}
-    for t, rows in order.items():
+    assert set(released) <= set(order)
+    for t, rows in ((t, order[t]) for t in released):
         rows.sort(key=lambda r: r["position"])
         seqs = [by_name[edition_of[t], r["name"]] for r in rows]
         top, _ = seqcol.digests([s["name"] for s in seqs], [s["length"] for s in seqs],

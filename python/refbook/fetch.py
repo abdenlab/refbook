@@ -115,7 +115,8 @@ def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: s
     bases = bases or Bases(cat)
     roots = [seqs[n]["root_id"] for n in names]
     # The root bases each interval is made from: its own bounds, unless its sequence is padded.
-    win = [root_window(cat, r, seqs[n]["operations"], a, z) for r, n, a, z in zip(roots, names, lo, hi)]
+    win = [root_window(cat, r, seqs[n]["operations"], a, z, seqs[n].get("book"))
+           for r, n, a, z in zip(roots, names, lo, hi)]
     rlo, rhi = [w[0] for w in win], [w[1] for w in win]
     if engine == "auto":
         engine = "datafusion" if reader is not None or (_have_datafusion() and not cat.remote) else "pyarrow"
@@ -151,7 +152,8 @@ def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: s
             b = _from_blocks(blocks, root, rlo[i], rhi[i])
         else:
             b = bases.slice(root, rlo[i], rhi[i])
-        b = apply_operations(cat, root, seqs[names[i]]["operations"], b, lo[i], hi[i])
+        s = seqs[names[i]]
+        b = apply_operations(cat, root, s["operations"], b, lo[i], hi[i], s.get("book"))
         if strands[i] == "-":
             b = b.translate(COMPLEMENT)[::-1]
         out[i] = b.decode("ascii")

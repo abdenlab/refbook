@@ -9,6 +9,10 @@ it, and sq the SQ. digest (a FASTA's, computed here, or a seqcol document's).
 - BAM                       its header text, or its binary reference list
 - VCF (plain or bgzipped)   ##contig ID, length and md5
 - FASTA (plain or gzipped)  digested here: names, lengths, MD5s and SQ. digests
+
+Gzipped files are read by open_compressed: one or more gzip members (bgzip's
+blocks), and trailing bytes that start no member ignored, as gzip does (razip,
+which 1000 Genomes used for b37 and hs37d5, appends its index that way).
 - seqcol JSON (level 2)     names, lengths and SQ. digests
 - CRAM 2.x/3.x               the SAM header in the first container (raw,
                             gzip, bzip2 or lzma; rANS-compressed headers are
@@ -19,10 +23,12 @@ import base64
 import bz2
 import gzip
 import hashlib
+import io
 import json
 import lzma
 import re
 import struct
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,10 +60,61 @@ class Header:
         return bool(self.entries) and all(e.md5 or e.sq for e in self.entries)
 
 
+GZIP_MAGIC = b"\x1f\x8b"
+CHUNK = 1 << 20
+
+
+class _GzipMembers(io.RawIOBase):
+    """The decompressed bytes of a file's gzip members, one after another, up to its end or to trailing bytes
+    that don't start another member. A member cut short is an error."""
+
+    def __init__(self, f):
+        self.f, self.d, self.buf, self.pos, self.done = f, zlib.decompressobj(31), b"", 0, False
+
+    def readable(self) -> bool:
+        return True
+
+    def close(self) -> None:
+        self.f.close()
+        super().close()
+
+    def readinto(self, b) -> int:
+        while self.pos == len(self.buf) and not self.done:
+            if self.d.eof:
+                rest = self.d.unused_data
+                while len(rest) < 2 and (more := self.f.read(CHUNK)):
+                    rest += more
+                if rest[:2] != GZIP_MAGIC:
+                    self.done = True
+                    break
+                self.d = zlib.decompressobj(31)
+                self.buf, self.pos = self.d.decompress(rest), 0
+                continue
+            chunk = self.f.read(CHUNK)
+            if not chunk:
+                raise EOFError("the compressed file ended before its end-of-stream marker")
+            self.buf, self.pos = self.d.decompress(chunk), 0
+        n = min(len(b), len(self.buf) - self.pos)
+        b[:n] = self.buf[self.pos:self.pos + n]
+        self.pos += n
+        return n
+
+
+def open_compressed(path: Path, mode: str = "rb"):
+    """A file, gzipped or not, opened for reading (`rb` or `rt`); see the module docstring."""
+    if mode not in ("rb", "rt"):
+        raise ValueError(f"open_compressed: mode {mode!r}")
+    f = open(path, "rb")  # noqa: SIM115 (returned open, for the caller's `with`)
+    if f.read(2) != GZIP_MAGIC:
+        f.seek(0)
+        return f if mode == "rb" else io.TextIOWrapper(f)
+    f.seek(0)
+    raw = io.BufferedReader(_GzipMembers(f), CHUNK)
+    return raw if mode == "rb" else io.TextIOWrapper(raw)
+
+
 def _open_text(path: Path):
-    with open(path, "rb") as f:
-        magic = f.read(2)
-    return gzip.open(path, "rt") if magic == b"\x1f\x8b" else open(path, "rt")
+    return open_compressed(path, "rt")
 
 
 def _sam_entries(lines) -> list[Entry]:

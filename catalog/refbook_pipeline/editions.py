@@ -29,7 +29,7 @@ from refbook import seqcol
 from . import Refused, engine
 
 IUPAC_TO_N = engine.IUPAC_TO_N
-PAD = engine.PAD
+PAD, ORIENT, LAYOUT = engine.PAD, engine.ORIENT, engine.LAYOUT
 
 
 def kind(root: str, member: dict | None, releases: set[str], latest: set[str], loose: dict[str, str]) -> str:
@@ -129,7 +129,7 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
                 raise Refused(f"{label} {r['name']}: the recipe compiles to another root")
             ops = compiled[r["name"]][1]
             if ops:  # rebuilding from root and operations, in Python, must give the digests
-                spans = tuple(s for m in ops if m not in (IUPAC_TO_N, PAD) for s in tables["spans"][m].get(acc, []))
+                spans = tuple(s for m in ops if m not in (IUPAC_TO_N, *LAYOUT) for s in tables["spans"][m].get(acc, []))
                 positions = tuple(tables["iupac"].get(acc, [])) if IUPAC_TO_N in ops else ()
                 padding = engine.padding_of(tables, acc, ops)
                 if engine.derivative_digests(tables["blocks"], acc, spans, positions, padding) != (
@@ -154,9 +154,10 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
             "contents": [{"kind": k, "count": n} for k, n in sorted(kinds.items())],
             "excluded": excluded(recipe, members, roots_used),
             "operations": mask_layers + ([IUPAC_TO_N] if recipe.get("alphabet") else [])
-                          + ([PAD] if recipe.get("pad") else []),
+                          + ([PAD] if recipe.get("pad") else []) + ([ORIENT] if recipe.get("orient") else []),
             "naming": naming(recipe["rename"]),
-            "recipe": json.dumps({k: recipe[k] for k in ("select", "mask", "alphabet", "pad", "rename") if k in recipe},
+            "recipe": json.dumps({k: recipe[k] for k in ("select", "mask", "alphabet", "pad", "orient", "rename")
+                                  if k in recipe},
                                  sort_keys=True),
             "n_targets": len(ts),
         })
@@ -177,23 +178,28 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
     return {"editions": editions, "manifests": manifests, "targets": targets, "target_sequences": orders}
 
 
-def sequence_store(manifests: list[dict], roots: dict) -> tuple[list[dict], list[dict]]:
+def sequence_store(manifests: list[dict], roots: dict, book_of: dict[str, str]) -> tuple[list[dict], list[dict]]:
     """The sequences and derivations tables: every root as submitted, and every derivative a manifest uses, with
-    each way it is made. A sequence's canonical derivation: fewest operations, then sorted names, then root."""
-    ways = defaultdict(lambda: defaultdict(set))  # sq -> (root, operations) -> editions
+    each way it is made. A sequence's canonical derivation: fewest operations, then sorted names, then root. A way
+    that pads or orients its root carries the book whose placement it follows (`book_of`: edition -> book); the
+    others, none."""
+    ways = defaultdict(lambda: defaultdict(set))  # sq -> (root, operations, book) -> editions
     info = {}
     for acc, r in roots.items():
-        ways[r["sha512t24u"]][acc, ()]
+        ways[r["sha512t24u"]][acc, (), None]
         info[r["sha512t24u"]] = (r["md5"], r["length"])
     for r in manifests:
-        ways[r["sha512t24u"]][r["root_id"], tuple(r["operations"])].add(r["edition"])
+        ops = tuple(r["operations"])
+        book = book_of[r["edition"]] if set(ops) & set(LAYOUT) else None
+        ways[r["sha512t24u"]][r["root_id"], ops, book].add(r["edition"])
         info[r["sha512t24u"]] = (r["md5"], r["length"])
     sequences, derivations = [], []
     for sq in sorted(ways):
-        root, ops = min(ways[sq], key=lambda w: (len(w[1]), sorted(w[1]), w[0]))
+        root, ops, book = min(ways[sq], key=lambda w: (len(w[1]), sorted(w[1]), w[0], w[2] or ""))
         md5, length = info[sq]
         sequences.append({"sha512t24u": sq, "md5": md5, "length": length, "root_id": root, "operations": list(ops),
-                          "n_derivations": len(ways[sq])})
-        for (acc, o), fl in sorted(ways[sq].items()):
-            derivations.append({"sha512t24u": sq, "root_id": acc, "operations": list(o), "editions": sorted(fl)})
+                          "book": book, "n_derivations": len(ways[sq])})
+        for (acc, o, b), fl in sorted(ways[sq].items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] or "")):
+            derivations.append({"sha512t24u": sq, "root_id": acc, "operations": list(o), "book": b,
+                                "editions": sorted(fl)})
     return sequences, derivations

@@ -1,0 +1,101 @@
+{
+  "_doc": "The 1000 Genomes GRCh37 references and their copies. b37 (human_g1k_v37): GRCh37's primary assembly with rCRS as MT (README.human_g1k_v37.fasta.txt), chrY's PARs hard-masked with N (layer_par_y), IUPAC codes kept; chromosomes by GRC name, scaffolds by GenBank accession. hs37d5: b37, then EBV (as NC_007605) and the hs37d5 decoy (1000G:hs37d5, as hs37d5). Broad's hg19/v0 Homo_sapiens_assembly19 is b37 with EBV. b37 and hs37d5 are razip files (gzip, then razip's index).",
+  "recipes": [
+    {
+      "target": "1000G_human_g1k_v37",
+      "published": "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        }
+      }
+    },
+    {
+      "target": "1000G_hs37d5",
+      "published": "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2",
+            "1000G:hs37d5"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        },
+        "map": {
+          "AJ507799.2": "NC_007605",
+          "1000G:hs37d5": "hs37d5"
+        }
+      }
+    },
+    {
+      "target": "Broad_Homo_sapiens_assembly19",
+      "published": "https://storage.googleapis.com/gcp-public-data--broad-references/hg19/v0/Homo_sapiens_assembly19.fasta",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        },
+        {
+          "roots": [
+            "AJ507799.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        },
+        "map": {
+          "AJ507799.2": "NC_007605"
+        }
+      }
+    }
+  ]
+}

@@ -24,13 +24,17 @@ The terms refbook uses, grouped from the genome outward.
   placements, hard-masks.
 
 **nucleotide operation**
-: A change to a root sequence's bases. There are three. Two keep its length
+: A change to a root sequence's bases. There are four. Two keep its length
   and coordinates, both setting positions to `N`: **mask** (a layer's spans,
-  e.g. the GRC hard-mask) and **alphabet** (IUPAC codes → `N`). The third,
-  **pad**, applied last, lays an alt scaffold or patch out in its parent's
-  coordinates: `N` up to the placed region, the whole scaffold (reverse-
+  e.g. the GRC hard-mask) and **alphabet** (IUPAC codes → `N`). Two, applied
+  last, lay an alt scaffold or patch out by its placement on its parent
+  (`layer_padding`, a placement per book: GRCh37's novel patches are GRCh38's
+  alts, on other chromosome versions): **pad** writes it in its parent's
+  coordinates, `N` up to the placed region, the whole scaffold (reverse-
   complemented if placed on the minus strand), then `N` to the parent's end,
-  as Ensembl's GRCh37 files write them (`layer_padding`).
+  as Ensembl's GRCh37 files do; **orient** only reverse-complements one placed
+  on the minus strand, unpadded, as GENCODE 19 does. A derivative made by
+  either records the book whose placement it follows.
 
 **derivative sequence**
 : A sequence generated from a root sequence by applying nucleotide operations.

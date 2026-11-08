@@ -14,9 +14,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from refbook_pipeline import engine, layout
+from refbook_pipeline import books, engine, layout
 from under_test import CATALOG as BUILD
-from under_test import file, published, recipes
+from under_test import file, published
 
 from refbook import _core
 
@@ -75,19 +75,21 @@ def test_wasm_agrees_on_sequences_and_collections(tmp_path):
 
 
 @pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
-def test_wasm_compiles_every_recipe_like_python(tmp_path):
-    rs = recipes()
-    t = engine.load_tables(engine.table_paths(published(), rs), rs)
+@pytest.mark.parametrize("book", ["grch37", "grch38"])
+def test_wasm_compiles_every_recipe_like_python(tmp_path, book):
+    rs = books.recipes(layout.BOOKS, book)
+    t = engine.load_tables(engine.table_paths(published(), rs), rs, book)
     tables = {
         "members": t["members"], "roots": list(t["roots"]),
         "iupac": [acc for acc, r in t["roots"].items() if r["n_iupac"]],
         "layers": {name: list(by_root) for name, by_root in t["spans"].items()},
         "external": t["external"],
         "placements": [{"root_id": acc, "parent_type": p} for acc, ps in t["parent_types"].items() for p in ps],
-        "padding": [{"root_id": acc, "revised": p["revised"]} for acc, p in t["padding"].items()],
+        "padding": [{"root_id": acc, "revised": p["revised"], "orientation": p["orientation"]}
+                    for acc, p in t["padding"].items()],
     }
     got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": tables, "recipes": rs})
-    assert len(got["compiled"]) == len(rs) == 17
+    assert len(got["compiled"]) == len(rs) > 0
     for r in rs:
         want = [{"name": n, "root_id": acc, "operations": ops} for n, acc, ops in engine.compile(r, t)]
         assert got["compiled"][r["target"]] == {"ok": want}, r["target"]

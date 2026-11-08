@@ -39,11 +39,16 @@ def test_the_sequence_store_keeps_every_way_and_picks_the_fewest_operations():
                   "md5": "mm", "length": 9},
                  {"edition": "b", "root_id": "Y.1", "operations": ["hardmask_grc"], "sha512t24u": "SQ.m",
                   "md5": "mm", "length": 9}]
-    seqs, ders = editions.sequence_store(manifests, roots)
+    manifests.append({"edition": "c", "root_id": "Y.1", "operations": ["orient"], "sha512t24u": "SQ.o", "md5": "mo",
+                      "length": 9})
+    seqs, ders = editions.sequence_store(manifests, roots, {"a": "B37", "b": "B37", "c": "B38"})
     by = {s["sha512t24u"]: s for s in seqs}
     assert by["SQ.m"]["operations"] == ["hardmask_grc"] and by["SQ.m"]["n_derivations"] == 2
     assert by["SQ.y"]["operations"] == [] and [d["editions"] for d in ders if d["sha512t24u"] == "SQ.m"] == [
         ["b"], ["a"]]
+    # A way that lays its root out by a placement carries its book; the others none.
+    assert (by["SQ.o"]["book"], by["SQ.m"]["book"]) == ("B38", None)
+    assert [d["book"] for d in ders if d["sha512t24u"] == "SQ.o"] == ["B38"]
 
 
 def test_book_aliases_scope_names_to_the_book(tmp_path):

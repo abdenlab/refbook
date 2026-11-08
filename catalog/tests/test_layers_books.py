@@ -46,7 +46,49 @@ def test_an_agp_must_be_the_same_in_every_release(tmp_path):
 def test_a_release_is_named_and_numbered_by_its_directory(tmp_path):
     r = layers.Release.of(tmp_path, "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.17_GRCh38.p2")
     assert (r.number, r.name, r.directory.name) == (2, "GRCh38.p2", "GCA_000001405.17_GRCh38.p2")
+    assert r.structure == r.directory / "GCA_000001405.17_GRCh38.p2_assembly_structure"
     assert layers.Release.of(tmp_path, "x/GCA_000001405.15_GRCh38").number == 0
+    archived = layers.Release.of(tmp_path, "x/GCA_000001405.6_GRCh37.p5", archive="old/Homo_sapiens")
+    assert archived.structure == tmp_path / "old/Homo_sapiens/GRCh37.p5"
+
+
+PLACEMENT_HEADER = ("#alt_asm_name\tprim_asm_name\talt_scaf_name\talt_scaf_acc\tparent_type\tparent_name\t"
+                    "parent_acc\tregion_name\tori\talt_scaf_start\talt_scaf_stop\tparent_start\tparent_stop\t"
+                    "alt_start_tail\talt_stop_tail\n")
+
+
+def test_placements_come_from_the_units_when_the_whole_list_is_missing(tmp_path):
+    for unit, acc in (("ALT_REF_LOCI_1", "GL1.1"), ("PATCHES", "JH1.1")):
+        d = tmp_path / unit / "alt_scaffolds"
+        d.mkdir(parents=True)
+        (d / "alt_scaffold_placement.txt").write_text(
+            PLACEMENT_HEADER + f"{unit}\tPrimary Assembly\tX\t{acc}\tCHROMOSOME\t1\tCM1.1\tR\t+\t1\t9\t1\t9\t0\t0\n")
+    rows, units = layers.placement_rows(tmp_path)
+    assert [r["alt_scaf_acc"] for r in rows] == ["GL1.1", "JH1.1"] and units == {"ALT_REF_LOCI_1", "PATCHES"}
+    assert layers.placement_rows(tmp_path / "PATCHES") == ([], set())  # no unit has placements
+    (tmp_path / "all_alt_scaffold_placement.txt").write_text(PLACEMENT_HEADER)
+    assert layers.placement_rows(tmp_path) == ([], None)  # the whole list, when there is one, for every unit
+
+
+BED = "d\t0\t4\tAC1.1:11-14\nd\t6\t9\tAEKP1.1:1-3\n"
+
+
+def test_a_bed_of_parts_gives_an_agp(tmp_path):
+    (tmp_path / "d.bed").write_text(BED)
+    rows = layers.build_agp_bed(tmp_path / "d.bed", "https://x/d.bed", "d", "P:d", 9)
+    assert [(r["part_number"], r["start"], r["end"], r["component_type"], r["component_id"], r["component_start"],
+             r["component_end"], r["orientation"], r["gap_length"], r["gap_type"], r["linkage"]) for r in rows] == [
+        (1, 0, 4, "O", "AC1.1", 10, 14, "+", None, None, None),
+        (2, 4, 6, "N", None, None, None, None, 2, "contig", False),
+        (3, 6, 9, "O", "AEKP1.1", 0, 3, "+", None, None, None)]
+    assert {r["root_id"] for r in rows} == {"P:d"} and set(rows[0]) == set(layers.AGP_COLUMNS)
+    t = layers.build_agp(tmp_path, [], set(), rows)
+    assert t["root_id"].to_pylist() == ["P:d"] * 3
+    with pytest.raises(Refused, match="its parts end at 9, P:d has 10"):
+        layers.build_agp_bed(tmp_path / "d.bed", "u", "d", "P:d", 10)
+    (tmp_path / "d.bed").write_text(BED.replace("1-3", "1-4"))
+    with pytest.raises(Refused, match="doesn't fit"):
+        layers.build_agp_bed(tmp_path / "d.bed", "u", "d", "P:d", 9)
 
 
 def declare(tmp_path, book_toml, recipes=None):
@@ -76,6 +118,21 @@ def test_a_book_names_only_declared_sources(tmp_path):
 def test_a_book_declaration_refuses(tmp_path, toml, match):
     with pytest.raises(Refused, match=match):
         declare(tmp_path, toml)
+
+
+def test_a_release_without_its_structure_needs_an_archive(tmp_path):
+    (tmp_path / "s.toml").write_text('[[source]]\nname = "R"\nroles = ["input"]\nncbi_assembly = "h/GCA_1.2_T.p1"\n'
+                                     'structure = false\n[[source]]\nname = "Old"\nroles = ["input"]\nbase = "h/old"\n')
+    d = tmp_path / "books" / "t"
+    d.mkdir(parents=True)
+    (d / "book.toml").write_text('name = "t"\nreleases = ["R"]\nsources = ["R", "Old"]\n')
+    srcs = sources.load(tmp_path / "s.toml")
+    assert srcs["R"].ncbi_assembly and not srcs["R"].structure and sources.reports(srcs["R"])
+    with pytest.raises(Refused, match="no structure_archive"):
+        books.load(tmp_path / "books", srcs)
+    (d / "book.toml").write_text('name = "t"\nreleases = ["R"]\nsources = ["R", "Old"]\nstructure_archive = "Old"\n')
+    b = books.load(tmp_path / "books", srcs)["t"]
+    assert [r.structure for r in books.releases(b, srcs, tmp_path)] == [tmp_path / "h/old/T.p1"]
 
 
 def test_recipes_and_their_targets(tmp_path):

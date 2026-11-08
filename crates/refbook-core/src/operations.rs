@@ -9,8 +9,10 @@
 //! parent's coordinates, as Ensembl's GRCh37 files do: N for the parent's
 //! bases before the placed region, the whole scaffold (reverse-complemented
 //! if it is placed on the minus strand), then N for the parent's bases after
-//! the region. It comes last: the masks apply to the root, in its own
-//! coordinates, before it is padded.
+//! the region. The fourth, `orient`, is `pad` without the Ns: a scaffold placed
+//! on the minus strand, reverse-complemented (GENCODE 19's patches). Both come
+//! last: the masks apply to the root, in its own coordinates, before it is
+//! laid out. Both are a `Padding`.
 //!
 //! The functions work on a slice of a root that starts at `start` in root
 //! coordinates, so a fetch of a few bases costs no more than those bases.
@@ -107,6 +109,16 @@ impl Padding {
         }
     }
 
+    /// How `orient` lays a root out: reverse-complemented, no Ns.
+    pub fn orientation(root_length: usize, reverse: bool) -> Padding {
+        Padding {
+            before: 0,
+            root_length,
+            after: 0,
+            reverse,
+        }
+    }
+
     /// The padded sequence's length.
     pub fn length(&self) -> usize {
         self.before + self.root_length + self.after
@@ -199,6 +211,10 @@ mod tests {
         let m = Padding::of_placement(4, 3, 6, 10, "-");
         assert_eq!(m.pad(b"ACGG", 0, 11), b"NNNCCGTNNNN");
         assert_eq!(Padding::of_placement(4, 3, 6, 10, "b"), p);
+        let o = Padding::orientation(4, true);
+        assert_eq!((o.length(), o.pad(b"ACGG", 0, 4)), (4, b"CCGT".to_vec()));
+        assert_eq!(o.root_range(1, 3), (1, 3));
+        assert_eq!(o.root_range(0, 1), (3, 4));
     }
 
     #[test]

@@ -4,7 +4,11 @@
                        *.scaf.agp.gz of its releases and add-ons), 0-based half-open on the root and on the component.
                        Gap rows have null component columns and vice versa. `object_rank` is the root's position
                        among the objects of its `source` file (editions order by it). A root's AGP must be the same
-                       in every release (and every book) that has it, so each root appears once.
+                       in every release (and every book) that has it, so each root appears once: its first
+                       release's, but where releases differ only in annotation, the latest release's: GRCh37 p0..p2
+                       wrote AGP 1.1, then 2.0 (gap type, linkage, evidence), and p12 revised component types. A
+                       revision of the layout itself is accepted only for the roots the book lists (`revised`). A minted root
+                       with a BED of its parts (hs37d5's decoys) has the AGP that BED gives (build_agp_bed).
 - layer_regions        named regions (alt loci regions, CEN, PAR, HET) on the chromosomes, and on the alt scaffolds
                        patches are placed on: one row per distinct span, with the releases it holds for
 - layer_placements     where each alt scaffold and patch sits on its parent, one row per distinct placement, with
@@ -23,11 +27,12 @@ accepted and why) for the record.
 
 from __future__ import annotations
 
-import gzip
 from dataclasses import dataclass
 from pathlib import Path
 
 import pyarrow as pa
+
+from refbook.parse import open_compressed
 
 from . import Refused
 from .members import release_of
@@ -39,22 +44,33 @@ class Release:
     name: str            # GRCh38.p2
     directory: Path      # its NCBI directory under raw/, e.g. raw/.../GCA_000001405.17_GRCh38.p2
     url: str             # that directory's URL
+    structure: Path      # its assembly structure: <directory>/<asm>_assembly_structure, or an archived copy
 
     @classmethod
-    def of(cls, raw: Path, base: str) -> Release:
+    def of(cls, raw: Path, base: str, archive: str = "") -> Release:
+        """The release whose NCBI directory is raw/<base>. `archive`: the raw path of a directory holding its
+        assembly structure as release-named subdirectories (NCBI's old_genbank archive, for a release whose
+        directory no longer has it)."""
         name = base.rsplit("/", 1)[-1].split("_", 2)[2]
-        return cls(release_of(name), name, raw / base, f"https://{base}")
+        d = raw / base
+        structure = raw / archive / name if archive else structure_of(d)
+        return cls(release_of(name), name, d, f"https://{base}", structure)
 
 
-def agp_files(directory: Path) -> list[Path]:
-    return sorted(p for p in directory.glob("*_assembly_structure/**/AGP/*.agp.gz")
+def structure_of(directory: Path) -> Path:
+    """An NCBI assembly directory's assembly structure tree."""
+    return directory / f"{directory.name}_assembly_structure"
+
+
+def agp_files(structure: Path) -> list[Path]:
+    return sorted(p for p in structure.glob("**/AGP/*.agp.gz")
                   if p.name.endswith((".comp.agp.gz", ".scaf.agp.gz")))
 
 
 def read_agp(path: Path) -> dict[str, list[tuple]]:
     """object -> AGP rows, as tuples of the (string) columns after `object`."""
     objs = {}
-    with gzip.open(path, "rt") as f:
+    with open_compressed(path, "rt") as f:
         for line in f:
             if line.startswith("#") or not line.strip():
                 continue
@@ -85,21 +101,72 @@ AGP_COLUMNS = ["root_id", "part_number", "start", "end", "component_type", "comp
                "object_rank"]
 
 
-def build_agp(raw: Path, directories: list[Path], roots: set[str]) -> pa.Table:
-    """The AGP of every root in `roots` (the members; a loose root has none), from the directories in order: a
-    root's source is the first file that has it."""
-    agp, source, rank = {}, {}, {}
-    for d in directories:
+def build_agp_bed(path: Path, url: str, name: str, root_id: str, length: int) -> list[dict]:
+    """The AGP of a root concatenated from parts, from the BED that maps it to them (hs37d5cs.bed: the root's
+    FASTA `name`, start, end, then `accession:start-end` 1-based, the part's source). Each part is a component of
+    type O (other sequence) on the + strand: the BED gives no strand, and the parts checked against GenBank (2 of
+    hs37d5's 4,715) match as is. What lies between parts is a gap of type N, gap_type contig, unlinked: AGP's
+    nearest terms for the Ns a concatenation puts between unrelated sequences. The parts and gaps must tile the
+    root."""
+    rows, at = [], 0
+    for line in path.read_text().splitlines():
+        obj, s, e, part = line.split("\t")[:4]
+        s, e = int(s), int(e)
+        if obj != name:
+            raise Refused(f"{path.name}: {obj} is not {name}")
+        acc, _, span = part.rpartition(":")
+        cs, ce = (int(x) for x in span.split("-"))
+        if ce - cs + 1 != e - s or s < at:
+            raise Refused(f"{path.name}: {line!r}: its part's span or its place doesn't fit")
+        if s > at:
+            rows.append({"start": at, "end": s, "component_type": "N", "gap_length": s - at,
+                         "gap_type": "contig", "linkage": False})
+        rows.append({"start": s, "end": e, "component_type": "O", "component_id": acc, "component_start": cs - 1,
+                     "component_end": ce, "orientation": "+"})
+        at = e
+    if at != length:
+        raise Refused(f"{path.name}: its parts end at {at}, {root_id} has {length} bases")
+    out = []
+    for i, r in enumerate(rows, 1):
+        rec = {k: None for k in AGP_COLUMNS}
+        rec.update(r, root_id=root_id, part_number=i, source=url, object_rank=0)
+        out.append(rec)
+    return out
+
+
+def agp_parts(rows: list[tuple]) -> list[tuple]:
+    """An AGP's layout, without its annotation (component type; gap type, linkage, evidence): each row's span and
+    part number, then its component's ID, span and orientation, or its gap length."""
+    return [r[:3] + (("gap", r[4]) if r[3] in ("N", "U") else tuple(r[4:8])) for r in rows]
+
+
+def build_agp(raw: Path, structures: list[Path], roots: set[str], extra: list[dict] = (),
+              notes: list[str] | None = None, revised: set[str] = frozenset()) -> pa.Table:
+    """The AGP of every root in `roots` (the members; a loose root has none), from the assembly structure trees in
+    release order: a root's source is the first file that has it, or the latest that annotates it otherwise, or
+    (for a root in `revised`) that lays it out otherwise; each such change is added to `notes`. Then the `extra`
+    rows (build_agp_bed's)."""
+    agp, source, rank, used = {}, {}, {}, set()
+    for d in structures:
         for path in agp_files(d):
             for i, (obj, rows) in enumerate(read_agp(path).items()):
                 if obj not in roots:
                     continue  # placed scaffolds are AGP objects but not roots
                 if obj in agp and agp[obj] != rows:
-                    raise Refused(f"{obj}: AGP in {path} differs from {source[obj]}")
+                    relaid = agp_parts(agp[obj]) != agp_parts(rows)
+                    if relaid and obj not in revised:
+                        raise Refused(f"{obj}: AGP in {path} differs from {source[obj]}")
+                    used |= {obj} if relaid else set()
+                    if notes is not None:
+                        how = "revised (declared)" if relaid else "annotated otherwise"
+                        notes.append(f"{obj}: AGP {how} in {path.relative_to(raw)}; kept")
+                    agp[obj], source[obj], rank[obj] = rows, path, i
                 if obj not in agp:
                     agp[obj], source[obj], rank[obj] = rows, path, i
     if roots - set(agp):
         raise Refused(f"no AGP for: {sorted(roots - set(agp))[:10]}")
+    if revised - used:
+        raise Refused(f"declared AGP revisions that no release makes: {sorted(revised - used)}")
     cols = {k: [] for k in AGP_COLUMNS}
     for obj in sorted(agp):
         url = "https://" + source[obj].relative_to(raw).as_posix()
@@ -108,6 +175,11 @@ def build_agp(raw: Path, directories: list[Path], roots: set[str]) -> pa.Table:
             rec.update(root_id=obj, source=url, object_rank=rank[obj])
             for k, v in cols.items():
                 v.append(rec[k])
+    if {r["root_id"] for r in extra} & set(agp):
+        raise Refused("a root has an AGP from both a structure tree and a BED")
+    for rec in sorted(extra, key=lambda r: (r["root_id"], r["part_number"])):
+        for k, v in cols.items():
+            v.append(rec[k])
     return pa.table(cols)
 
 
@@ -140,12 +212,24 @@ def release_ranges(by_release: dict) -> list[tuple]:
     return out
 
 
+def region_definitions(structure: Path, chrom: dict[str, str]) -> list[dict]:
+    """A release's region definitions: genomic_regions_definitions.txt, and, if it defines no PAR (GRCh37's
+    archived p0..p12 leave them out), the PARs of its Primary_Assembly/pseudoautosomal_region/par.txt (`chrom`:
+    chromosome name -> accession)."""
+    rows = read_tsv(structure / "genomic_regions_definitions.txt", "#region_name")
+    par = structure / "Primary_Assembly" / "pseudoautosomal_region" / "par.txt"
+    if par.exists() and not any(r["region_name"].startswith("PAR") for r in rows):
+        rows += [{"region_name": r["PAR-Name"], "chromosome": chrom[r["Chr"]], "start": r["Start"], "stop": r["Stop"]}
+                 for r in read_tsv(par, "#Chr")]
+    return rows
+
+
 def build_regions(releases: list[Release], members: list[dict],
                   quirks: set[tuple[int, str, str]]) -> tuple[pa.Table, dict]:
     """Named regions, keyed by (region_name, root): the PARs share a name across X and Y. A region's span can change
     between releases (they grow to fit new patches): one row per distinct span, with its releases. Also returns
-    {(name, root, release): span}. genomic_regions_definitions.txt is authoritative; its release's
-    assembly_regions.txt must agree, but for the book's `quirks`."""
+    {(name, root, release): span}. genomic_regions_definitions.txt is authoritative (region_definitions); its
+    release's assembly_regions.txt must agree, but for the book's `quirks`."""
     by_release, rtype = {}, {}
     for rel in releases:
         d, n = rel.directory, rel.number
@@ -153,7 +237,7 @@ def build_regions(releases: list[Release], members: list[dict],
         chrom = {m["sequence_name"]: m["genbank_accession"] for m in members if m["assembly_name"] == rel.name}
         chrom.update({m["assigned_molecule"]: m["genbank_accession"] for m in members
                       if m["assembly_name"] == rel.name and m["role"] == "assembled-molecule"})
-        for r in read_tsv(d / f"{d.name}_assembly_structure" / "genomic_regions_definitions.txt", "#region_name"):
+        for r in region_definitions(rel.structure, chrom):
             key = (r["region_name"], r["chromosome"], n)
             if key in by_release:
                 raise Refused(f"{key}: defined twice")
@@ -196,18 +280,32 @@ PLACEMENT_COLUMNS = ["root_id", "assembly_unit", "scaffold_name", "parent_type",
                      "patch_type", "first_release", "last_release"]
 
 
+def placement_rows(structure: Path) -> tuple[list[dict], set[str] | None]:
+    """A release's alt scaffold placements, and the assembly units they cover (None: every unit). From
+    all_alt_scaffold_placement.txt, or (an archived structure lacks it) the units' alt_scaffold_placement.txt, in
+    unit order: GRCh37 p0..p2 have none for their alt loci units, which were not yet placed that way."""
+    whole = structure / "all_alt_scaffold_placement.txt"
+    if whole.exists():
+        return read_tsv(whole, "#alt_asm_name"), None
+    files = sorted(structure.glob("*/alt_scaffolds/alt_scaffold_placement.txt"))
+    return [r for f in files for r in read_tsv(f, "#alt_asm_name")], {f.parent.parent.name for f in files}
+
+
 def build_placements(releases: list[Release], members: list[dict], length: dict[str, int],
                      region_spans: dict) -> tuple[pa.Table, list[str]]:
     """Where each alt scaffold and patch sits on its parent (a chromosome, or an alt scaffold for patches to alts).
     NCBI revises some placements between releases: one row per distinct placement, with its releases. Also returns
-    the notes: members a release leaves unplaced."""
+    the notes: members a release leaves unplaced, and units whose structure has no placements."""
     place, ptype, notes = {}, {}, []
     for rel in releases:
-        d = rel.directory
-        s = d / f"{d.name}_assembly_structure"
-        rows = read_tsv(s / "all_alt_scaffold_placement.txt", "#alt_asm_name")
-        role = {m["genbank_accession"]: m["role"] for m in members if m["assembly_name"] == rel.name}
-        want = {a for a, r in role.items() if r in ("alt-scaffold", "fix-patch", "novel-patch")}
+        d, s = rel.directory, rel.structure
+        rows, units = placement_rows(s)
+        here = [m for m in members if m["assembly_name"] == rel.name]
+        role = {m["genbank_accession"]: m["role"] for m in here}
+        placed = [m for m in here if m["role"] in ("alt-scaffold", "fix-patch", "novel-patch")]
+        missing = sorted({m["assembly_unit"] for m in placed} - units) if units is not None else []
+        notes += [f"{rel.name}: no placements for {u} (its structure has none)" for u in missing]
+        want = {m["genbank_accession"] for m in placed if m["assembly_unit"] not in missing}
         got = [r["alt_scaf_acc"] for r in rows]
         if len(got) != len(set(got)) or set(got) != want:
             raise Refused(f"{d.name}: placements != the report's alt and patch members")

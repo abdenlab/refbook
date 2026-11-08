@@ -1,0 +1,56 @@
+# The GRCh37 book: the GRCh37 assembly, every release (p0..p13) and the patches withdrawn along the way, with the
+# sequences its editions add (EBV, the Yoruba chrM hg19 keeps, the hs37d5 decoy), and the published editions its
+# recipes reproduce.
+name = "grch37"
+assembly = "GRCh37"   # the assembly's name, as its editions record it
+
+# The assembly's releases, p0 first: NCBI assembly sources. Their reports give the members; their structure the
+# AGPs, regions and placements. NCBI's release directories keep the structure only for p13: the others' is in
+# NCBI's old_genbank archive (structure_archive, a directory per release name).
+releases = [
+  "GRCh37", "GRCh37.p1", "GRCh37.p2", "GRCh37.p3", "GRCh37.p4", "GRCh37.p5", "GRCh37.p6", "GRCh37.p7",
+  "GRCh37.p8", "GRCh37.p9", "GRCh37.p10", "GRCh37.p11", "GRCh37.p12", "GRCh37.p13",
+]
+structure_archive = "GRCh37-structure-archive"
+# Every source the book reads: the above, and the rest.
+sources = [
+  "GRCh37", "GRCh37.p1", "GRCh37.p2", "GRCh37.p3", "GRCh37.p4", "GRCh37.p5", "GRCh37.p6", "GRCh37.p7",
+  "GRCh37.p8", "GRCh37.p9", "GRCh37.p10", "GRCh37.p11", "GRCh37.p12", "GRCh37.p13",
+  "GRCh37-structure-archive", "GRCh37-withdrawn-patches", "GRCh37-analysis-sets",
+  "EBV", "Yoruba-chrM", "1000G-hs37d5",
+  "1000G-b37", "UCSC-hg19", "Ensembl-75", "Ensembl-GRCh37-116", "GENCODE-19", "Broad-hg19-v0", "iGenomes-GRCh37",
+]
+
+# The checks' book-specific choices: the edition streamed in full (check_materialize). No analysis set for
+# check_roots: the GRCh37.p13 analysis sets' M5 tags match none of their own sequences (all 298 differ from the MD5
+# of the bases in the same file, which reproduce exactly; Broad's .dict M5s agree with the roots). The roots are
+# checked by the .dict targets' M5s (reproduce) and ENA (check_roots_ena).
+[checks]
+stream = "gencode-grch37-p13"
+
+# Where names come from beyond the assembly reports (aliases.parquet): UCSC's names for the patches (the reports
+# give none) from its p13.plusMT chromAlias; Ensembl's from its reproduced toplevel (no chromAlias has them); UCSC's
+# for the roots outside the releases (hg19's Yoruba chrM, chrEBV) from reproduced targets.
+[[aliases]]
+namespace = "ucsc"
+chromalias = { source = "UCSC-hg19", file = "p13.plusMT/hg19.p13.plusMT.chromAlias.txt" }
+label = "UCSC hg19.p13.plusMT.chromAlias.txt"
+
+[[aliases]]
+namespace = "ensembl"
+targets = ["Ensembl75_toplevel"]
+roots = "fill"
+label = "Ensembl 75 FASTA (reproduced)"
+
+[[aliases]]
+namespace = "ucsc"
+targets = ["UCSC_hg19", "GRCh37_full_analysis_set"]
+roots = "outside_releases"
+label = "UCSC hg19 and the GRC analysis sets (reproduced)"
+
+# Where a root's AGP lays it out otherwise in a later release (its bases, the same accession.version, unchanged),
+# each with its reason. layer_agp keeps the latest; a revision not declared here refuses.
+[[agp_revisions]]
+release = 12
+root = "GL949748.1"
+why = "components CU464060.4 and CU464062.1 (both -) replaced by CU464060.5 and CU464062.2 (both +), same spans"

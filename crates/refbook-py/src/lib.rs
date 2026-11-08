@@ -313,7 +313,8 @@ type MemberRow = (
 /// sequence_name, refseq_accession) in report order; every root id; the roots
 /// with IUPAC codes; mask layer -> the roots it has spans on; external roots
 /// as (root_id, collection, group, name) in rank order; placements as
-/// (root_id, parent_type); padding as (root_id, revised), from layer_padding.
+/// (root_id, parent_type); padding as (root_id, revised, reverse), from one
+/// book's layer_padding (reverse: placed on the minus strand).
 #[pyclass(frozen)]
 struct RecipeTables(recipe::Tables);
 
@@ -328,7 +329,7 @@ impl RecipeTables {
         layers: std::collections::HashMap<String, Vec<String>>,
         external: Vec<(String, String, String, Option<String>)>,
         placements: Vec<(String, String)>,
-        padding: Vec<(String, bool)>,
+        padding: Vec<(String, bool, bool)>,
     ) -> Self {
         let mut parent_types =
             std::collections::HashMap::<String, std::collections::HashSet<String>>::new();
@@ -367,7 +368,10 @@ impl RecipeTables {
                 })
                 .collect(),
             parent_types,
-            padding: padding.into_iter().collect(),
+            padding: padding
+                .into_iter()
+                .map(|(root, revised, reverse)| (root, recipe::Placed { revised, reverse }))
+                .collect(),
         })
     }
 }

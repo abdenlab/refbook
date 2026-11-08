@@ -53,6 +53,7 @@ def metadata(cat: Catalog, sq: str) -> dict:
         "refbook": {
             "root_id": rec["root_id"],
             "operations": list(rec["operations"]),
+            **({"book": rec["book"]} if rec.get("book") else {}),
             "editions": [{"edition": f, "name": n} for f, n in cat.edition_names().get(sq, [])],
         },
     }
@@ -64,5 +65,6 @@ def subsequence(cat: Catalog, sq: str, start: int, end: int, bases: Bases) -> by
     rec = cat.sequence[sq]
     if not 0 <= start <= end <= rec["length"]:
         raise ValueError(f"{start}-{end} is outside {sq} (length {rec['length']})")
-    root, ops = rec["root_id"], rec["operations"]
-    return apply_operations(cat, root, ops, bases.slice(root, *root_window(cat, root, ops, start, end)), start, end)
+    root, ops, book = rec["root_id"], rec["operations"], rec.get("book")
+    window = root_window(cat, root, ops, start, end, book)
+    return apply_operations(cat, root, ops, bases.slice(root, *window), start, end, book)

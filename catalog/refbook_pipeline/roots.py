@@ -10,14 +10,15 @@ Reads the FASTA files the sources declare (`sequences`) and writes:
 - layer_iupac.parquet           positions of non-ACGTN codes
 
 The roots expected are the assembly members (their reports give each one's length) and the loose roots the
-sources declare (EBV, length from its GenBank record). Refuses a sequence that is expected nowhere, has another
+sources declare (EBV, length from its GenBank record), and the minted roots (hs37d5's decoys: read under their
+FASTA name, kept under the ID the catalog gives them; length from their FASTA index). Refuses a sequence that is
+expected nowhere, has another
 length, has a non-canonical base, or is missing. A root found in two files must have the same bases in both
 (as rCRS will in GRCh37's and GRCh38's): the first is kept.
 """
 
 from __future__ import annotations
 
-import gzip
 from pathlib import Path
 
 import pyarrow as pa
@@ -25,6 +26,7 @@ import pyarrow.parquet as pq
 
 from refbook import blocks as root_blocks
 from refbook import refget
+from refbook.parse import open_compressed
 
 from . import Refused
 
@@ -38,9 +40,8 @@ def genbank_length(path: Path) -> int:
 
 def read_fasta(path: Path):
     """(accession.version, sequence bytes) from a FASTA, gzipped or not."""
-    opener = gzip.open if path.suffix == ".gz" else open
     name, chunks = None, []
-    with opener(path, "rb") as f:
+    with open_compressed(path) as f:
         for line in f:
             if line.startswith(b">"):
                 if name is not None:
@@ -53,8 +54,10 @@ def read_fasta(path: Path):
 
 
 def build(expected: dict[str, int], fastas: list[tuple[Path, str]], out: Path,
-          block_size: int = root_blocks.BLOCK_SIZE) -> dict:
-    """Write the root tables into the directory `out` from `fastas` ((path, URL), read in order)."""
+          block_size: int = root_blocks.BLOCK_SIZE, minted: dict[Path, dict[str, str]] | None = None) -> dict:
+    """Write the root tables into the directory `out` from `fastas` ((path, URL), read in order). `minted` maps,
+    for a FASTA, a name in it to the root ID it is kept under."""
+    minted = minted or {}
     roots = {k: [] for k in ("root_id", "length", "md5", "sha512t24u", "n_N", "n_iupac", "n_lower", "source")}
     layers = {name: {"root_id": [], "start": [], "end": []} for name in LAYERS}
     iupac = {"root_id": [], "pos": [], "code": []}
@@ -63,6 +66,7 @@ def build(expected: dict[str, int], fastas: list[tuple[Path, str]], out: Path,
     try:
         for path, url in fastas:
             for acc, seq in read_fasta(path):
+                acc = minted.get(path, {}).get(acc, acc)
                 if acc not in expected:
                     raise Refused(f"{acc} in {path.name}: in no assembly report, and not a declared loose root")
                 seq = refget.remove_whitespace(seq)

@@ -1,0 +1,42 @@
+{
+  "_doc": "The cataloged GRCh37 editions: refbook's label for each, and the targets that reproduce it. A target is keyed by its recipe's id in recipes/*.json; `publisher` and `alias` are who made the file and the name they give it (an alias of the edition). Labels follow each edition's most common target. The editions task checks that the targets listed under an edition are exactly those whose named sequence sets have one digest, so a label can't cover two editions or miss a target.",
+  "editions": [
+    {"label": "grch37-full", "targets": {
+      "GRCh37_full_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.14_GRCh37.p13_full_analysis_set"}}},
+    {"label": "grch37-no-alt", "targets": {
+      "GRCh37_no_alt_analysis_set": {"publisher": "GRC", "alias": "GCA_000001405.14_GRCh37.p13_no_alt_analysis_set"}}},
+    {"label": "b37", "targets": {
+      "1000G_human_g1k_v37": {"publisher": "1000 Genomes", "alias": "human_g1k_v37"}}},
+    {"label": "b37-ebv", "targets": {
+      "Broad_Homo_sapiens_assembly19": {"publisher": "Broad Institute", "alias": "Homo_sapiens_assembly19"}}},
+    {"label": "hs37d5", "targets": {
+      "1000G_hs37d5": {"publisher": "1000 Genomes", "alias": "hs37d5"},
+      "iGenomes_GATK_GRCh37": {"publisher": "Illumina iGenomes", "alias": "GATK/GRCh37"}}},
+    {"label": "hg19", "targets": {
+      "UCSC_hg19": {"publisher": "UCSC", "alias": "hg19"}}},
+    {"label": "hg19-p13-plusmt", "targets": {
+      "UCSC_hg19.p13.plusMT": {"publisher": "UCSC", "alias": "hg19.p13.plusMT"}}},
+    {"label": "hg19-p13-full-analysis-set", "targets": {
+      "UCSC_hg19.p13.plusMT.full_analysis_set": {"publisher": "UCSC", "alias": "hg19.p13.plusMT.full_analysis_set"}}},
+    {"label": "hg19-p13-no-alt-analysis-set", "targets": {
+      "UCSC_hg19.p13.plusMT.no_alt_analysis_set": {"publisher": "UCSC", "alias": "hg19.p13.plusMT.no_alt_analysis_set"}}},
+    {"label": "hg19-chromosomes", "targets": {
+      "iGenomes_UCSC_hg19": {"publisher": "Illumina iGenomes", "alias": "UCSC/hg19"}}},
+    {"label": "ensembl-grch37-primary", "targets": {
+      "Ensembl75_primary_assembly": {"publisher": "Ensembl 75", "alias": "Homo_sapiens.GRCh37.75.dna.primary_assembly"},
+      "EnsemblGRCh37_116_primary_assembly": {"publisher": "Ensembl GRCh37 116", "alias": "Homo_sapiens.GRCh37.dna.primary_assembly"}}},
+    {"label": "ensembl-grch37-toplevel", "targets": {
+      "Ensembl75_toplevel": {"publisher": "Ensembl 75", "alias": "Homo_sapiens.GRCh37.75.dna.toplevel"},
+      "EnsemblGRCh37_116_toplevel": {"publisher": "Ensembl GRCh37 116", "alias": "Homo_sapiens.GRCh37.dna.toplevel"}}},
+    {"label": "ensembl-grch37-alt", "targets": {
+      "EnsemblGRCh37_116_alt": {"publisher": "Ensembl GRCh37 116", "alias": "Homo_sapiens.GRCh37.dna.alt"}}},
+    {"label": "ensembl-grch37-chromosomes", "targets": {
+      "iGenomes_Ensembl_GRCh37": {"publisher": "Illumina iGenomes", "alias": "Ensembl/GRCh37"}}},
+    {"label": "ncbi-build37.1", "targets": {
+      "iGenomes_NCBI_build37.1": {"publisher": "Illumina iGenomes", "alias": "NCBI/build37.1"}}},
+    {"label": "ncbi-build37.2", "targets": {
+      "iGenomes_NCBI_build37.2": {"publisher": "Illumina iGenomes", "alias": "NCBI/build37.2"}}},
+    {"label": "gencode-grch37-p13", "targets": {
+      "GENCODE19_p13": {"publisher": "GENCODE 19", "alias": "GRCh37.p13.genome"}}}
+  ]
+}

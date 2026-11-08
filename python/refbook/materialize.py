@@ -158,32 +158,43 @@ def _read_imgt_fasta(path: Path) -> dict[tuple[str, str], bytes]:
 
 
 PAD = "pad"
+ORIENT = "orient"
 IUPAC_TO_N = "iupac_to_n"
 
 
-def root_window(cat: Catalog, root: str, operations: list[str], start: int, end: int) -> tuple[int, int]:
-    """The root bases [a, b) that bases [start, end) of a sequence (a root and its operations) are made from:
-    the same, unless the sequence is padded."""
+def layout(cat: Catalog, root: str, operations: list[str], book: str | None = None) -> tuple | None:
+    """How a sequence lays its root out, as the core's (before, root_length, after, reverse): by its placement in
+    `book` (layer_padding), padded (pad) or only oriented (orient: no Ns); None if it does neither."""
     if PAD in operations:
-        return _core.pad_root_range(start, end, cat.padding(root))
-    return start, end
+        return cat.padding(root, book)
+    if ORIENT in operations:
+        return (0, cat.root_length[root], 0, cat.padding(root, book)[3])
+    return None
+
+
+def root_window(cat: Catalog, root: str, operations: list[str], start: int, end: int,
+                book: str | None = None) -> tuple[int, int]:
+    """The root bases [a, b) that bases [start, end) of a sequence (a root, its operations and, if they pad or
+    orient it, the book whose placement they follow) are made from: the same, unless the sequence is laid out."""
+    p = layout(cat, root, operations, book)
+    return _core.pad_root_range(start, end, p) if p else (start, end)
 
 
 def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytes,
-                     start: int = 0, end: int | None = None) -> bytes:
-    """Bases [start, end) of a sequence (a root and its operations) from b, the root's bases at
-    root_window(start, end); end defaults to start + len(b), or for a padded sequence given its whole root, to its
-    length. The operations: a mask layer's spans set to N and iupac_to_n (both write N, so their order doesn't
-    matter), then pad, which lays the root out in its parent's coordinates. Implemented in the Rust core
-    (crates/refbook-core/src/operations.rs)."""
-    spans = [span for op in operations if op not in (IUPAC_TO_N, PAD)
+                     start: int = 0, end: int | None = None, book: str | None = None) -> bytes:
+    """Bases [start, end) of a sequence (a root, its operations and their book) from b, the root's bases at
+    root_window(start, end); end defaults to start + len(b), or for a laid-out sequence given its whole root, to
+    its length. The operations: a mask layer's spans set to N and iupac_to_n (both write N, so their order doesn't
+    matter), then pad, which lays the root out in its parent's coordinates, or orient, which only turns it to its
+    parent's strand. Implemented in the Rust core (crates/refbook-core/src/operations.rs)."""
+    spans = [span for op in operations if op not in (IUPAC_TO_N, PAD, ORIENT)
              for span in cat.spans(op).get(root, ())]
-    if PAD not in operations:
+    p = layout(cat, root, operations, book)
+    if p is None:
         return _core.apply_operations(bytes(b), start, spans, IUPAC_TO_N in operations)
-    p = cat.padding(root)
     if end is None:
         if start != 0 or len(b) != p[1]:
-            raise ValueError(f"{root}: give the end of a padded slice")
+            raise ValueError(f"{root}: give the end of a laid-out slice")
         end = sum(p[:3])
     a, _ = _core.pad_root_range(start, end, p)
     return _core.pad(_core.apply_operations(bytes(b), a, spans, IUPAC_TO_N in operations), start, end, p)
@@ -192,7 +203,7 @@ def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytes,
 def sequence_bases(cat: Catalog, sq: str, bases: "Bases", verify: bool = True) -> bytes:
     """A known sequence's bases, from its canonical derivation."""
     rec = cat.sequence[sq]
-    b = apply_operations(cat, rec["root_id"], rec["operations"], bases.get(rec["root_id"]))
+    b = apply_operations(cat, rec["root_id"], rec["operations"], bases.get(rec["root_id"]), book=rec.get("book"))
     if verify and (hashlib.md5(b).hexdigest() != rec["md5"] or "SQ." + sha512t24u(b) != sq):
         raise ValueError(f"{sq}: bases built from {rec['root_id']} {rec['operations']} "
                          "do not match the digest")

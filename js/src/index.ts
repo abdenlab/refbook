@@ -174,8 +174,9 @@ export interface Tables {
   external?: { root_id: string; collection: string; group: string; name: string | null }[];
   /** layer_placements rows. */
   placements?: { root_id: string; parent_type: string }[];
-  /** layer_padding rows: the roots `pad` can place, and whether their placement was revised. */
-  padding?: { root_id: string; revised: boolean }[];
+  /** One book's layer_padding rows: the roots `pad` and `orient` can lay out, whether their placement was revised,
+   * and its orientation ("-": the minus strand). */
+  padding?: { root_id: string; revised: boolean; orientation: string }[];
 }
 
 export interface ManifestRow {

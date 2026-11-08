@@ -136,12 +136,15 @@ def test_metadata_of_a_root_and_a_derivative(svc):
     assert m["refbook"] == {**m["refbook"], "root_id": "CM000663.2", "operations": []}
     assert get(svc, f"/sequence/ga4gh:{sq}/metadata")[1] == m
     assert get(svc, "/sequence/insdc:CM000663.2/metadata")[1] == m
-    # ucsc:chr1 names the root and its IUPAC -> N derivative.
+    # ucsc:chr1 names the root, its IUPAC -> N derivative, and GRCh37's chr1 (UCSC names are a book's; refget has
+    # no books).
     r, choices = get(svc, "/sequence/ucsc:chr1/metadata")
-    assert r.status == 300 and sq in choices["sequences"] and len(choices["sequences"]) == 2
-    other = next(s for s in choices["sequences"] if s != sq)
+    assert r.status == 300 and sq in choices["sequences"] and len(choices["sequences"]) == 3
+    others = {s: get(svc, f"/sequence/{s}/metadata")[1]["refbook"] for s in choices["sequences"] if s != sq}
+    assert sorted((o["root_id"], tuple(o["operations"])) for o in others.values()) == [
+        ("CM000663.1", ()), ("CM000663.2", ("iupac_to_n",))]
+    other = next(s for s, o in others.items() if o["operations"])
     _, d = get(svc, f"/sequence/{other}/metadata")
-    assert d["refbook"]["operations"] == ["iupac_to_n"]
     assert {a["naming_authority"] for a in d["metadata"]["aliases"]} <= {"ucsc", "grc", "ensembl"}
 
 

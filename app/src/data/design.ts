@@ -13,6 +13,7 @@ export interface Recipe {
   mask?: { layer: string; with: "N" }[];
   alphabet?: { iupac: "N" };
   pad?: { roles: string[] };
+  orient?: { roles: string[] };
   rename: { namespace: string; by_role?: Record<string, string>; map?: Record<string, string>; template?: Record<string, string> };
 }
 export type SelectEntry =
@@ -42,6 +43,10 @@ export interface DesignTables {
 
 const key = (root: string, ops: string[]) => [root, ...ops].join(" ");
 const GRCH38 = "GCA_000001405.";
+/** The book the designer works in: its members, placements and padding (a root can be placed in two books). Until
+ * the app picks an assembly, GRCh38's. */
+const BOOK = "grch38";
+const inBook = <T extends { book?: string | null }>(rows: T[]) => rows.filter((r) => r.book == null || r.book === BOOK);
 
 let loaded: Promise<DesignTables> | null = null;
 
@@ -64,27 +69,27 @@ let placed: Promise<Map<string, Place>> | null = null;
 /** Just the places (about 0.1 MB, once): for showing roles and units without the compiler's tables. */
 export function rootPlaces(cat: Catalog): Promise<Map<string, Place>> {
   return (placed ??= Promise.all([
-    cat.table<PlaceMember>("assembly_members.parquet"),
+    cat.table<PlaceMember & { book?: string }>("assembly_members.parquet"),
     cat.table<{ root_id: string; collection: string; rank: number }>("roots_external.parquet"),
-  ]).then(([m, e]) => placesOf(m, e)));
+  ]).then(([m, e]) => placesOf(inBook(m), e)));
 }
 
 /** The tables the compiler and the digests need (about 0.4 MB, once). */
 export function designTables(cat: Catalog): Promise<DesignTables> {
   return (loaded ??= measure("design tables", async () => {
-    type Member = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
+    type Member = { book?: string; assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
       assigned_molecule: string | null; assembly_unit: string; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
     const [members, placements, padding, hardmask, iupac, external, sequences, derivations] = await Promise.all([
       cat.table<Member>("assembly_members.parquet"),
-      cat.table<{ root_id: string; parent_type: string }>("layer_placements.parquet"),
-      cat.table<{ root_id: string; parent_start: number; parent_end: number; parent_length: number; revised: boolean }>(
-        "layer_padding.parquet"),
+      cat.table<{ book?: string; root_id: string; parent_type: string }>("layer_placements.parquet"),
+      cat.table<{ book?: string; root_id: string; parent_start: number; parent_end: number; parent_length: number;
+        revised: boolean; orientation: string }>("layer_padding.parquet"),
       cat.table<{ root_id: string }>("layer_hardmask_grc.parquet"),
       cat.table<{ root_id: string }>("layer_iupac.parquet"),
       cat.table<{ root_id: string; collection: string; group: string; name: string | null; rank: number }>("roots_external.parquet"),
       cat.table<{ sha512t24u: string; md5: string; length: number; root_id: string; operations: string[] }>("sequences.parquet"),
-      cat.table<{ sha512t24u: string; root_id: string; operations: string[] }>("derivations.parquet"),
-    ]);
+      cat.table<{ sha512t24u: string; root_id: string; operations: string[]; book?: string | null }>("derivations.parquet"),
+    ]).then(([m, pl, pd, ...rest]) => [inBook(m), inBook(pl), inBook(pd), ...rest] as const);
     const md5 = new Map(sequences.map((s) => [s.sha512t24u, s.md5]));
     const rootLength = new Map(sequences.filter((s) => !s.operations.length).map((s) => [s.root_id, s.length]));
     const ext = [...external].sort((a, b) => a.rank - b.rank);
@@ -96,7 +101,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       layers: { hardmask_grc: [...new Set(hardmask.map((r) => r.root_id))] },
       external: ext.map((e) => ({ root_id: e.root_id, collection: e.collection, group: e.group, name: e.name })),
       placements: placements.map((p) => ({ root_id: p.root_id, parent_type: p.parent_type })),
-      padding: padding.map((p) => ({ root_id: p.root_id, revised: p.revised })),
+      padding: padding.map((p) => ({ root_id: p.root_id, revised: p.revised, orientation: p.orientation })),
     });
     // What padding adds to a root's length: the Ns before and after it.
     const padded = new Map(padding.map((p) => [p.root_id, p.parent_start + p.parent_length - p.parent_end]));
@@ -115,7 +120,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
     const places = placesOf(members, ext);
     return {
       compiler, rootLength, padded, collections, roleCounts, places, layers: ["hardmask_grc"],
-      derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
+      derived: new Map(inBook(derivations).map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
       assemblies: new Map(members.map((m) => [m.assembly_accession, m.assembly_name])),
     };
   }));

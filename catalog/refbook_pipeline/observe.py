@@ -16,7 +16,6 @@ and the whole defline.
 A module of the pipeline: one task per target (dodo.py task_observe).
 """
 
-import gzip
 import re
 from pathlib import Path
 
@@ -24,6 +23,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from refbook import refget
+from refbook.parse import open_compressed
 
 from . import Refused
 
@@ -37,9 +37,8 @@ SCHEMA = pa.schema([("position", pa.int64()), ("name", pa.string()), ("length", 
 
 def records(path: Path):
     """Yield (defline, [sequence lines]) from a FASTA, gzipped or not."""
-    opener = gzip.open if path.suffix == ".gz" else open
     defline, lines = None, []
-    with opener(path, "rb") as f:
+    with open_compressed(path) as f:
         for line in f:
             if line.startswith(b">"):
                 if defline is not None:

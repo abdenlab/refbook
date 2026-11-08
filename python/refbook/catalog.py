@@ -31,7 +31,7 @@ KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocaliz
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
          "fix-patch": "fix patches", "novel-patch": "novel patches"}
 OPERATIONS = {"hardmask_grc": "GRC hard-mask", "par_y": "chrY PARs to N", "iupac_to_n": "IUPAC -> N",
-              "pad": "N-padded into its parent's coordinates"}
+              "pad": "N-padded into its parent's coordinates", "orient": "turned to its parent's strand"}
 
 
 @dataclass(frozen=True)
@@ -199,17 +199,22 @@ class Catalog:
             self._spans[layer] = spans
         return self._spans[layer]
 
-    def padding(self, root: str) -> tuple[int, int, int, bool]:
-        """How `pad` lays a root out (layer_padding.parquet): (before, root_length, after, reverse), the Ns before
-        it, its length, the Ns after it, and whether it is reverse-complemented."""
+    def padding(self, root: str, book: str | None = None) -> tuple[int, int, int, bool]:
+        """How `pad` lays a root out by its placement in `book` (layer_padding.parquet, a placement per book: a root
+        can be placed in two, on other parents): (before, root_length, after, reverse), the Ns before it, its
+        length, the Ns after it, and whether it is reverse-complemented. Without a book, the root's only placement."""
         if self._padding is None:
-            self._padding = {}
+            self._padding = defaultdict(dict)
             if self.exists("layer_padding.parquet"):
-                t = pq.read_table(self.file("layer_padding.parquet"))
-                self._padding = {r["root_id"]: r for r in t.to_pylist()}
-        if root not in self._padding:
-            raise KeyError(f"{root}: not in layer_padding, so it can't be padded")
-        p = self._padding[root]
+                for r in pq.read_table(self.file("layer_padding.parquet")).to_pylist():
+                    self._padding[r["root_id"]][r.get("book")] = r
+        places = self._padding.get(root, {})
+        if book in places:
+            p = places[book]
+        elif book is None and len(places) == 1:
+            p = next(iter(places.values()))
+        else:
+            raise KeyError(f"{root}: no placement in layer_padding for book {book}, so it can't be laid out")
         return (p["parent_start"], self.root_length[root], p["parent_length"] - p["parent_end"],
                 p["orientation"] == "-")
 

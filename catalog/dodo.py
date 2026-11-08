@@ -134,10 +134,13 @@ def task_assembly_members():
 
 def task_roots():
     """Every root once, from the FASTA files the books' sources declare (see refbook_pipeline/roots.py)."""
-    srcs = [s for s in books.sources_of(BOOKS, SOURCES) if s.sequences or s.loose_roots]
+    srcs = [s for s in books.sources_of(BOOKS, SOURCES) if s.sequences or s.loose_roots or s.minted_roots]
     table = CATALOG / "members" / "assembly_members.parquet"
     fastas = [(RAW / p, sources.url_of(p)) for s in srcs for p in s.sequences]
     loose = [(acc, RAW / record) for s in srcs for acc, record in s.loose_roots]
+    minted = [m for s in srcs for m in s.minted_roots]
+    renames = {RAW / p: {m["name"]: m["root_id"] for m in s.minted_roots} for s in srcs if s.minted_roots
+               for p in s.sequences}
     out = CATALOG / "roots"
 
     def action():
@@ -146,14 +149,19 @@ def task_roots():
             if acc in expected:
                 raise Refused(f"{acc} is declared a loose root, but an assembly report lists it")
             expected[acc] = roots.genbank_length(record)
+        for m in minted:
+            if m["root_id"] in expected:
+                raise Refused(f"{m['root_id']}: minted twice, or also an accession")
+            expected[m["root_id"]] = sources.fai_length(RAW / m["fai"], m["name"])
         with layout.output(out) as tmp:
-            print(roots.build(expected, fastas, tmp))
+            print(roots.build(expected, fastas, tmp, minted=renames))
             layout.record_inputs(tmp, [lock_path(s.name) for s in srcs])
 
     dep = reads(srcs)
     names = ["roots", "root_blocks", "layer_softmask_ncbi", "layer_n_runs", "layer_iupac"]
     return {"actions": [action], "task_dep": dep["task_dep"],
-            "file_dep": [table] + [p for p, _ in fastas] + [r for _, r in loose] + dep["file_dep"] + code("roots", "members"),
+            "file_dep": [table] + [p for p, _ in fastas] + [r for _, r in loose] + [RAW / m["fai"] for m in minted]
+                        + dep["file_dep"] + code("roots", "members"),
             "targets": [out / f"{n}.parquet" for n in names] + [out / "inputs.json"]}
 
 
@@ -225,8 +233,8 @@ def task_reproduce():
         observed = BUILD / "books" / book.name / "observed"
         out = BUILD / "books" / book.name / "reproduced"
 
-        def action(recipes=recipes, paths=paths, observed=observed, out=out):
-            t = engine.load_tables(paths, recipes)
+        def action(recipes=recipes, paths=paths, observed=observed, out=out, book=book.name):
+            t = engine.load_tables(paths, recipes, book)
             rows, failed = [], []
             for recipe in recipes:
                 got = engine.run(recipe, t)
@@ -261,7 +269,7 @@ def task_editions():
         out = here / "editions"
 
         def action(book=book, recipes=recipes, paths=paths, here=here, labels=labels, loose=loose, out=out):
-            t = engine.load_tables(paths, recipes)
+            t = engine.load_tables(paths, recipes, book.name)
             prov = {r["target"]: observe.read_provenance(here / "observed" / f"{r['target']}.parquet") for r in recipes}
             releases = {layers.Release.of(RAW, SOURCES[n].base).name for n in book.releases}
             with layout.output(out) as tmp:
@@ -294,14 +302,16 @@ def task_catalog_editions():
                 if name == "editions":
                     tables = [t.add_column(0, "book", pa.array([b] * t.num_rows, pa.string()))
                               for b, t in zip(parts, tables)]
-                combined[name] = pa.concat_tables(tables)
+                # Permissive: a column a book leaves empty (no edition excludes anything) has no element type.
+                combined[name] = pa.concat_tables(tables, promote_options="permissive")
                 pq.write_table(combined[name], tmp / f"{name}.parquet", compression="zstd")
             labels = combined["editions"]["edition"].to_pylist()
             if len(labels) != len(set(labels)):
                 raise Refused(f"an edition label is used in two books: {sorted({x for x in labels if labels.count(x) > 1})}")
             cols = ["root_id", "length", "md5", "sha512t24u"]
             roots = {r["root_id"]: r for p in roots_paths for r in pq.read_table(p, columns=cols).to_pylist()}
-            seqs, ders = editions.sequence_store(combined["manifests"].to_pylist(), roots)
+            book_of = dict(zip(combined["editions"]["edition"].to_pylist(), combined["editions"]["book"].to_pylist()))
+            seqs, ders = editions.sequence_store(combined["manifests"].to_pylist(), roots, book_of)
             pq.write_table(pa.Table.from_pylist(seqs), tmp / "sequences.parquet", compression="zstd")
             pq.write_table(pa.Table.from_pylist(ders), tmp / "derivations.parquet", compression="zstd")
             (tmp / "collections").mkdir()
@@ -407,13 +417,15 @@ def task_check_gaps():
 
 def roots_check(ena: bool):
     out = CHECKS / ("roots_ena" if ena else "roots")
-    names = ["roots.parquet", "layer_hardmask_grc.parquet"]
-    sets = [(b.checks["analysis_set"]["source"], b.checks["analysis_set"]["file"]) for b in BOOKS.values() if b.checks]
+    names = ["roots.parquet", "layer_hardmask_grc.parquet", "layer_par_y.parquet"]
+    sets = [(b.checks["analysis_set"]["source"], b.checks["analysis_set"]["file"]) for b in BOOKS.values()
+            if b.checks and "analysis_set" in b.checks]
     files = [RAW / SOURCES[s].base / f for s, f in sets]
 
     def action():
         roots_ = pq.read_table(PUBLISHED["roots.parquet"]).to_pylist()
-        masked = set(pq.read_table(PUBLISHED["layer_hardmask_grc.parquet"], columns=["root_id"])["root_id"].to_pylist())
+        # What the analysis sets mask: the GRC hard-mask (GRCh38), and chrY's PARs (GRCh37's mask only those).
+        masked = {r for n in names[1:] for r in pq.read_table(PUBLISHED[n], columns=["root_id"])["root_id"].to_pylist()}
         m5 = {}
         for f in files:
             m5.update(checks.grc_m5(f))
@@ -448,7 +460,7 @@ def task_check_materialize():
     names = ["sequences.parquet", "derivations.parquet", "editions.parquet", "manifests.parquet", "targets.parquet",
              "target_sequences.parquet", "roots.parquet", "roots_external.parquet", "root_blocks.parquet",
              "layer_hardmask_grc.parquet", "collections"]
-    stream = [b.checks["stream"] for b in BOOKS.values() if b.checks]
+    stream = [b.checks["stream"] for b in BOOKS.values() if b.checks and "stream" in b.checks]
 
     def action():
         passed, details, log = checks.check_materialize(CATALOG, stream)
@@ -497,30 +509,42 @@ def task_export():
 
 
 LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_par_y", "layer_padding", "layer_hardmask_grc"]
+# Layers whose rows mean something only within a book: numbered by release, or (padding) a placement on a parent
+# that is the book's (GRCh37's novel patches are GRCh38's alts, on other chromosome versions).
+BOOK_KEYED = ("layer_regions", "layer_placements", "layer_padding")
 
 
 def task_layers():
     """A book's layers, from its releases' and add-ons' assembly structure (see refbook_pipeline/layers.py)."""
     for book in BOOKS.values():
         srcs = [SOURCES[n] for n in book.releases + book.addons]
-        rels = [layers.Release.of(RAW, SOURCES[n].base) for n in book.releases]
-        dirs = [RAW / s.base for s in srcs]
+        if book.structure_archive:
+            srcs.append(SOURCES[book.structure_archive])
+        rels = books.releases(book, SOURCES, RAW)
+        dirs = [r.structure for r in rels] + [layers.structure_of(RAW / SOURCES[n].base) for n in book.addons]
         mask = book.hardmask_grc
         mask_src = [SOURCES[mask["source"]]] if mask else []
         mask_file = RAW / SOURCES[mask["source"]].base / mask["file"] if mask else None
         table = BUILD / "books" / book.name / "members" / "assembly_members.parquet"
         lengths = CATALOG / "roots" / "roots.parquet"
         out = BUILD / "books" / book.name / "layers"
+        bed_srcs = [SOURCES[n] for n in book.sources if any("agp_bed" in m for m in SOURCES[n].minted_roots)]
+        beds = [m for s in bed_srcs for m in s.minted_roots if "agp_bed" in m]
 
-        def action(book=book, rels=rels, dirs=dirs, mask=mask, mask_file=mask_file, srcs=srcs + mask_src,
-                   table=table, lengths=lengths, out=out):
+        def action(book=book, rels=rels, dirs=dirs, mask=mask, mask_file=mask_file, srcs=srcs + mask_src + bed_srcs,
+                   table=table, lengths=lengths, out=out, beds=beds):
             ms = pq.read_table(table).to_pylist()
             r = pq.read_table(lengths, columns=["root_id", "length"])
             length = dict(zip(r["root_id"].to_pylist(), r["length"].to_pylist()))
             with layout.output(out) as tmp:
-                agp = layers.build_agp(RAW, dirs, {m["genbank_accession"] for m in ms})
+                extra = [r for m in beds for r in layers.build_agp_bed(
+                    RAW / m["agp_bed"], sources.url_of(m["agp_bed"]), m["name"], m["root_id"], length[m["root_id"]])]
+                agp_notes = []
+                agp = layers.build_agp(RAW, dirs, {m["genbank_accession"] for m in ms}, extra, agp_notes,
+                                       {root for _, root in book.agp_revisions})
                 regions, spans = layers.build_regions(rels, ms, set(book.region_quirks))
                 placements, notes = layers.build_placements(rels, ms, length, spans)
+                notes = agp_notes + notes
                 tables = {"layer_agp": agp, "layer_regions": regions, "layer_placements": placements,
                           "layer_par_y": layers.build_par_y(regions, ms),
                           "layer_padding": layers.build_padding(placements, length)}
@@ -541,7 +565,8 @@ def task_layers():
                 print({name: t.num_rows for name, t in tables.items()}, notes)
 
         files = [RAW / f for s in srcs for f in sources.files(s, RAW)[0]] + ([mask_file] if mask else [])
-        dep = reads(srcs + mask_src)
+        files += [RAW / m["agp_bed"] for m in beds]
+        dep = reads(srcs + mask_src + bed_srcs)
         yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
                "file_dep": [table, lengths] + files + dep["file_dep"] + code("layers", "members"),
                "targets": [out / f"{n}.parquet" for n in LAYERS[:5] + (LAYERS[5:] if mask else [])]
@@ -550,28 +575,41 @@ def task_layers():
 
 def task_catalog_layers():
     """The catalog's layers: every book's. A root-keyed layer (AGP, hard-mask) has each root once, the same in
-    every book that has it; regions and placements, numbered by release, carry their book."""
+    every book that has it, and taken from the latest assembly's book (books newest first: grch38 before grch37).
+    An AGP may differ between books only where it was found (source, object_rank: GL000194.1 is chr4's in GRCh37,
+    chr14's in GRCh38) and in annotation (layers.agp_parts). The book-keyed layers (BOOK_KEYED) carry their book."""
     out = CATALOG / "layers"
-    parts = {b: BUILD / "books" / b / "layers" for b in BOOKS}
+    parts = {b: BUILD / "books" / b / "layers" for b in sorted(BOOKS, reverse=True)}
+
+    def same(name, a, b):
+        if name != "layer_agp":
+            return a == b
+        layout_ = [{k: v for k, v in r.items() if k not in ("source", "object_rank", "component_type", "gap_type",
+                                                             "linkage", "linkage_evidence")} for r in a]
+        return layout_ == [{k: v for k, v in r.items() if k not in ("source", "object_rank", "component_type",
+                                                                    "gap_type", "linkage", "linkage_evidence")}
+                           for r in b] and [r["component_id"] is None for r in a] == [r["component_id"] is None
+                                                                                      for r in b]
 
     def action():
         with layout.output(out) as tmp:
             for name in LAYERS:
                 found = [(b, d / f"{name}.parquet") for b, d in parts.items() if (d / f"{name}.parquet").exists()]
                 tables = [pq.read_table(p) for _, p in found]
-                if name in ("layer_regions", "layer_placements"):
+                if name in BOOK_KEYED:
                     tables = [t.add_column(0, "book", pa.array([b] * t.num_rows, pa.string()))
-                              for (b, _), t in zip(found, tables)]
+                              for (b, _), t in sorted(zip(found, tables))]
                     combined = pa.concat_tables(tables)
                 else:
                     combined, seen = [], {}
                     for t in tables:
                         for root, rows in sorted(_by_root(t).items()):
-                            if root in seen and seen[root] != rows:
+                            if root in seen and not same(name, seen[root], rows):
                                 raise Refused(f"{name}: {root} differs between books")
                             if root not in seen:
                                 seen[root] = rows
                                 combined += rows
+                    combined.sort(key=lambda r: r["root_id"])  # stable: each root's rows keep their order
                     combined = pa.Table.from_pylist(combined, schema=tables[0].schema)
                 pq.write_table(combined, tmp / f"{name}.parquet", compression="zstd")
 

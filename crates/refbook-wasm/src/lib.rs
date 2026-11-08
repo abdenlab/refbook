@@ -334,6 +334,7 @@ struct PlacementRow {
 struct PaddingRow {
     root_id: String,
     revised: bool,
+    orientation: String,
 }
 
 #[derive(Deserialize)]
@@ -357,7 +358,8 @@ struct TablesIn {
 /// every root id; iupac the roots with IUPAC codes; layers a mask layer's
 /// name -> the roots it has spans on; external roots_external rows (root_id,
 /// collection, group, name) in rank order; placements layer_placements rows
-/// (root_id, parent_type); padding layer_padding rows (root_id, revised).
+/// (root_id, parent_type); padding one book's layer_padding rows (root_id,
+/// revised, orientation).
 #[wasm_bindgen]
 pub struct RecipeTables(recipe::Tables);
 
@@ -407,7 +409,13 @@ impl RecipeTables {
             padding: t
                 .padding
                 .into_iter()
-                .map(|p| (p.root_id, p.revised))
+                .map(|p| {
+                    let placed = recipe::Placed {
+                        revised: p.revised,
+                        reverse: p.orientation == "-",
+                    };
+                    (p.root_id, placed)
+                })
                 .collect(),
         }))
     }

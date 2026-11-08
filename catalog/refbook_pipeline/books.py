@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import Refused
+from .layers import Release
 from .sources import Source
 
 
@@ -26,6 +27,8 @@ class Book:
     hardmask_grc: dict | None = None         # source, file, par_root (see the book's book.toml)
     aliases: tuple[dict, ...] = ()           # where names come from beyond the reports (see aliases.py)
     checks: dict | None = None               # analysis_set (source, file), stream (see checks.py)
+    structure_archive: str = ""              # where releases without a structure tree have it (see book.toml)
+    agp_revisions: tuple[tuple[int, str], ...] = ()  # (release, root): AGP layouts known to change
 
 
 def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
@@ -44,10 +47,17 @@ def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
                 raise Refused(f"{b['name']}: {key} not among its sources: {stray}")
         if b.get("hardmask_grc") and b["hardmask_grc"]["source"] not in b["sources"]:
             raise Refused(f"{b['name']}: hardmask_grc's source is not among its sources")
+        archive = b.get("structure_archive", "")
+        if archive and archive not in b["sources"]:
+            raise Refused(f"{b['name']}: structure_archive is not among its sources")
+        bare = [s for s in b.get("releases", []) if sources[s].ncbi_assembly and not sources[s].structure]
+        if bare and not archive:
+            raise Refused(f"{b['name']}: releases without an assembly structure, and no structure_archive: {bare}")
         out[b["name"]] = Book(b["name"], tuple(b["sources"]), b.get("assembly", ""),
                               tuple(b.get("releases", [])), tuple(b.get("addons", [])),
                               tuple((q["release"], q["region"], q["root"]) for q in b.get("region_quirks", [])),
-                              b.get("hardmask_grc"), tuple(b.get("aliases", [])), b.get("checks"))
+                              b.get("hardmask_grc"), tuple(b.get("aliases", [])), b.get("checks"),
+                              archive, tuple((q["release"], q["root"]) for q in b.get("agp_revisions", [])))
     return out
 
 
@@ -55,6 +65,13 @@ def sources_of(books: dict[str, Book], sources: dict[str, Source]) -> list[Sourc
     """The sources any book draws on, each once, in their order in sources.toml."""
     used = {s for b in books.values() for s in b.sources}
     return [s for name, s in sources.items() if name in used]
+
+
+def releases(book: Book, sources: dict[str, Source], raw: Path) -> list[Release]:
+    """The book's releases, p0 first, each with where its assembly structure is."""
+    archive = sources[book.structure_archive].base if book.structure_archive else ""
+    return [Release.of(raw, sources[n].base, archive if sources[n].ncbi_assembly and not sources[n].structure else "")
+            for n in book.releases]
 
 
 def recipes(books_dir: Path, book: str) -> list[dict]:

@@ -1,0 +1,216 @@
+{
+  "_doc": "Ensembl's GRCh37 FASTAs, release 75 (the last on GRCh37) and the GRCh37 site's release 116 (the unmasked 'dna' files). GRCh37.p13; chrY's PARs hard-masked with N (layer_par_y), IUPAC codes as N. Toplevel adds every alt scaffold and patch in its parent's coordinates (pad: N before the placed region, the scaffold, reverse-complemented if placed on the minus strand, N after); alt.fa has those alone. Names: chromosomes and patches by GRC name, the alt scaffolds by GRC name without its _CTGn suffix (HSCHR6_MHC_COX), scaffolds by GenBank accession.",
+  "recipes": [
+    {
+      "target": "Ensembl75_primary_assembly",
+      "published": "https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        }
+      }
+    },
+    {
+      "target": "Ensembl75_toplevel",
+      "published": "https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.toplevel.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "pad": {
+        "roles": [
+          "alt-scaffold",
+          "fix-patch",
+          "novel-patch"
+        ]
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc",
+          "fix-patch": "grc",
+          "novel-patch": "grc"
+        },
+        "map": {
+          "GL000250.1": "HSCHR6_MHC_APD",
+          "GL000251.1": "HSCHR6_MHC_COX",
+          "GL000252.1": "HSCHR6_MHC_DBB",
+          "GL000253.1": "HSCHR6_MHC_MANN",
+          "GL000254.1": "HSCHR6_MHC_MCF",
+          "GL000255.1": "HSCHR6_MHC_QBL",
+          "GL000256.1": "HSCHR6_MHC_SSTO",
+          "GL000257.1": "HSCHR4_1",
+          "GL000258.1": "HSCHR17_1"
+        }
+      }
+    },
+    {
+      "target": "EnsemblGRCh37_116_primary_assembly",
+      "published": "https://ftp.ensembl.org/pub/grch37/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc"
+        }
+      }
+    },
+    {
+      "target": "EnsemblGRCh37_116_toplevel",
+      "published": "https://ftp.ensembl.org/pub/grch37/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna.toplevel.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "assembled-molecule",
+            "unlocalized-scaffold",
+            "unplaced-scaffold",
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "pad": {
+        "roles": [
+          "alt-scaffold",
+          "fix-patch",
+          "novel-patch"
+        ]
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc",
+          "fix-patch": "grc",
+          "novel-patch": "grc"
+        },
+        "map": {
+          "GL000250.1": "HSCHR6_MHC_APD",
+          "GL000251.1": "HSCHR6_MHC_COX",
+          "GL000252.1": "HSCHR6_MHC_DBB",
+          "GL000253.1": "HSCHR6_MHC_MANN",
+          "GL000254.1": "HSCHR6_MHC_MCF",
+          "GL000255.1": "HSCHR6_MHC_QBL",
+          "GL000256.1": "HSCHR6_MHC_SSTO",
+          "GL000257.1": "HSCHR4_1",
+          "GL000258.1": "HSCHR17_1"
+        }
+      }
+    },
+    {
+      "target": "EnsemblGRCh37_116_alt",
+      "published": "https://ftp.ensembl.org/pub/grch37/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna.alt.fa.gz",
+      "select": [
+        {
+          "assembly": "GCA_000001405.14",
+          "roles": [
+            "alt-scaffold",
+            "fix-patch",
+            "novel-patch"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "alphabet": {
+        "iupac": "N"
+      },
+      "pad": {
+        "roles": [
+          "alt-scaffold",
+          "fix-patch",
+          "novel-patch"
+        ]
+      },
+      "rename": {
+        "namespace": "genbank",
+        "by_role": {
+          "assembled-molecule": "grc",
+          "fix-patch": "grc",
+          "novel-patch": "grc"
+        },
+        "map": {
+          "GL000250.1": "HSCHR6_MHC_APD",
+          "GL000251.1": "HSCHR6_MHC_COX",
+          "GL000252.1": "HSCHR6_MHC_DBB",
+          "GL000253.1": "HSCHR6_MHC_MANN",
+          "GL000254.1": "HSCHR6_MHC_MCF",
+          "GL000255.1": "HSCHR6_MHC_QBL",
+          "GL000256.1": "HSCHR6_MHC_SSTO",
+          "GL000257.1": "HSCHR4_1",
+          "GL000258.1": "HSCHR17_1"
+        }
+      }
+    }
+  ]
+}
