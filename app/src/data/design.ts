@@ -12,6 +12,7 @@ export interface Recipe {
   select: SelectEntry[];
   mask?: { layer: string; with: "N" }[];
   alphabet?: { iupac: "N" };
+  pad?: { roles: string[] };
   rename: { namespace: string; by_role?: Record<string, string>; map?: Record<string, string>; template?: Record<string, string> };
 }
 export type SelectEntry =
@@ -23,6 +24,8 @@ export interface DesignTables {
   compiler: rb.RecipeTables;
   /** root_id -> length, every root. */
   rootLength: Map<string, number>;
+  /** root_id -> the Ns padding adds to it (layer_padding). */
+  padded: Map<string, number>;
   /** "root_id ops..." -> {sha512t24u, md5} of every known derivation. */
   derived: Map<string, { sha512t24u: string; md5: string }>;
   /** Assembly releases: accession -> name (GRCh38, GRCh38.p1, ..., hs38d1). */
@@ -71,9 +74,11 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
   return (loaded ??= measure("design tables", async () => {
     type Member = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
       assigned_molecule: string | null; assembly_unit: string; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
-    const [members, placements, hardmask, iupac, external, sequences, derivations] = await Promise.all([
+    const [members, placements, padding, hardmask, iupac, external, sequences, derivations] = await Promise.all([
       cat.table<Member>("assembly_members.parquet"),
       cat.table<{ root_id: string; parent_type: string }>("layer_placements.parquet"),
+      cat.table<{ root_id: string; parent_start: number; parent_end: number; parent_length: number; revised: boolean }>(
+        "layer_padding.parquet"),
       cat.table<{ root_id: string }>("layer_hardmask_grc.parquet"),
       cat.table<{ root_id: string }>("layer_iupac.parquet"),
       cat.table<{ root_id: string; collection: string; group: string; name: string | null; rank: number }>("roots_external.parquet"),
@@ -91,7 +96,10 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       layers: { hardmask_grc: [...new Set(hardmask.map((r) => r.root_id))] },
       external: ext.map((e) => ({ root_id: e.root_id, collection: e.collection, group: e.group, name: e.name })),
       placements: placements.map((p) => ({ root_id: p.root_id, parent_type: p.parent_type })),
+      padding: padding.map((p) => ({ root_id: p.root_id, revised: p.revised })),
     });
+    // What padding adds to a root's length: the Ns before and after it.
+    const padded = new Map(padding.map((p) => [p.root_id, p.parent_start + p.parent_length - p.parent_end]));
     const roleCounts = new Map<string, Map<string, number>>();
     for (const m of members) {
       const c = roleCounts.get(m.assembly_accession) ?? new Map<string, number>();
@@ -106,7 +114,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
     }
     const places = placesOf(members, ext);
     return {
-      compiler, rootLength, collections, roleCounts, places, layers: ["hardmask_grc"],
+      compiler, rootLength, padded, collections, roleCounts, places, layers: ["hardmask_grc"],
       derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
       assemblies: new Map(members.map((m) => [m.assembly_accession, m.assembly_name])),
     };
@@ -135,7 +143,8 @@ export function design(recipe: Recipe, t: DesignTables, editions: Edition[]): De
   const compiled = rb.compileRecipe(recipe, t.compiler);
   const rows: DesignRow[] = compiled.map((r) => {
     const d = t.derived.get(key(r.root_id, r.operations));
-    return { edition: "", name: r.name, root_id: r.root_id, operations: r.operations, length: t.rootLength.get(r.root_id) ?? 0,
+    const length = (t.rootLength.get(r.root_id) ?? 0) + (r.operations.includes("pad") ? t.padded.get(r.root_id) ?? 0 : 0);
+    return { edition: "", name: r.name, root_id: r.root_id, operations: r.operations, length,
              md5: d?.md5 ?? null, sha512t24u: d?.sha512t24u ?? null };
   });
   const novel = rows.filter((r) => !r.sha512t24u);

@@ -30,7 +30,8 @@ FORMAT = 2
 KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocalized scaffolds",
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
          "fix-patch": "fix patches", "novel-patch": "novel patches"}
-OPERATIONS = {"hardmask_grc": "GRC hard-mask", "iupac_to_n": "IUPAC -> N"}
+OPERATIONS = {"hardmask_grc": "GRC hard-mask", "par_y": "chrY PARs to N", "iupac_to_n": "IUPAC -> N",
+              "pad": "N-padded into its parent's coordinates"}
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ class Catalog:
             if r["namespace"] in ("ucsc", "imgt"):
                 self.display.setdefault(r["root_id"], r["alias"])
         self._spans = {}
+        self._padding = None
         self._sequence_aliases = None
 
     def _local(self, name: str) -> Path:
@@ -196,6 +198,20 @@ class Catalog:
                 spans[r].append((s, e))
             self._spans[layer] = spans
         return self._spans[layer]
+
+    def padding(self, root: str) -> tuple[int, int, int, bool]:
+        """How `pad` lays a root out (layer_padding.parquet): (before, root_length, after, reverse), the Ns before
+        it, its length, the Ns after it, and whether it is reverse-complemented."""
+        if self._padding is None:
+            self._padding = {}
+            if self.exists("layer_padding.parquet"):
+                t = pq.read_table(self.file("layer_padding.parquet"))
+                self._padding = {r["root_id"]: r for r in t.to_pylist()}
+        if root not in self._padding:
+            raise KeyError(f"{root}: not in layer_padding, so it can't be padded")
+        p = self._padding[root]
+        return (p["parent_start"], self.root_length[root], p["parent_length"] - p["parent_end"],
+                p["orientation"] == "-")
 
     def blocks_location(self) -> str:
         """root_blocks.parquet as a path or URL (for engines that open it themselves)."""

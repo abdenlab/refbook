@@ -11,7 +11,7 @@ import { catalogHandler } from "../server/catalog.ts";
 import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
-import { editions, IUPAC_TO_N, manifest, region, targetOrder, targets, verify } from "../src/data/editions.ts";
+import { editions, IUPAC_TO_N, manifest, onSequence, padding, region, targetOrder, targets, verify } from "../src/data/editions.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
 import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
@@ -108,6 +108,35 @@ test("a region is the same bases as the whole sequence there", { skip }, async (
   }
   const r = measured["region 65530"];
   assert.ok(r.requests <= 4 && r.bytes < 4e6, JSON.stringify(r));
+});
+
+test("a padded row: the root in its parent's coordinates, N around it, in any slice", { skip }, async () => {
+  // GRCh38 has no padded edition: pad an alt of hg38-p14 by its layer_padding row, reversed and not.
+  const pads = await cat.table<{ root_id: string; orientation: string; revised: boolean }>("layer_padding.parquet");
+  const rows = await manifest(cat, "hg38-p14");
+  for (const orientation of ["-", "+"]) {
+    const p = pads.filter((x) => x.orientation === orientation && !x.revised).map((x) => rows.find((r) => r.root_id === x.root_id && !r.operations.length))
+      .filter((r) => r !== undefined).sort((a, b) => a.length - b.length)[0]!;
+    const own = (await region(cat, blocks, p, 0, p.length)).bases;
+    const pd = (await cat.table<any>("layer_padding.parquet")).find((x) => x.root_id === p.root_id);
+    const extra = pd.parent_start + pd.parent_length - pd.parent_end;
+    const row = { ...p, operations: ["pad"], length: p.length + extra };
+    const pp = (await padding(cat, row))!;
+    assert.equal(pp.reverse, orientation === "-");
+    assert.deepEqual(onSequence(pp, [0, p.length]), [pp.before, pp.before + p.length]);
+    const comp: Record<string, string> = { A: "T", C: "G", G: "C", T: "A", N: "N" };
+    const mid = pp.reverse ? Uint8Array.from([...own].reverse().map((b) => (comp[String.fromCharCode(b)] ?? "N").charCodeAt(0))) : own;
+    const want = (s: number, e: number) => Uint8Array.from({ length: e - s }, (_, k) => {
+      const i = s + k - pp.before;
+      return i >= 0 && i < p.length ? mid[i] : 78;
+    });
+    for (const [s, e] of [[0, 10], [pp.before - 5, pp.before + 70_000], [pp.before + p.length - 30, pp.before + p.length + 30],
+                          [row.length - 10, row.length]]) {
+      const r = await region(cat, blocks, row, s, e);
+      assert.deepEqual(r.bases, want(s, e), `${orientation} ${s}-${e}`);
+      assert.equal(r.root.length, e - s);
+    }
+  }
 });
 
 test("pasted headers parse in every format", () => {

@@ -7,9 +7,10 @@
 //!
 //! - a digest the store knows pins the sequence: its root, the nucleotide
 //!   operations from it, and the editions that use it (under which names);
-//! - otherwise a name that names a root of that length gives the root, and
-//!   the stored sequences of that root (its cognates: the same length, the
-//!   same bases but for N) are what it could be;
+//! - otherwise a name that names a root of that length (its own, or a stored
+//!   sequence's of it, such as an N-padded one) gives the root, and the stored
+//!   sequences of that root of that length (its cognates: the same bases but
+//!   for N) are what it could be;
 //! - a name alone gives the root, without a length to check it by.
 //!
 //! Anything that disagrees is a note: an unknown digest, a length other than
@@ -250,7 +251,15 @@ pub fn identify_entry(e: &Entry, t: &IdentifyTables) -> Identity {
     let roots: Vec<String> = match e.length {
         Some(l) => named
             .iter()
-            .filter(|r| t.root_length.get(*r) == Some(&l))
+            .filter(|r| {
+                // The root's own length, or a stored sequence's of it (a padded one is longer).
+                t.root_length.get(*r) == Some(&l)
+                    || t.of_root
+                        .get(*r)
+                        .into_iter()
+                        .flatten()
+                        .any(|&i| t.stored[i].length == l)
+            })
             .cloned()
             .collect(),
         None => named.clone(),
@@ -277,7 +286,7 @@ pub fn identify_entry(e: &Entry, t: &IdentifyTables) -> Identity {
     } else {
         Evidence::Name
     };
-    id.length = t.root_length.get(&root).copied();
+    id.length = e.length.or_else(|| t.root_length.get(&root).copied());
     // An entry with a digest the store lacks is none of the stored cognates.
     if e.md5.is_none() && e.sq.is_none() {
         let name = e.name.as_deref().unwrap_or_default();
@@ -320,6 +329,7 @@ mod tests {
                 st("SQ.r1n", "ab", 100, "R1", &["iupac_to_n"]),
                 st("SQ.r2", "bb", 50, "R2", &[]),
                 st("SQ.r3", "cc", 50, "R3", &[]),
+                st("SQ.r2p", "bp", 80, "R2", &["pad"]),
             ],
             vec![("R1".into(), 100), ("R2".into(), 50), ("R3".into(), 50)],
             vec![
@@ -327,6 +337,7 @@ mod tests {
                 s("R1", "1"),
                 s("R2", "chrX"),
                 s("R3", "chrX"),
+                s("R2", "X_HAP1"),
             ],
             vec![
                 ("hg".into(), "chr1".into(), "SQ.r1n".into()),
@@ -468,5 +479,19 @@ mod tests {
             identify_entry(&entry(None, Some(100), None), &t).evidence,
             Evidence::Nothing
         );
+    }
+
+    #[test]
+    fn a_padded_length_gives_the_root_and_its_padded_cognates() {
+        let t = tables();
+        let id = identify_entry(&entry(Some("X_HAP1"), Some(80), None), &t);
+        assert_eq!(
+            (id.evidence, id.root_id.as_deref(), id.length),
+            (Evidence::NameAndLength, Some("R2"), Some(80))
+        );
+        assert_eq!(id.cognates, vec!["SQ.r2p"]);
+        assert!(id.notes.is_empty());
+        let root = identify_entry(&entry(Some("X_HAP1"), Some(50), None), &t);
+        assert_eq!(root.cognates, vec!["SQ.r2"]);
     }
 }

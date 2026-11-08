@@ -114,3 +114,48 @@ def test_operations_agree_with_the_reference():
         spans = [(s, s + rng.randrange(0, 40)) for s in (rng.randrange(0, n + 100) for _ in range(rng.randrange(0, 6)))]
         to_n = rng.random() < 0.5
         assert _core.apply_operations(bases, start, spans, to_n) == reference_apply(bases, start, spans, to_n)
+
+
+COMPLEMENT = bytes.maketrans(b"ACGTRYKMBVDHSWN", b"TGCAYRMKVBHDSWN")
+
+
+def reference_pad(root: bytes, before: int, after: int, reverse: bool) -> bytes:
+    """The whole padded sequence, built plainly."""
+    return b"N" * before + (root.translate(COMPLEMENT)[::-1] if reverse else root) + b"N" * after
+
+
+def test_padding_agrees_with_the_reference_on_every_slice():
+    rng = random.Random(11)
+    for _ in range(200):
+        root = bytes(rng.choice(b"ACGTNRYKMSWBDHV") for _ in range(rng.randrange(0, 30)))
+        p = (rng.randrange(0, 12), len(root), rng.randrange(0, 12), rng.random() < 0.5)
+        whole = reference_pad(root, p[0], p[2], p[3])
+        assert _core.pad(root, 0, len(whole), p) == whole
+        for _ in range(20):
+            start = rng.randrange(0, len(whole) + 1)
+            end = rng.randrange(start, len(whole) + 1)
+            a, z = _core.pad_root_range(start, end, p)
+            assert _core.pad(root[a:z], start, end, p) == whole[start:end]
+    with pytest.raises(ValueError, match="root range"):
+        _core.pad(b"ACGT", 0, 11, (3, 5, 3, False))
+
+
+def test_materialize_pads_after_the_masks():
+    """The library's apply_operations: masks in root coordinates, then padding; slices agree with the whole."""
+    from refbook.materialize import apply_operations, root_window
+
+    class Cat:
+        def spans(self, layer):
+            return {"R": [(1, 3)]}
+
+        def padding(self, root):
+            return (4, 6, 2, True)
+
+    root = b"ACGTRA"
+    ops = ["hardmask_x", "iupac_to_n", "pad"]
+    whole = apply_operations(Cat(), "R", ops, root)
+    assert whole == reference_pad(b"ANNTNA", 4, 2, True) == b"NNNNTNANNTNN"
+    for start in range(len(whole) + 1):
+        for end in range(start, len(whole) + 1):
+            a, z = root_window(Cat(), "R", ops, start, end)
+            assert apply_operations(Cat(), "R", ops, root[a:z], start, end) == whole[start:end]

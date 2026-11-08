@@ -29,6 +29,7 @@ from refbook import seqcol
 from . import Refused, engine
 
 IUPAC_TO_N = engine.IUPAC_TO_N
+PAD = engine.PAD
 
 
 def kind(root: str, member: dict | None, releases: set[str], latest: set[str], loose: dict[str, str]) -> str:
@@ -128,9 +129,11 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
                 raise Refused(f"{label} {r['name']}: the recipe compiles to another root")
             ops = compiled[r["name"]][1]
             if ops:  # rebuilding from root and operations, in Python, must give the digests
-                spans = tuple(s for m in ops if m != IUPAC_TO_N for s in tables["spans"][m].get(acc, []))
+                spans = tuple(s for m in ops if m not in (IUPAC_TO_N, PAD) for s in tables["spans"][m].get(acc, []))
                 positions = tuple(tables["iupac"].get(acc, [])) if IUPAC_TO_N in ops else ()
-                if engine.derivative_digests(tables["blocks"], acc, spans, positions) != (r["md5"], r["sha512t24u"]):
+                padding = engine.padding_of(tables, acc, ops)
+                if engine.derivative_digests(tables["blocks"], acc, spans, positions, padding) != (
+                        r["md5"], r["sha512t24u"]):
                     raise Refused(f"{label} {r['name']}: operations {ops} don't give its digests")
             elif (r["md5"], r["sha512t24u"]) != (tables["roots"][acc]["md5"], tables["roots"][acc]["sha512t24u"]):
                 raise Refused(f"{label} {r['name']}: differs from root {acc}, with no operations")
@@ -150,9 +153,10 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
             "assembly": assembly, "patch_release": max(patch_releases) if patch_releases else None,
             "contents": [{"kind": k, "count": n} for k, n in sorted(kinds.items())],
             "excluded": excluded(recipe, members, roots_used),
-            "operations": mask_layers + ([IUPAC_TO_N] if recipe.get("alphabet") else []),
+            "operations": mask_layers + ([IUPAC_TO_N] if recipe.get("alphabet") else [])
+                          + ([PAD] if recipe.get("pad") else []),
             "naming": naming(recipe["rename"]),
-            "recipe": json.dumps({k: recipe[k] for k in ("select", "mask", "alphabet", "rename") if k in recipe},
+            "recipe": json.dumps({k: recipe[k] for k in ("select", "mask", "alphabet", "pad", "rename") if k in recipe},
                                  sort_keys=True),
             "n_targets": len(ts),
         })

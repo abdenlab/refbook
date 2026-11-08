@@ -84,6 +84,7 @@ def test_wasm_compiles_every_recipe_like_python(tmp_path):
         "layers": {name: list(by_root) for name, by_root in t["spans"].items()},
         "external": t["external"],
         "placements": [{"root_id": acc, "parent_type": p} for acc, ps in t["parent_types"].items() for p in ps],
+        "padding": [{"root_id": acc, "revised": p["revised"]} for acc, p in t["padding"].items()],
     }
     got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": tables, "recipes": rs})
     assert len(got["compiled"]) == len(rs) == 17
@@ -115,3 +116,29 @@ def test_wasm_identifies_like_python(tmp_path):
                               "identify": {"tables": tables, "entries": entries}})
     rows = [(e.get("name"), e.get("length"), e.get("md5"), e.get("sq")) for e in entries]
     assert got["identified"] == json.loads(_core.identify_sequences(rows, cat.identify_tables()))
+
+
+def test_wasm_pads_like_python(tmp_path):
+    rng = random.Random(29)
+    pads = []
+    for _ in range(300):
+        n = rng.randrange(0, 60)
+        p = (rng.randrange(0, 40), n, rng.randrange(0, 40), rng.random() < 0.5)
+        total = sum(p[:3])
+        start = rng.randrange(0, total + 1)
+        end = rng.randrange(start, total + 1)
+        a, z = _core.pad_root_range(start, end, p)
+        bases = bytes(rng.choice(b"ACGTNRYKMSWBDHV") for _ in range(z - a))
+        pads.append({"bases": base64.b64encode(bases).decode(), "start": start, "end": end,
+                     "padding": dict(zip(("before", "root_length", "after", "reverse"), p))})
+    pads.append({**pads[0], "bases": base64.b64encode(b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA").decode()})
+    got = run_wasm(tmp_path, {"sequences": [], "collections": [], "tables": None, "recipes": [], "pads": pads})
+    for q, w in zip(pads, got["pads"]):
+        p = tuple(q["padding"][k] for k in ("before", "root_length", "after", "reverse"))
+        try:
+            want = _core.pad(base64.b64decode(q["bases"]), q["start"], q["end"], p)
+        except ValueError as e:
+            assert "error" in w and str(e) == w["error"]
+            continue
+        assert tuple(w["ok"]["range"]) == _core.pad_root_range(q["start"], q["end"], p)
+        assert w["ok"]["bases"].encode("latin1") == want

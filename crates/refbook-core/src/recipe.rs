@@ -13,6 +13,10 @@
 //!     collection's rank order (never materialized).
 //! - `mask`: `[{"layer": <name>, "with": "N"}]`, hard-mask a layer's spans.
 //! - `alphabet`: `{"iupac": "N"}`, every IUPAC code to N.
+//! - `pad`: `{"roles": [...]}`, put each selected member with one of the roles
+//!   (alt scaffolds, patches) in its parent's coordinates, N-padded
+//!   (layer_padding; see operations.rs). It applies after the masks and the
+//!   alphabet change.
 //! - `rename`: `{"namespace", "by_role"?, "map"?, "template"?}`. The map wins,
 //!   then the template for the root's assembly or collection (placeholders
 //!   `{accession}`, `{accession_v}` with "." as "v", `{name}` for an external
@@ -20,8 +24,8 @@
 //!
 //! A recipe defines a named sequence set: no order, no formatting. Other keys
 //! of a recipe (`target`, `published`, ...) are its metadata and are ignored;
-//! a key the grammar doesn't know inside `select`, `mask`, `alphabet` or
-//! `rename` is an error.
+//! a key the grammar doesn't know inside `select`, `mask`, `alphabet`, `pad`
+//! or `rename` is an error.
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -31,6 +35,9 @@ use std::fmt;
 
 /// The operation `alphabet: {"iupac": "N"}` applies.
 pub const IUPAC_TO_N: &str = "iupac_to_n";
+
+/// The operation `pad` applies.
+pub const PAD: &str = "pad";
 
 /// Why a recipe doesn't compile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +67,11 @@ pub enum RecipeError {
     UnsupportedAlphabet(String),
     /// An external root (bases not hosted) that an operation would change.
     ExternalChanged(String),
+    /// A root to pad that layer_padding doesn't place.
+    NotPlaced(String),
+    /// A root to pad whose placement was revised between releases, so its
+    /// padded sequence depends on the release.
+    PlacementRevised(String),
 }
 
 impl fmt::Display for RecipeError {
@@ -86,6 +98,11 @@ impl fmt::Display for RecipeError {
                     "only the alphabet change iupac -> N is implemented, not {a}"
                 )
             }
+            NotPlaced(r) => write!(f, "{r}: no placement to pad it by"),
+            PlacementRevised(r) => write!(
+                f,
+                "{r}: its placement was revised between releases, so padding it is ambiguous"
+            ),
             ExternalChanged(r) => {
                 write!(
                     f,
@@ -168,6 +185,12 @@ pub struct Alphabet {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Pad {
+    pub roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Rename {
     pub namespace: Namespace,
     #[serde(default)]
@@ -184,6 +207,7 @@ pub struct Recipe {
     pub select: Vec<Entry>,
     pub mask: Vec<Mask>,
     pub alphabet: Alphabet,
+    pub pad: Option<Pad>,
     pub rename: Rename,
 }
 
@@ -232,6 +256,10 @@ impl Recipe {
             Some(a) => field(a, "alphabet")?,
             None => Alphabet::default(),
         };
+        let pad = match take(&mut o, "pad") {
+            Some(p) => Some(field(p, "pad")?),
+            None => None,
+        };
         let rename = field(
             take(&mut o, "rename").ok_or(RecipeError::Malformed("no rename".into()))?,
             "rename",
@@ -240,6 +268,7 @@ impl Recipe {
             select,
             mask,
             alphabet,
+            pad,
             rename,
         })
     }
@@ -292,6 +321,8 @@ pub struct Tables {
     pub external: Vec<External>,
     /// Root -> the parent types it is placed on (layer_placements).
     pub parent_types: HashMap<String, HashSet<String>>,
+    /// Root -> whether its placement was revised (layer_padding).
+    pub padding: HashMap<String, bool>,
 }
 
 /// A manifest row: a name, its root, and the operations that make it.
@@ -451,7 +482,8 @@ fn name_of(s: &Selected, rename: &Rename) -> Result<String, RecipeError> {
 /// Compile a recipe: its manifest rows, in canonical order (by name, as bytes).
 /// Each row's operations are the recipe's mask layers that have spans on the
 /// root, in recipe order, then `iupac_to_n` if the alphabet change applies and
-/// the root has IUPAC codes.
+/// the root has IUPAC codes, then `pad` if the root is a member with one of
+/// the roles to pad.
 pub fn compile(recipe: &Recipe, t: &Tables) -> Result<Vec<Row>, RecipeError> {
     for m in &recipe.mask {
         if m.with != "N" {
@@ -485,6 +517,15 @@ pub fn compile(recipe: &Recipe, t: &Tables) -> Result<Vec<Row>, RecipeError> {
             .collect();
         if to_n && t.iupac.contains(s.root_id) {
             operations.push(IUPAC_TO_N.into());
+        }
+        if let (Some(pad), Via::Member(m)) = (&recipe.pad, &s.via)
+            && pad.roles.contains(&m.role)
+        {
+            match t.padding.get(s.root_id) {
+                None => return Err(RecipeError::NotPlaced(s.root_id.into())),
+                Some(true) => return Err(RecipeError::PlacementRevised(s.root_id.into())),
+                Some(false) => operations.push(PAD.into()),
+            }
         }
         if matches!(s.via, Via::External(_)) && !operations.is_empty() {
             return Err(RecipeError::ExternalChanged(s.root_id.into()));
@@ -548,6 +589,12 @@ mod tests {
                 ("A1.1".to_string(), set(&["chromosome"])),
                 ("F1.1".to_string(), set(&["chromosome"])),
                 ("F2.1".to_string(), set(&["scaffold"])),
+            ]
+            .into(),
+            padding: [
+                ("A1.1".to_string(), false),
+                ("F1.1".to_string(), false),
+                ("F2.1".to_string(), true),
             ]
             .into(),
         }
@@ -711,5 +758,42 @@ mod tests {
         .unwrap();
         assert_eq!(r.rename.namespace, Namespace::Grc);
         assert_eq!(r.rename.namespace.to_string(), "grc");
+    }
+
+    #[test]
+    fn pad() {
+        let recipe = |roles: &str, accessions: &str| {
+            format!(
+                r#"{{"select": [{{"assembly": "GCA_1.1", "roles": ["assembled-molecule", "alt-scaffold", "fix-patch"], "accessions": {accessions}}}],
+                   "mask": [{{"layer": "hardmask_x", "with": "N"}}],
+                   "pad": {{"roles": {roles}}}, "rename": {{"namespace": "ucsc"}}}}"#
+            )
+        };
+        assert_eq!(
+            compiled(&recipe(
+                r#"["alt-scaffold", "fix-patch"]"#,
+                r#"["C1.1", "A1.1", "F1.1"]"#
+            ))
+            .unwrap(),
+            vec![
+                ("chr1".into(), "C1.1".into(), vec![]),
+                ("chr1_A1v1_alt".into(), "A1.1".into(), vec!["pad".into()]),
+                ("chr1_F1v1_fix".into(), "F1.1".into(), vec!["pad".into()]),
+            ]
+        );
+        // F2.1's placement was revised.
+        assert_eq!(
+            compiled(&recipe(r#"["fix-patch"]"#, r#"["F2.1"]"#)),
+            Err(RecipeError::PlacementRevised("F2.1".into()))
+        );
+        // C1.1 isn't placed.
+        assert_eq!(
+            compiled(&recipe(r#"["assembled-molecule"]"#, r#"["C1.1"]"#)),
+            Err(RecipeError::NotPlaced("C1.1".into()))
+        );
+        assert!(matches!(
+            compiled(r#"{"select": [], "pad": {"role": []}, "rename": {"namespace": "ucsc"}}"#),
+            Err(RecipeError::Malformed(_))
+        ));
     }
 }

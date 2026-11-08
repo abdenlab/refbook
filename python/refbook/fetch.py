@@ -43,7 +43,7 @@ import pyarrow as pa
 
 from refbook.blocks import BLOCK_SIZE
 from refbook.catalog import Catalog
-from refbook.materialize import Bases, apply_operations
+from refbook.materialize import Bases, apply_operations, root_window
 from refbook.resolve import collection as resolve_collection
 
 COMPLEMENT = bytes.maketrans(b"ACGTRYKMBDHVSWN", b"TGCAYRMKVHDBSWN")
@@ -114,11 +114,14 @@ def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: s
 
     bases = bases or Bases(cat)
     roots = [seqs[n]["root_id"] for n in names]
+    # The root bases each interval is made from: its own bounds, unless its sequence is padded.
+    win = [root_window(cat, r, seqs[n]["operations"], a, z) for r, n, a, z in zip(roots, names, lo, hi)]
+    rlo, rhi = [w[0] for w in win], [w[1] for w in win]
     if engine == "auto":
         engine = "datafusion" if reader is not None or (_have_datafusion() and not cat.remote) else "pyarrow"
     blocks = None
     if engine == "datafusion":
-        need = {(r, k * BLOCK_SIZE) for r, a, z in zip(roots, lo, hi) if r in bases.row_groups and z > a
+        need = {(r, k * BLOCK_SIZE) for r, a, z in zip(roots, rlo, rhi) if r in bases.row_groups and z > a
                 for k in range(a // BLOCK_SIZE, (z - 1) // BLOCK_SIZE + 1)}
         blocks = (reader or DataFusionBlocks(cat)).get(sorted(need))
     elif engine != "pyarrow":
@@ -126,29 +129,29 @@ def fetch(cat: Catalog, collection, intervals, *, chrom: str = "chrom", start: s
 
     out = [None] * table.num_rows
     # Visit intervals in genome order so row groups are read once; write back in input order.
-    order = sorted(range(table.num_rows), key=lambda i: (roots[i], lo[i]))
+    order = sorted(range(table.num_rows), key=lambda i: (roots[i], rlo[i]))
     if blocks is None and bases.http is not None:
         # Over HTTP: prefetch the row groups in visit order, 64 at a time, concurrently.
         needed = []
         for i in order:
-            if roots[i] in bases.row_groups and hi[i] > lo[i]:
-                needed += [g for g in bases.row_groups_for(roots[i], lo[i], hi[i]) if g not in needed[-8:]]
+            if roots[i] in bases.row_groups and rhi[i] > rlo[i]:
+                needed += [g for g in bases.row_groups_for(roots[i], rlo[i], rhi[i]) if g not in needed[-8:]]
         needed = list(dict.fromkeys(needed))
         batches = {g: k // 64 for k, g in enumerate(needed)}
         fetched = None
     for i in order:
         root = roots[i]
-        if blocks is None and bases.http is not None and root in bases.row_groups and hi[i] > lo[i]:
-            batch = batches[bases.row_groups_for(root, lo[i], hi[i])[0]]
+        if blocks is None and bases.http is not None and root in bases.row_groups and rhi[i] > rlo[i]:
+            batch = batches[bases.row_groups_for(root, rlo[i], rhi[i])[0]]
             if batch != fetched:
                 bases._cache.clear()
                 bases.prefetch(needed[batch * 64:(batch + 1) * 64])
                 fetched = batch
         if blocks is not None and root in bases.row_groups:
-            b = _from_blocks(blocks, root, lo[i], hi[i])
+            b = _from_blocks(blocks, root, rlo[i], rhi[i])
         else:
-            b = bases.slice(root, lo[i], hi[i])
-        b = apply_operations(cat, root, seqs[names[i]]["operations"], b, lo[i])
+            b = bases.slice(root, rlo[i], rhi[i])
+        b = apply_operations(cat, root, seqs[names[i]]["operations"], b, lo[i], hi[i])
         if strands[i] == "-":
             b = b.translate(COMPLEMENT)[::-1]
         out[i] = b.decode("ascii")

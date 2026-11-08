@@ -12,8 +12,10 @@
 - layer_hardmask_grc   the spans the GRC's analysis sets replace with N, each with its unmasked cognate
 - layer_par_y          chrY's pseudoautosomal regions, from the region definitions: what an edition writes as N
                        when it masks only the PARs
+- layer_padding        each alt scaffold's and patch's placement in the latest release that places it, and its
+                       parent's length: what the `pad` operation (N-padding into the parent's coordinates) reads
 
-The root-keyed layers (AGP, hard-mask, PAR) serve every book whose roots they cover. Regions and placements are
+The root-keyed layers (AGP, hard-mask, PAR, padding) serve every book whose roots they cover. Regions and placements are
 numbered by release, which means something only within a book, so the catalog's
 tables carry the book. Each function refuses what the reports don't bear out, and returns its notes (what it
 accepted and why) for the record.
@@ -279,3 +281,27 @@ def build_par_y(regions: pa.Table, members: list[dict]) -> pa.Table:
     rows = sorted(spans.items(), key=lambda kv: (kv[0][0], kv[1]))
     return pa.table({"root_id": [k[0] for k, _ in rows], "start": [s for _, (s, _) in rows],
                      "end": [e for _, (_, e) in rows], "name": [k[1] for k, _ in rows]})
+
+
+def build_padding(placements: pa.Table, length: dict[str, int]) -> pa.Table:
+    """layer_padding: for each placed root, the placement `pad` lays it out by (operations.rs: N for the parent's
+    bases before parent_start, the whole root, reverse-complemented if orientation is "-", then N up to
+    parent_length): the one in the latest release that places it. `revised` marks a root whose placement on its
+    parent differs between releases; the recipe compiler refuses to pad it, since its padded sequence would depend
+    on the release."""
+    by_root = {}
+    for p in placements.to_pylist():
+        by_root.setdefault(p["root_id"], []).append(p)
+    cols = {k: [] for k in ("root_id", "parent_id", "parent_start", "parent_end", "orientation", "parent_length",
+                            "revised")}
+    for root, ps in sorted(by_root.items()):
+        latest = max(ps, key=lambda p: p["last_release"])
+        if latest["parent_id"] not in length:
+            raise Refused(f"{root}: its parent {latest['parent_id']} is not a root")
+        if latest["parent_end"] > length[latest["parent_id"]]:
+            raise Refused(f"{root}: placed past the end of {latest['parent_id']}")
+        layouts = {(p["parent_id"], p["parent_start"], p["parent_end"], p["orientation"]) for p in ps}
+        for k, v in zip(cols, (root, latest["parent_id"], latest["parent_start"], latest["parent_end"],
+                               latest["orientation"], length[latest["parent_id"]], len(layouts) > 1)):
+            cols[k].append(v)
+    return pa.table(cols)

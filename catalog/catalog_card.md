@@ -51,7 +51,7 @@ All coordinates are 0-based, half-open. Sequence digests follow GA4GH refget
 | `root_blocks.parquet` | The bases of every root, uppercase with IUPAC codes kept, in 64 kb blocks, laid out for HTTP range reads |
 | `assembly_members.parquet` | Every row of every GRCh38 and hs38d1 assembly report |
 | `aliases.parquet` | Names of each root in the GenBank, RefSeq, UCSC, GRC, Ensembl and IMGT namespaces |
-| `layer_*.parquet` | Annotations in root coordinates: AGP components and gaps, alt/patch placements, named regions (centromeres, PARs), the GRC hard-masks, IUPAC positions, N runs, NCBI soft-masking |
+| `layer_*.parquet` | Annotations in root coordinates: AGP components and gaps, alt/patch placements and the padding they give, named regions (centromeres, PARs), chrY's PARs, the GRC hard-masks, IUPAC positions, N runs, NCBI soft-masking |
 | `sequences.parquet` | The sequence store: every distinct sequence (each root, and each masked or IUPAC→N derivative), by `SQ.` digest and MD5, with the root and nucleotide operations it is made from |
 | `derivations.parquet` | Every known way to make each sequence, and the editions that use it |
 | `editions.parquet` | Each edition: label, identifier (an order-independent digest of its named sequences), seqcol digest, recipe, and facets (contents, operations, naming) |

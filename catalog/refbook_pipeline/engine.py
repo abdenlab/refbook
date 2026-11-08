@@ -12,6 +12,8 @@ A recipe (catalog/books/<book>/recipes/*.json) is data:
            roots, roots_external.parquet, in their collection's rank order; never materialized)
 - mask     [{"layer": <name>, "with": "N"}]: hard-mask the spans of layer_<name> that fall on selected roots
 - alphabet {"iupac": "N"}: replace every IUPAC code (layer_iupac) with N
+- pad      {"roles": [...]}: lay each selected member with one of the roles into its parent's coordinates, N-padded
+           (layer_padding), after the masks and the alphabet change
 - rename   {"namespace": "ucsc", "by_role": {role: namespace}, "map": {root: name}, "template": {assembly or
            collection: "...{accession_v}..."}}; map wins, then template (for that assembly's roots; accession_v is
            the accession with "." -> "v", name an external root's name), then the by_role namespace for the root's
@@ -37,6 +39,7 @@ from refbook.blocks import row_groups_by_root
 from . import Refused
 
 IUPAC_TO_N = "iupac_to_n"
+PAD = "pad"
 
 
 @functools.cache
@@ -52,26 +55,48 @@ def root_bases(blocks: Path, acc: str) -> bytes:
     return b"".join(b.encode() for _, b in sorted(zip(t["start"].to_pylist(), t["bases"].to_pylist())))
 
 
-def apply_operations(bases: bytes, spans: list[tuple[int, int]], positions: list[int]) -> bytes:
-    """A root's bases with the masked spans (0-based half-open) and the given positions (IUPAC -> N) set to N:
-    in Python, independently of the core, as a check on it."""
+COMPLEMENT = bytes.maketrans(b"ACGTRYKMBVDHacgtrykmbvdh", b"TGCAYRMKVBHDtgcayrmkvbhd")
+
+
+def apply_operations(bases: bytes, spans: list[tuple[int, int]], positions: list[int],
+                     padding: tuple | None = None) -> bytes:
+    """A root's bases with the masked spans (0-based half-open) and the given positions (IUPAC -> N) set to N, then,
+    with a padding (before, root_length, after, reverse), laid out N-padded: in Python, independently of the core,
+    as a check on it."""
     out = bytearray(bases)
     for start, end in spans:
         out[start:end] = b"N" * (end - start)
     for p in positions:
         out[p] = ord("N")
+    if padding:
+        before, root_length, after, reverse = padding
+        assert root_length == len(out)
+        middle = bytes(out).translate(COMPLEMENT)[::-1] if reverse else bytes(out)
+        return b"N" * before + middle + b"N" * after
     return bytes(out)
 
 
 @functools.cache
-def derivative_digests(blocks: Path, acc: str, spans: tuple, positions: tuple) -> tuple[str, str]:
+def derivative_digests(blocks: Path, acc: str, spans: tuple, positions: tuple,
+                       padding: tuple | None = None) -> tuple[str, str]:
     """Digests of a root after operations, by the Python apply_operations. Cached: editions share derivatives."""
-    return refget.digests(apply_operations(root_bases(blocks, acc), spans, positions))
+    return refget.digests(apply_operations(root_bases(blocks, acc), spans, positions, padding))
 
 
 @functools.cache
-def _derived(blocks: Path, acc: str, spans: tuple, to_n: bool) -> tuple[str, str]:
-    return refget.digests(_core.apply_operations(root_bases(blocks, acc), 0, list(spans), to_n))
+def _derived(blocks: Path, acc: str, spans: tuple, to_n: bool, padding: tuple | None) -> tuple[str, str]:
+    b = _core.apply_operations(root_bases(blocks, acc), 0, list(spans), to_n)
+    if padding:
+        b = _core.pad(b, 0, sum(padding[:3]), padding)
+    return refget.digests(b)
+
+
+def padding_of(t: dict, acc: str, ops: list[str]) -> tuple | None:
+    """The (before, root_length, after, reverse) a row's `pad` lays its root out by, or None without `pad`."""
+    if PAD not in ops:
+        return None
+    p = t["padding"][acc]
+    return (p["parent_start"], t["roots"][acc]["length"], p["parent_length"] - p["parent_end"], p["orientation"] == "-")
 
 
 def compile(recipe: dict, t: dict) -> list[tuple[str, str, list[str]]]:
@@ -89,11 +114,12 @@ def run(recipe: dict, t: dict) -> list[dict]:
     for name, acc, ops in compile(recipe, t):
         r = t["roots"][acc]
         md5, sq = r["md5"], r["sha512t24u"]
+        padding = padding_of(t, acc, ops)
         if ops:
-            spans = tuple(s for op in ops if op != IUPAC_TO_N for s in t["spans"][op].get(acc, ()))
-            md5, sq = _derived(t["blocks"], acc, spans, IUPAC_TO_N in ops)
+            spans = tuple(s for op in ops if op not in (IUPAC_TO_N, PAD) for s in t["spans"][op].get(acc, ()))
+            md5, sq = _derived(t["blocks"], acc, spans, IUPAC_TO_N in ops, padding)
         out.append({"target": recipe["target"], "name": name, "root_id": acc, "operations": ops,
-                    "length": r["length"], "md5": md5, "sha512t24u": sq})
+                    "length": sum(padding[:3]) if padding else r["length"], "md5": md5, "sha512t24u": sq})
     return out
 
 
@@ -128,7 +154,7 @@ def in_observed_order(got: list[dict], observed: list[dict]) -> list[dict]:
 
 def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
     """The tables run() needs. `paths` gives assembly_members, roots, roots_external, root_blocks, layer_iupac,
-    layer_placements and layer_<name> for every layer a recipe masks with."""
+    layer_placements, layer_padding and layer_<name> for every layer a recipe masks with."""
     members = pq.read_table(paths["assembly_members"]).to_pylist()
     cols = ["root_id", "length", "md5", "sha512t24u", "n_iupac"]
     roots = {r["root_id"]: r for r in pq.read_table(paths["roots"], columns=cols).to_pylist()}
@@ -148,20 +174,23 @@ def load_tables(paths: dict[str, Path], recipes: list[dict]) -> dict:
     parent_types = defaultdict(set)
     for p in pq.read_table(paths["layer_placements"], columns=["root_id", "parent_type"]).to_pylist():
         parent_types[p["root_id"]].add(p["parent_type"])
+    padding = {p["root_id"]: p for p in pq.read_table(paths["layer_padding"]).to_pylist()}
     compiler = _core.RecipeTables(
         members=[(m["assembly_accession"], m["genbank_accession"], m["role"], m["ucsc_name"],
                   m["sequence_name"], m["refseq_accession"]) for m in members],
         roots=list(roots), iupac=[acc for acc, r in roots.items() if r["n_iupac"]],
         layers={name: list(by_root) for name, by_root in spans.items()},
         external=[(e["root_id"], e["collection"], e["group"], e["name"]) for e in external],
-        placements=[(acc, p) for acc, ps in parent_types.items() for p in sorted(ps)])
+        placements=[(acc, p) for acc, ps in parent_types.items() for p in sorted(ps)],
+        padding=[(acc, p["revised"]) for acc, p in padding.items()])
     return {"members": members, "roots": roots, "spans": spans, "iupac": iupac, "external": external,
-            "parent_types": parent_types, "compiler": compiler, "blocks": paths["root_blocks"]}
+            "parent_types": parent_types, "padding": padding, "compiler": compiler, "blocks": paths["root_blocks"]}
 
 
 def table_paths(published: dict[str, Path], recipes: list[dict]) -> dict[str, Path]:
     """The tables load_tables reads, by its names, from the catalog's published files (export.published): what a
     build or a release holds."""
-    names = ["assembly_members", "roots", "root_blocks", "layer_iupac", "roots_external", "layer_placements"]
+    names = ["assembly_members", "roots", "root_blocks", "layer_iupac", "roots_external", "layer_placements",
+             "layer_padding"]
     names += sorted({f"layer_{m['layer']}" for r in recipes for m in r.get("mask", [])})
     return {n: published[f"{n}.parquet"] for n in names}

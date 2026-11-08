@@ -249,6 +249,49 @@ fn apply_operations<'py>(
     PyBytes::new(py, &out)
 }
 
+/// A padding as (before, root_length, after, reverse): `before` Ns, the root
+/// (reverse-complemented if reverse), then `after` Ns.
+type PaddingIn = (usize, usize, usize, bool);
+
+fn padding((before, root_length, after, reverse): PaddingIn) -> operations::Padding {
+    operations::Padding {
+        before,
+        root_length,
+        after,
+        reverse,
+    }
+}
+
+/// The root bases (0-based half-open, root coordinates) that bases start..end
+/// of a padded sequence show.
+#[pyfunction]
+fn pad_root_range(start: usize, end: usize, padding_: PaddingIn) -> (usize, usize) {
+    padding(padding_).root_range(start, end)
+}
+
+/// Bases start..end of a padded sequence, from the root's bases at
+/// pad_root_range(start, end, padding) (with the other operations applied).
+#[pyfunction]
+fn pad<'py>(
+    py: Python<'py>,
+    bases: &[u8],
+    start: usize,
+    end: usize,
+    padding_: PaddingIn,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let p = padding(padding_);
+    let (a, z) = p.root_range(start, end);
+    if bases.len() != z - a {
+        return Err(PyValueError::new_err(format!(
+            "pad: {} bases given, the root range {a}..{z} has {}",
+            bases.len(),
+            z - a
+        )));
+    }
+    let out = py.detach(|| p.pad(bases, start, end));
+    Ok(PyBytes::new(py, &out))
+}
+
 create_exception!(
     _core,
     RecipeError,
@@ -270,13 +313,14 @@ type MemberRow = (
 /// sequence_name, refseq_accession) in report order; every root id; the roots
 /// with IUPAC codes; mask layer -> the roots it has spans on; external roots
 /// as (root_id, collection, group, name) in rank order; placements as
-/// (root_id, parent_type).
+/// (root_id, parent_type); padding as (root_id, revised), from layer_padding.
 #[pyclass(frozen)]
 struct RecipeTables(recipe::Tables);
 
 #[pymethods]
 impl RecipeTables {
     #[new]
+    #[pyo3(signature = (members, roots, iupac, layers, external, placements, padding=vec![]))]
     fn new(
         members: Vec<MemberRow>,
         roots: Vec<String>,
@@ -284,6 +328,7 @@ impl RecipeTables {
         layers: std::collections::HashMap<String, Vec<String>>,
         external: Vec<(String, String, String, Option<String>)>,
         placements: Vec<(String, String)>,
+        padding: Vec<(String, bool)>,
     ) -> Self {
         let mut parent_types =
             std::collections::HashMap::<String, std::collections::HashSet<String>>::new();
@@ -322,6 +367,7 @@ impl RecipeTables {
                 })
                 .collect(),
             parent_types,
+            padding: padding.into_iter().collect(),
         })
     }
 }
@@ -420,6 +466,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(seqcol_top_level_digest, m)?,
         wrap_pyfunction!(seqcol_compare, m)?,
         wrap_pyfunction!(apply_operations, m)?,
+        wrap_pyfunction!(pad_root_range, m)?,
+        wrap_pyfunction!(pad, m)?,
         wrap_pyfunction!(compile_recipe, m)?,
         wrap_pyfunction!(identify_sequences, m)?,
     ] {

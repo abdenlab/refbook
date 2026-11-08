@@ -157,14 +157,36 @@ def _read_imgt_fasta(path: Path) -> dict[tuple[str, str], bytes]:
     return out
 
 
+PAD = "pad"
+IUPAC_TO_N = "iupac_to_n"
+
+
+def root_window(cat: Catalog, root: str, operations: list[str], start: int, end: int) -> tuple[int, int]:
+    """The root bases [a, b) that bases [start, end) of a sequence (a root and its operations) are made from:
+    the same, unless the sequence is padded."""
+    if PAD in operations:
+        return _core.pad_root_range(start, end, cat.padding(root))
+    return start, end
+
+
 def apply_operations(cat: Catalog, root: str, operations: list[str], b: bytes,
-                     start: int = 0) -> bytes:
-    """Bases b of a root, starting at `start`, with nucleotide operations applied:
-    a mask layer's spans set to N, and iupac_to_n. Both write N, so their order
-    doesn't matter. Implemented in the Rust core (crates/refbook-core/src/operations.rs)."""
-    spans = [span for op in operations if op != "iupac_to_n"
+                     start: int = 0, end: int | None = None) -> bytes:
+    """Bases [start, end) of a sequence (a root and its operations) from b, the root's bases at
+    root_window(start, end); end defaults to start + len(b), or for a padded sequence given its whole root, to its
+    length. The operations: a mask layer's spans set to N and iupac_to_n (both write N, so their order doesn't
+    matter), then pad, which lays the root out in its parent's coordinates. Implemented in the Rust core
+    (crates/refbook-core/src/operations.rs)."""
+    spans = [span for op in operations if op not in (IUPAC_TO_N, PAD)
              for span in cat.spans(op).get(root, ())]
-    return _core.apply_operations(bytes(b), start, spans, "iupac_to_n" in operations)
+    if PAD not in operations:
+        return _core.apply_operations(bytes(b), start, spans, IUPAC_TO_N in operations)
+    p = cat.padding(root)
+    if end is None:
+        if start != 0 or len(b) != p[1]:
+            raise ValueError(f"{root}: give the end of a padded slice")
+        end = sum(p[:3])
+    a, _ = _core.pad_root_range(start, end, p)
+    return _core.pad(_core.apply_operations(bytes(b), a, spans, IUPAC_TO_N in operations), start, end, p)
 
 
 def sequence_bases(cat: Catalog, sq: str, bases: "Bases", verify: bool = True) -> bytes:

@@ -107,3 +107,23 @@ def test_par_y_takes_the_par_regions_on_the_y_chromosome_only():
                            members)
     with pytest.raises(Refused, match="no PAR regions"):
         layers.build_par_y(pa.Table.from_pylist(regions[:1]), members)
+
+
+def test_padding_takes_the_latest_placement_and_marks_revised_ones():
+    import pyarrow as pa
+    def placement(root, start, end, first, last, ori="+", parent="C.1"):
+        return {"root_id": root, "parent_id": parent, "parent_start": start, "parent_end": end, "orientation": ori,
+                "first_release": first, "last_release": last}
+    length = {"C.1": 1000, "A.1": 50, "P.1": 40}
+    t = layers.build_padding(pa.Table.from_pylist([
+        placement("P.1", 100, 140, 2, 5), placement("P.1", 90, 140, 6, 14),
+        placement("A.1", 500, 560, 0, 14, ori="-")]), length).to_pylist()
+    assert t == [
+        {"root_id": "A.1", "parent_id": "C.1", "parent_start": 500, "parent_end": 560, "orientation": "-",
+         "parent_length": 1000, "revised": False},
+        {"root_id": "P.1", "parent_id": "C.1", "parent_start": 90, "parent_end": 140, "orientation": "+",
+         "parent_length": 1000, "revised": True}]
+    with pytest.raises(Refused, match="past the end"):
+        layers.build_padding(pa.Table.from_pylist([placement("A.1", 990, 1010, 0, 14)]), length)
+    with pytest.raises(Refused, match="not a root"):
+        layers.build_padding(pa.Table.from_pylist([placement("A.1", 9, 10, 0, 14, parent="Z.1")]), length)

@@ -18,7 +18,7 @@ The functions refget Sequences v2 needs, over a catalog:
 import re
 
 from refbook.catalog import Catalog
-from refbook.materialize import Bases, apply_operations
+from refbook.materialize import Bases, apply_operations, root_window
 
 MD5 = re.compile(r"[0-9a-fA-F]{32}")
 
@@ -64,5 +64,5 @@ def subsequence(cat: Catalog, sq: str, start: int, end: int, bases: Bases) -> by
     rec = cat.sequence[sq]
     if not 0 <= start <= end <= rec["length"]:
         raise ValueError(f"{start}-{end} is outside {sq} (length {rec['length']})")
-    root = rec["root_id"]
-    return apply_operations(cat, root, rec["operations"], bases.slice(root, start, end), start)
+    root, ops = rec["root_id"], rec["operations"]
+    return apply_operations(cat, root, ops, bases.slice(root, *root_window(cat, root, ops, start, end)), start, end)

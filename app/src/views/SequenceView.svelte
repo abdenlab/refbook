@@ -7,7 +7,8 @@
   // them 0-based, half-open (?start=&end=), and follows the view.
   import type { Blocks } from "../data/blocks.ts";
   import type { Catalog } from "../data/catalog.ts";
-  import { IUPAC_TO_N, manifest, OPERATION_LABELS, region, spans, type ManifestRow } from "../data/editions.ts";
+  import { IUPAC_TO_N, PAD, manifest, onSequence, OPERATION_LABELS, padding, region, rootWindow, spans,
+           type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { bp, n } from "../format.ts";
   import { href } from "../route.svelte.ts";
@@ -24,23 +25,30 @@
   type Span = [number, number];
   const runs = () => cat.table<{ root_id: string; start: number; end: number }>("layer_n_runs.parquet");
 
-  /** Where to start by default: after a leading run of N (chromosomes begin with telomere gaps). */
-  async function firstBase(row: ManifestRow): Promise<number> {
-    const lead = (await runs()).find((r) => r.root_id === row.root_id && r.start === 0);
-    return lead && lead.end < row.length ? lead.end : 0;
+  /** Where to start by default: after a leading run of N (chromosomes begin with telomere gaps; a padded
+   * sequence, with its padding). */
+  function firstBase(row: ManifestRow, gaps: Span[]): number {
+    let at = 0;
+    for (const [s, e] of gaps) if (s <= at && e > at) at = e;
+    return at < row.length ? at : 0;
   }
 
-  /** What the overview draws: the runs of N, and the spans the edition's operations change. */
+  /** What the overview draws, in the sequence's coordinates: the runs of N (padding among them), and the spans the
+   * edition's operations change. */
   async function tracks(row: ManifestRow): Promise<{ gaps: Span[]; changed: Span[] }> {
-    const gaps = (await runs()).filter((r) => r.root_id === row.root_id).map((r) => [r.start, r.end] as Span);
+    const p = await padding(cat, row);
+    const gaps = (await runs()).filter((r) => r.root_id === row.root_id).map((r) => onSequence(p, [r.start, r.end]));
+    if (p) gaps.push([0, p.before], [p.before + p.root_length, row.length]);
     const changed: Span[] = [];
     for (const op of row.operations) {
+      if (op === PAD) continue;
       if (op === IUPAC_TO_N) {
         const codes = await cat.table<{ root_id: string; pos: number }>("layer_iupac.parquet");
-        changed.push(...codes.filter((c) => c.root_id === row.root_id).map((c) => [c.pos, c.pos + 1] as Span));
-      } else changed.push(...(await spans(cat, op, row.root_id)).map(([s, e]) => [s, e] as Span));
+        changed.push(...codes.filter((c) => c.root_id === row.root_id).map((c) => onSequence(p, [c.pos, c.pos + 1])));
+      } else changed.push(...(await spans(cat, op, row.root_id)).map((s) => onSequence(p, s)));
     }
-    return { gaps, changed: changed.sort((a, b) => a[0] - b[0]) };
+    const sorted = (xs: Span[]) => xs.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
+    return { gaps: sorted(gaps), changed: sorted(changed) };
   }
 
   const loaded = $derived((async () => {
@@ -49,8 +57,8 @@
     const store = await blocks();
     if (!store.hosts(row.root_id)) return { row, store, hosted: false as const };
     const asked = query.has("start") ? Math.max(0, Math.min(row.length - 1, Number(query.get("start")))) : null;
-    const top = asked ?? (await firstBase(row));
-    return { row, store, hosted: true as const, top, ...(await tracks(row)) };
+    const t = await tracks(row);
+    return { row, store, hosted: true as const, top: asked ?? firstBase(row, t.gaps), ...t };
   })());
 
   let scroller = $state<BaseScroller>();
@@ -119,7 +127,7 @@
       <div class="view">
         <BaseScroller bind:this={scroller} length={row.length} {top} {mark} submitted={unmasked} {onview} onmove={(s, e) => (view = [s, e])}
                       read={(s, e) => measure(`bases ${name}:${n(s + 1)}-${n(e)}`, () => region(cat, store, row, s, e))}
-                      warm={(s, e) => void store.read(row.root_id, s, e).catch(() => {})} />
+                      warm={(s, e) => void rootWindow(cat, row, s, e).then(([a, z]) => store.read(row.root_id, a, z)).catch(() => {})} />
       </div>
     {/if}
   {:catch e}

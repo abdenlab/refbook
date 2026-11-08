@@ -260,6 +260,50 @@ pub fn apply_operations(
     Ok(b)
 }
 
+#[derive(Deserialize)]
+struct PaddingIn {
+    before: usize,
+    root_length: usize,
+    after: usize,
+    reverse: bool,
+}
+
+impl From<PaddingIn> for operations::Padding {
+    fn from(p: PaddingIn) -> Self {
+        operations::Padding {
+            before: p.before,
+            root_length: p.root_length,
+            after: p.after,
+            reverse: p.reverse,
+        }
+    }
+}
+
+/// The root bases ([start, end], 0-based half-open, root coordinates) that
+/// bases start..end of a padded sequence show.
+#[wasm_bindgen(js_name = padRootRange)]
+pub fn pad_root_range(start: usize, end: usize, padding: JsValue) -> Result<Vec<usize>, JsError> {
+    let p: operations::Padding = from_js::<PaddingIn>(padding, "padding")?.into();
+    let (a, z) = p.root_range(start, end);
+    Ok(vec![a, z])
+}
+
+/// Bases start..end of a padded sequence, from the root's bases at
+/// padRootRange(start, end, padding) (with the other operations applied).
+#[wasm_bindgen]
+pub fn pad(bases: &[u8], start: usize, end: usize, padding: JsValue) -> Result<Vec<u8>, JsError> {
+    let p: operations::Padding = from_js::<PaddingIn>(padding, "padding")?.into();
+    let (a, z) = p.root_range(start, end);
+    if bases.len() != z - a {
+        return Err(JsError::new(&format!(
+            "pad: {} bases given, the root range {a}..{z} has {}",
+            bases.len(),
+            z - a
+        )));
+    }
+    Ok(p.pad(bases, start, end))
+}
+
 // the recipe compiler
 
 #[derive(Deserialize)]
@@ -287,6 +331,12 @@ struct PlacementRow {
 }
 
 #[derive(Deserialize)]
+struct PaddingRow {
+    root_id: String,
+    revised: bool,
+}
+
+#[derive(Deserialize)]
 struct TablesIn {
     members: Vec<MemberRow>,
     roots: Vec<String>,
@@ -296,6 +346,8 @@ struct TablesIn {
     external: Vec<ExternalRow>,
     #[serde(default)]
     placements: Vec<PlacementRow>,
+    #[serde(default)]
+    padding: Vec<PaddingRow>,
 }
 
 /// The catalog tables the recipe compiler reads, built once and shared by
@@ -305,7 +357,7 @@ struct TablesIn {
 /// every root id; iupac the roots with IUPAC codes; layers a mask layer's
 /// name -> the roots it has spans on; external roots_external rows (root_id,
 /// collection, group, name) in rank order; placements layer_placements rows
-/// (root_id, parent_type).
+/// (root_id, parent_type); padding layer_padding rows (root_id, revised).
 #[wasm_bindgen]
 pub struct RecipeTables(recipe::Tables);
 
@@ -352,6 +404,11 @@ impl RecipeTables {
                 })
                 .collect(),
             parent_types,
+            padding: t
+                .padding
+                .into_iter()
+                .map(|p| (p.root_id, p.revised))
+                .collect(),
         }))
     }
 }

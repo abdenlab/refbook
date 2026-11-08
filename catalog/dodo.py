@@ -496,7 +496,7 @@ def task_export():
                         "help": "accept a root check that didn't consult ENA (not a release)"}]}
 
 
-LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_par_y", "layer_hardmask_grc"]
+LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_par_y", "layer_padding", "layer_hardmask_grc"]
 
 
 def task_layers():
@@ -522,7 +522,8 @@ def task_layers():
                 regions, spans = layers.build_regions(rels, ms, set(book.region_quirks))
                 placements, notes = layers.build_placements(rels, ms, length, spans)
                 tables = {"layer_agp": agp, "layer_regions": regions, "layer_placements": placements,
-                          "layer_par_y": layers.build_par_y(regions, ms)}
+                          "layer_par_y": layers.build_par_y(regions, ms),
+                          "layer_padding": layers.build_padding(placements, length)}
                 if mask:
                     tables["layer_hardmask_grc"] = layers.build_hardmask_grc(mask_file, length, regions,
                                                                            mask["par_root"])
@@ -543,7 +544,7 @@ def task_layers():
         dep = reads(srcs + mask_src)
         yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
                "file_dep": [table, lengths] + files + dep["file_dep"] + code("layers", "members"),
-               "targets": [out / f"{n}.parquet" for n in LAYERS[:4] + (LAYERS[4:] if mask else [])]
+               "targets": [out / f"{n}.parquet" for n in LAYERS[:5] + (LAYERS[5:] if mask else [])]
                           + [out / "notes.json", out / "inputs.json"]}
 
 

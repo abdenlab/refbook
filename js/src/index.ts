@@ -132,6 +132,26 @@ export const seqcolCompare = (a: Collection, b: Collection): Comparison => core.
 export const applyOperations = (bases: Uint8Array, start: number, spans: Span[], toN: boolean): Uint8Array =>
   core.applyOperations(bases, start, spans, toN);
 
+/** How a padded sequence lays out its root: `before` Ns, the root
+ * (reverse-complemented if `reverse`), then `after` Ns. */
+export interface Padding {
+  before: number;
+  root_length: number;
+  after: number;
+  reverse: boolean;
+}
+
+/** The root bases [start, end) that bases start..end of a padded sequence show. */
+export const padRootRange = (start: number, end: number, padding: Padding): Span => {
+  const [a, z] = core.padRootRange(start, end, padding);
+  return [a, z];
+};
+
+/** Bases start..end of a padded sequence, from the root's bases at
+ * padRootRange(start, end, padding), with the other operations applied. */
+export const pad = (bases: Uint8Array, start: number, end: number, padding: Padding): Uint8Array =>
+  core.pad(bases, start, end, padding);
+
 // the recipe compiler
 
 export interface Tables {
@@ -154,6 +174,8 @@ export interface Tables {
   external?: { root_id: string; collection: string; group: string; name: string | null }[];
   /** layer_placements rows. */
   placements?: { root_id: string; parent_type: string }[];
+  /** layer_padding rows: the roots `pad` can place, and whether their placement was revised. */
+  padding?: { root_id: string; revised: boolean }[];
 }
 
 export interface ManifestRow {

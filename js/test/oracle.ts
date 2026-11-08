@@ -1,8 +1,8 @@
 // Run the wasm build on a request file and print the results as JSON, for
 // tests/test_wasm.py to compare with the Python bindings of the same core.
 // Request: {sequences: [base64], collections: [{names, lengths, sequences}],
-// tables, recipes, identify?: {tables, entries}}. Every pair of collections is
-// also compared.
+// tables, recipes, identify?: {tables, entries}, pads?: [{bases (base64),
+// start, end, padding}]}. Every pair of collections is also compared.
 import { readFileSync } from "node:fs";
 import * as rb from "../src/index.ts";
 
@@ -29,4 +29,8 @@ if (req.tables) {
 }
 const identified = req.identify
   ? rb.identifySequences(req.identify.entries, rb.identifyTables(req.identify.tables)) : null;
-process.stdout.write(JSON.stringify({ scans, collections, comparisons, compiled, identified }));
+const pads = (req.pads ?? []).map((p: any) => attempt(() => ({
+  range: rb.padRootRange(p.start, p.end, p.padding),
+  bases: Buffer.from(rb.pad(Buffer.from(p.bases, "base64"), p.start, p.end, p.padding)).toString("latin1"),
+})));
+process.stdout.write(JSON.stringify({ scans, collections, comparisons, compiled, identified, pads }));
