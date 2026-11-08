@@ -57,6 +57,20 @@ def test_root_status(ena, grc, masked, want):
     assert checks.root_status(9, "m", ena, grc, masked) == want
 
 
+def test_a_root_absent_from_ena_passes_only_as_documented(tmp_path):
+    assert checks.root_status(9, "m", None, None, False, "m") == ("absent (documented)", "not in set", True)
+    assert checks.root_status(9, "m", None, None, False, "other")[2] is False      # listed with another MD5
+    assert checks.root_status(9, "m", 9, None, False, "m")[0].startswith("ok (UNEXPECTED")  # ENA holds it again
+    (tmp_path / "x.tsv").write_text("# a comment\nroot_id\tmd5\tchecked\twhy\nK1.1\tm\t2026-11-08\tnot in ENA\n")
+    exc = checks.read_ena_exceptions(tmp_path / "x.tsv")
+    assert exc == {"K1.1": "m"} and checks.read_ena_exceptions(tmp_path / "none.tsv") == {}
+    roots = [{"root_id": "K1.1", "length": 9, "md5": "m"}]
+    assert checks.check_roots(roots, set(), {}, "", {"m": None}, exc)[0]
+    assert not checks.check_roots(roots, set(), {}, "", {"m": None}, {})[0]
+    passed, details, _ = checks.check_roots([], set(), {}, "", {}, exc)  # listed, no longer a root
+    assert not passed and details["failed"] == ["K1.1"]
+
+
 def build(tmp_path, passed=True, ena="checked"):
     catalog = tmp_path / "build" / "catalog"
     (catalog / "roots").mkdir(parents=True)

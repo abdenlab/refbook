@@ -86,20 +86,33 @@ def gate(catalog: Path, checks: dict[str, Path], lock_paths: list[Path], develop
     return results, problems
 
 
-def card(template: Path, catalog: Path, version: str, release_members: set[str], addon_members: set[str]) -> str:
-    """The dataset card (README.md), from the template with this release's version and counts."""
-    editions = pq.read_table(catalog / "editions" / "editions.parquet", columns=["edition"]).to_pylist()
+def card(template: Path, catalog: Path, version: str, books: dict[str, tuple[str, list[str]]]) -> str:
+    """The dataset card (README.md), from the template with this release's version and counts. `books`: each
+    book's assembly and release names, p0 first."""
+    editions = pq.read_table(catalog / "editions" / "editions.parquet", columns=["book", "edition"]).to_pylist()
     targets = pq.read_table(catalog / "editions" / "targets.parquet",
                             columns=["edition", "publisher", "alias"]).to_pylist()
+    members = pq.read_table(catalog / "members" / "assembly_members.parquet",
+                            columns=["book", "assembly_name", "genbank_accession"]).to_pylist()
+    book_of = {e["edition"]: e["book"] for e in editions}
     by_edition = defaultdict(list)
     for t in targets:
         by_edition[t["edition"]].append(f"{t['publisher']} `{t['alias']}`")
-    rows = ["| Edition | Published as |", "| --- | --- |"]
-    rows += [f"| `{f}` | {'; '.join(sorted(ts))} |" for f, ts in sorted(by_edition.items())]
+    rows = ["| Book | Assembly | Releases | Sequences in them | Editions | Published files |",
+            "| --- | --- | --- | ---: | ---: | ---: |"]
+    for name, (assembly, releases) in sorted(books.items()):
+        seqs = {m["genbank_accession"] for m in members if m["book"] == name and m["assembly_name"] in releases}
+        span = f"{releases[0]} – {releases[-1]}" if len(releases) > 1 else releases[0]
+        n_ed = sum(b == name for b in book_of.values())
+        n_t = sum(book_of[t["edition"]] == name for t in targets)
+        rows.append(f"| `{name}` | {assembly} | {span} ({len(releases)}) | {len(seqs):,} | {n_ed} | {n_t} |")
+    table = ["| Edition | Assembly | Published as |", "| --- | --- | --- |"]
+    table += [f"| `{f}` | {books[book_of[f]][0]} | {'; '.join(sorted(ts))} |"
+              for f, ts in sorted(by_edition.items(), key=lambda kv: (book_of[kv[0]], kv[0]))]
     return template.read_text().format(
-        version=version, n_editions=len(targets), n_sets=len(editions), edition_table="\n".join(rows),
-        n_roots=pq.read_metadata(catalog / "roots" / "roots.parquet").num_rows,
-        n_grch38=len(release_members), n_decoys=len(addon_members))
+        version=version, n_editions=len(targets), n_sets=len(editions), n_books=len(books),
+        book_table="\n".join(rows), edition_table="\n".join(table),
+        n_roots=pq.read_metadata(catalog / "roots" / "roots.parquet").num_rows)
 
 
 def export(catalog: Path, out: Path, version: str, checks: dict[str, Path], evidence: list[tuple[Path, str]],

@@ -7,8 +7,10 @@ its result with the sha256 of every table it read, so an export can require a pa
   genomic_gaps.txt (GRC's, where published: GRCh38 p7, p13, p14) lists exactly its AGP gaps plus the N-runs inside
   components of at least MIN_COMPONENT_N.
 - check_roots: the roots' digests against two independent sources. ENA's refget server (its own copy of INSDC) must
-  hold each MD5 at its length (consulted only when asked: 3,097 requests); the GRC analysis-set FASTA's deflines
-  carry M5 per sequence, which must equal ours for a root the GRC leaves unmasked and differ for one it masks.
+  hold each MD5 at its length (consulted only when asked: one request per root), but for the roots ENA lacks that
+  roots_ena_exceptions.tsv lists with exactly that MD5 and how else it was confirmed; a listed root ENA now holds,
+  or whose MD5 is not the listed one, fails. The GRC analysis-set FASTA's deflines carry M5 per sequence, which must
+  equal ours for a root the GRC leaves unmasked and differ for one it masks.
 - check_materialize: from the bases, through the library: every derivation in the sequence store rebuilt and
   digested, every edition and target resolved to its seqcol digest, one collection streamed in full.
 """
@@ -196,31 +198,53 @@ def grc_m5(path: Path) -> dict[str, str]:
     return out
 
 
-def root_status(length: int, md5: str, ena: int | None | str, grc_md5: str | None, masked: bool) -> tuple[str, str, bool]:
-    """(ENA result, GRC result, passed) for one root; `ena` is "not checked" when ENA wasn't consulted."""
-    ena_s = ena if ena == "not checked" else ("absent" if ena is None else ("ok" if ena == length else f"length {ena}"))
+def read_ena_exceptions(path: Path) -> dict[str, str]:
+    """root_id -> MD5 of every root documented as absent from ENA (roots_ena_exceptions.tsv: root_id, md5, checked,
+    why; `#` lines are comments)."""
+    if not path.exists():
+        return {}
+    rows = [line.split("\t") for line in path.read_text().splitlines() if line and not line.startswith("#")]
+    return {r[0]: r[1] for r in rows[1:]}
+
+
+def root_status(length: int, md5: str, ena: int | None | str, grc_md5: str | None, masked: bool,
+                excepted: str | None = None) -> tuple[str, str, bool]:
+    """(ENA result, GRC result, passed) for one root; `ena` is "not checked" when ENA wasn't consulted; `excepted`
+    the MD5 roots_ena_exceptions.tsv lists for the root, if it does."""
+    if ena == "not checked":
+        ena_s = ena
+    elif ena is None:
+        ena_s = "absent (documented)" if excepted == md5 else "absent"
+    elif excepted is not None:
+        ena_s = "ok (UNEXPECTED: listed as absent)"
+    else:
+        ena_s = "ok" if ena == length else f"length {ena}"
     if grc_md5 is None:
         grc = "not in set"
     elif grc_md5 == md5:
         grc = "match" + (" (UNEXPECTED: masked by the GRC)" if masked else "")
     else:
         grc = "differs" + ("" if masked else " (UNEXPECTED)")
-    return ena_s, grc, ena_s in ("ok", "not checked") and "UNEXPECTED" not in grc
+    return ena_s, grc, ena_s in ("ok", "not checked", "absent (documented)") and "UNEXPECTED" not in grc
 
 
 def check_roots(roots: list[dict], masked: set[str], m5: dict[str, str], analysis_set: str,
-                ena: dict[str, int | None] | None) -> tuple[bool, dict, list[tuple]]:
-    """(passed, details, the report's rows) for check_roots; `ena` is None when ENA wasn't consulted."""
+                ena: dict[str, int | None] | None,
+                exceptions: dict[str, str] | None = None) -> tuple[bool, dict, list[tuple]]:
+    """(passed, details, the report's rows) for check_roots; `ena` is None when ENA wasn't consulted;
+    `exceptions` the roots documented as absent from ENA (read_ena_exceptions)."""
+    exceptions = exceptions or {}
     counts, failed, rows = Counter(), [], []
     for r in roots:
         acc = r["root_id"]
         e = "not checked" if ena is None else ena[r["md5"]]
-        ena_s, grc_s, ok = root_status(r["length"], r["md5"], e, m5.get(acc), acc in masked)
+        ena_s, grc_s, ok = root_status(r["length"], r["md5"], e, m5.get(acc), acc in masked, exceptions.get(acc))
         counts[f"ena:{ena_s}"] += 1
         counts[f"grc:{grc_s}"] += 1
         rows.append((acc, r["length"], r["md5"], ena_s, grc_s))
         if not ok:
             failed.append(acc)
+    failed += sorted(set(exceptions) - {r["root_id"] for r in roots})  # listed, but no longer a root
     return not failed, {"counts": dict(counts), "failed": failed[:100], "analysis_set": analysis_set,
                         "ena": "skipped" if ena is None else "checked"}, rows
 

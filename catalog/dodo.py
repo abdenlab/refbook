@@ -378,6 +378,7 @@ def task_aliases():
 
 
 CHECKS = BUILD / "checks"
+ENA_EXCEPTIONS = layout.PIPELINE / "roots_ena_exceptions.tsv"
 PUBLISHED = export.published(CATALOG)
 
 
@@ -430,7 +431,9 @@ def roots_check(ena: bool):
         for f in files:
             m5.update(checks.grc_m5(f))
         lengths = checks.ena_lengths([r["md5"] for r in roots_]) if ena else None
-        passed, details, rows = checks.check_roots(roots_, masked, m5, ", ".join(f.name for f in files), lengths)
+        exceptions = checks.read_ena_exceptions(ENA_EXCEPTIONS) if ena else {}
+        passed, details, rows = checks.check_roots(roots_, masked, m5, ", ".join(f.name for f in files), lengths,
+                                                   exceptions)
         with layout.output(out) as tmp:
             (tmp / "verify_roots.tsv").write_text("root_id\tlength\tmd5\tena\tgrc_analysis_set\n"
                                                   + "".join("\t".join(map(str, r)) + "\n" for r in rows))
@@ -439,7 +442,8 @@ def roots_check(ena: bool):
         if not passed:
             raise Refused(f"check_roots failed: {details['failed'][:5]}")
 
-    return {"actions": [action], "file_dep": [PUBLISHED[n] for n in names] + files + code("checks"),
+    exc = [ENA_EXCEPTIONS] if ena and ENA_EXCEPTIONS.exists() else []
+    return {"actions": [action], "file_dep": [PUBLISHED[n] for n in names] + files + exc + code("checks"),
             "targets": [out / "check_roots.json", out / "verify_roots.tsv"]}
 
 
@@ -486,17 +490,16 @@ def task_export():
         checks_ = {"check_gaps": CHECKS / "gaps" / "check_gaps.json", "check_roots": roots_json / "check_roots.json",
                    "check_materialize": CHECKS / "materialize" / "check_materialize.json"}
         locks_ = sorted(layout.LOCKS.glob("*.lock")) + sorted(layout.LOCKS.glob("*.exceptions.tsv"))
+        evidence_extra = [(ENA_EXCEPTIONS, f"evidence/{ENA_EXCEPTIONS.name}")] if ENA_EXCEPTIONS.exists() else []
         evidence = [(p, f"evidence/observed/{p.name}") for b in BOOKS for p in
                     sorted((BUILD / "books" / b / "observed").glob("*.parquet"))]
         evidence += [(roots_json / "verify_roots.tsv", "evidence/verify_roots.tsv"),
                      (CHECKS / "gaps" / "check_gaps.tsv", "evidence/check_gaps.tsv")]
         evidence += [(p, f"evidence/{p.name}") for p in checks_.values()]
-        evidence += [(p, f"evidence/locks/{p.name}") for p in locks_]
-        members_ = pq.read_table(PUBLISHED["assembly_members.parquet"]).to_pylist()
-        releases = {layers.Release.of(RAW, SOURCES[n].base).name for b in BOOKS.values() for n in b.releases}
-        text = export.card(layout.PIPELINE / "catalog_card.md", CATALOG, version,
-                           {m["genbank_accession"] for m in members_ if m["assembly_name"] in releases},
-                           {m["genbank_accession"] for m in members_ if m["assembly_name"] not in releases})
+        evidence += [(p, f"evidence/locks/{p.name}") for p in locks_] + evidence_extra
+        books_ = {b.name: (b.assembly, [layers.Release.of(RAW, SOURCES[n].base).name for n in b.releases])
+                  for b in BOOKS.values()}
+        text = export.card(layout.PIPELINE / "catalog_card.md", CATALOG, version, books_)
         print(export.export(CATALOG, Path(out), version, checks_, evidence,
                             sorted(layout.LOCKS.glob("*.lock")), text, development))
 

@@ -1,0 +1,13 @@
+# Roots absent from ENA (its browser and its refget server do not hold them), each confirmed another way. check_roots_ena
+# passes such a root only with exactly this MD5, and fails a listed root that ENA holds again or that is no longer a root.
+root_id	md5	checked	why
+KE332495.1	b96f5e6bc844e8392d4e442aa7557e15	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332496.1	d97cf75e24ed1370388fedf523faa7ab	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332497.1	e363729ea23dad7c6802e7b439b4f668	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332498.1	fa5fa49d281fc855dd1076c4f51bd8dc	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332499.1	1d2933992f087a832718c9de19d4ceab	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332500.1	0de582e28ae8c127d978b43e12a4f499	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332501.1	369f03e72d44461eab4542c58f3b5dcc	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332502.1	3b40b7fdb005a1ce00efaa3310148852	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332505.1	5fae03628eb9a445571bac107823b394	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
+KE332506.1	1135da7b213739cfb3bdf2741c0c8083	2026-11-08	GRCh37.p13 fix patch, not in ENA (browser: not found); the NCBI efetch record has this MD5
