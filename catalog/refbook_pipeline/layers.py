@@ -10,8 +10,11 @@
 - layer_placements     where each alt scaffold and patch sits on its parent, one row per distinct placement, with
                        the releases it holds for
 - layer_hardmask_grc   the spans the GRC's analysis sets replace with N, each with its unmasked cognate
+- layer_par_y          chrY's pseudoautosomal regions, from the region definitions: what an edition writes as N
+                       when it masks only the PARs
 
-Regions and placements are numbered by release, which means something only within a book, so the catalog's
+The root-keyed layers (AGP, hard-mask, PAR) serve every book whose roots they cover. Regions and placements are
+numbered by release, which means something only within a book, so the catalog's
 tables carry the book. Each function refuses what the reports don't bear out, and returns its notes (what it
 accepted and why) for the record.
 """
@@ -258,3 +261,21 @@ def build_hardmask_grc(path: Path, length: dict[str, int], regions: pa.Table, pa
     if par != masked:
         raise Refused(f"{par_root}'s masks {masked} != its PAR regions {par}")
     return pa.table(cols)
+
+
+def build_par_y(regions: pa.Table, members: list[dict]) -> pa.Table:
+    """layer_par_y: chrY's pseudoautosomal regions (the region definitions' PAR regions on the root assigned to
+    molecule Y), the spans that editions write as N when they mask only the PARs (Ensembl, and so b37 and hs37d5).
+    A PAR is the same in every release that defines it; refuses if a root's PARs differ between releases."""
+    y = {m["genbank_accession"] for m in members if m["assigned_molecule"] == "Y" and m["role"] == "assembled-molecule"}
+    spans = {}
+    for r in regions.to_pylist():
+        if r["region_type"] == "PAR" and r["root_id"] in y:
+            span = (r["start"], r["end"])
+            if spans.setdefault((r["root_id"], r["region_name"]), span) != span:
+                raise Refused(f"{r['root_id']} {r['region_name']}: its span differs between releases")
+    if y and not spans:
+        raise Refused(f"no PAR regions on chrY ({sorted(y)})")
+    rows = sorted(spans.items(), key=lambda kv: (kv[0][0], kv[1]))
+    return pa.table({"root_id": [k[0] for k, _ in rows], "start": [s for _, (s, _) in rows],
+                     "end": [e for _, (_, e) in rows], "name": [k[1] for k, _ in rows]})

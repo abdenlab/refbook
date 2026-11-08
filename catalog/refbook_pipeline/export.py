@@ -31,6 +31,7 @@ PUBLISHED = {
     "aliases.parquet": ("aliases", "aliases"), "sequence_aliases.parquet": ("aliases", "aliases"),
     "layer_agp.parquet": ("layers", "layer"), "layer_regions.parquet": ("layers", "layer"),
     "layer_placements.parquet": ("layers", "layer"), "layer_hardmask_grc.parquet": ("layers", "layer"),
+    "layer_par_y.parquet": ("layers", "layer"),
     "layer_iupac.parquet": ("roots", "layer"), "layer_n_runs.parquet": ("roots", "layer"),
     "layer_softmask_ncbi.parquet": ("roots", "layer"),
     "sequences.parquet": ("editions", "sequences"), "derivations.parquet": ("editions", "sequences"),

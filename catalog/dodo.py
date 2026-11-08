@@ -496,7 +496,7 @@ def task_export():
                         "help": "accept a root check that didn't consult ENA (not a release)"}]}
 
 
-LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_hardmask_grc"]
+LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_par_y", "layer_hardmask_grc"]
 
 
 def task_layers():
@@ -521,10 +521,18 @@ def task_layers():
                 agp = layers.build_agp(RAW, dirs, {m["genbank_accession"] for m in ms})
                 regions, spans = layers.build_regions(rels, ms, set(book.region_quirks))
                 placements, notes = layers.build_placements(rels, ms, length, spans)
-                tables = {"layer_agp": agp, "layer_regions": regions, "layer_placements": placements}
+                tables = {"layer_agp": agp, "layer_regions": regions, "layer_placements": placements,
+                          "layer_par_y": layers.build_par_y(regions, ms)}
                 if mask:
                     tables["layer_hardmask_grc"] = layers.build_hardmask_grc(mask_file, length, regions,
                                                                            mask["par_root"])
+                    hm = {(r["start"], r["end"]) for r in tables["layer_hardmask_grc"].to_pylist()
+                          if r["root_id"] == mask["par_root"]}
+                    par = {(r["start"], r["end"]) for r in tables["layer_par_y"].to_pylist()
+                           if r["root_id"] == mask["par_root"]}
+                    if hm != par:
+                        raise Refused(f"layer_par_y's spans on {mask['par_root']} {sorted(par)} != the GRC "
+                                      f"hard-mask's {sorted(hm)}")
                 for name, t in tables.items():
                     pq.write_table(t, tmp / f"{name}.parquet", compression="zstd")
                 (tmp / "notes.json").write_text(json.dumps(notes, indent=1) + "\n")
@@ -535,7 +543,7 @@ def task_layers():
         dep = reads(srcs + mask_src)
         yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
                "file_dep": [table, lengths] + files + dep["file_dep"] + code("layers", "members"),
-               "targets": [out / f"{n}.parquet" for n in LAYERS[:3] + (LAYERS[3:] if mask else [])]
+               "targets": [out / f"{n}.parquet" for n in LAYERS[:4] + (LAYERS[4:] if mask else [])]
                           + [out / "notes.json", out / "inputs.json"]}
 
 

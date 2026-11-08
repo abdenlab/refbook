@@ -87,3 +87,23 @@ def test_recipes_and_their_targets(tmp_path):
     (tmp_path / "books" / "t" / "recipes" / "r2.json").write_text(json.dumps({"recipes": [rs[0]]}))
     with pytest.raises(Refused, match="more than one recipe"):
         books.recipes(tmp_path / "books", "t")
+
+
+def test_par_y_takes_the_par_regions_on_the_y_chromosome_only():
+    import pyarrow as pa
+    def region(name, root, start, end, kind="PAR", first=0):
+        return {"region_name": name, "root_id": root, "start": start, "end": end, "region_type": kind,
+                "first_release": first, "last_release": first}
+    members = [{"genbank_accession": "Y.1", "assigned_molecule": "Y", "role": "assembled-molecule"},
+               {"genbank_accession": "X.1", "assigned_molecule": "X", "role": "assembled-molecule"}]
+    regions = [region("PAR#1", "X.1", 60000, 2699520), region("PAR#1", "Y.1", 10000, 2649520),
+               region("PAR#2", "Y.1", 59034049, 59363566), region("PAR#2", "Y.1", 59034049, 59363566, first=3),
+               region("REGION108", "Y.1", 100, 200, kind=None)]
+    t = layers.build_par_y(pa.Table.from_pylist(regions), members).to_pylist()
+    assert t == [{"root_id": "Y.1", "start": 10000, "end": 2649520, "name": "PAR#1"},
+                 {"root_id": "Y.1", "start": 59034049, "end": 59363566, "name": "PAR#2"}]
+    with pytest.raises(Refused, match="differs between releases"):
+        layers.build_par_y(pa.Table.from_pylist(regions + [region("PAR#2", "Y.1", 59034049, 59363567, first=5)]),
+                           members)
+    with pytest.raises(Refused, match="no PAR regions"):
+        layers.build_par_y(pa.Table.from_pylist(regions[:1]), members)
