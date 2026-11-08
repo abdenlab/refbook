@@ -1,0 +1,5 @@
+path	bytes	sha256	last_modified	url
+ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/CHECKSUMS	51137	4750dbd2e3dab30468ac1f3648ca606bcceb71a1b0e92268ad82df2cb9fc3e5c	2014-02-04T21:42:39+00:00	https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/CHECKSUMS
+ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz	869930767	d7778258e62a03f81ea92de0e7423705325e44038447923a60389eec534d1341	2014-02-04T21:05:42+00:00	https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz
+ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.toplevel.fa.gz	993618504	d620e91171c7087301fbd793c8726c87ed1cb0cf61d3fa62e46a5628b82569de	2014-02-04T21:05:51+00:00	https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.toplevel.fa.gz
+ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/README	5028	a2b865e93cb116a9a880d3ce2ea6d65c190a6b0afcb12a1842d629a7d211e4d2	2014-02-04T21:05:28+00:00	https://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/README

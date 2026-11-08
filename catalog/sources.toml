@@ -195,3 +195,205 @@ files = [
   "GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.dict",
   "GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta.fai",
 ]
+
+# ---------------------------------------------------------------------------------------------------------------
+# GRCh37, p0..p13 (GCA_000001405.1..14): each release's reports and checksums. NCBI keeps the assembly_structure
+# tree (AGPs, placements, region definitions) only for p13; p0..p12 keep the report, regions and stats.
+# p13's genomic.fna.gz has every p13 sequence; the 38 patches withdrawn before p13 come by efetch.
+
+[[source]]
+name = "GRCh37"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.1_GRCh37"
+structure = false
+
+[[source]]
+name = "GRCh37.p1"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.2_GRCh37.p1"
+structure = false
+
+[[source]]
+name = "GRCh37.p2"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.3_GRCh37.p2"
+structure = false
+
+[[source]]
+name = "GRCh37.p3"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.4_GRCh37.p3"
+structure = false
+
+[[source]]
+name = "GRCh37.p4"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.5_GRCh37.p4"
+structure = false
+
+[[source]]
+name = "GRCh37.p5"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.6_GRCh37.p5"
+structure = false
+
+[[source]]
+name = "GRCh37.p6"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.7_GRCh37.p6"
+structure = false
+
+[[source]]
+name = "GRCh37.p7"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.8_GRCh37.p7"
+structure = false
+
+[[source]]
+name = "GRCh37.p8"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.9_GRCh37.p8"
+structure = false
+
+[[source]]
+name = "GRCh37.p9"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.10_GRCh37.p9"
+structure = false
+
+[[source]]
+name = "GRCh37.p10"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.11_GRCh37.p10"
+structure = false
+
+[[source]]
+name = "GRCh37.p11"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.12_GRCh37.p11"
+structure = false
+
+[[source]]
+name = "GRCh37.p12"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.13_GRCh37.p12"
+structure = false
+
+[[source]]
+name = "GRCh37.p13"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.14_GRCh37.p13"
+also = ["GCA_000001405.14_GRCh37.p13_genomic.fna.gz"]
+sequences = ["GCA_000001405.14_GRCh37.p13_genomic.fna.gz"]
+
+[[source]]
+name = "GRCh37-withdrawn-patches"
+roles = ["input"]
+note = "The 38 patches withdrawn before p13 (35 replaced by a newer version, 3 dropped): in earlier releases, in no p13 file."
+efetch = { accessions = ["GL339449.1", "GL383534.1", "GL383553.1", "GL383559.1", "GL383561.1", "GL383563.1", "GL383575.1", "GL383582.1", "GL582966.1", "GL582977.1", "GL582978.1", "GL582979.1", "GL877870.1", "GL877874.1", "GL877877.1", "JH159134.1", "JH159135.1", "JH159141.1", "JH159142.1", "JH159150.1", "JH159150.2", "JH591181.1", "JH636052.1", "JH636052.2", "JH636052.3", "JH636053.1", "JH636053.2", "JH720443.1", "JH720444.1", "JH720450.1", "JH720454.1", "JH720454.2", "JH806574.1", "JH806582.1", "JH806590.1", "JH806600.1", "KB021646.1", "KB663607.1"], rettypes = ["fasta"] }
+sequences = [
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL339449.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383534.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383553.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383559.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383561.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383563.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383575.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL383582.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL582966.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL582977.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL582978.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL582979.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL877870.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL877874.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_GL877877.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159134.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159135.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159141.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159142.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159150.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH159150.2.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH591181.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH636052.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH636052.2.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH636052.3.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH636053.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH636053.2.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH720443.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH720444.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH720450.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH720454.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH720454.2.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH806574.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH806582.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH806590.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_JH806600.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_KB021646.1.fasta", "eutils.ncbi.nlm.nih.gov/efetch/nuccore_KB663607.1.fasta",
+]
+
+# Sequences outside GRCh37 that GRCh37 editions add.
+
+[[source]]
+name = "Yoruba-chrM"
+roles = ["input"]
+note = """The Yoruba mitochondrion (AF347015.1; RefSeq NC_001807.4, the same bases), hg19's chrM: in no GRCh37 release
+(GRCh37 has rCRS from p2)."""
+efetch = { accessions = ["AF347015.1"], rettypes = ["fasta", "gb"] }
+sequences = ["eutils.ncbi.nlm.nih.gov/efetch/nuccore_AF347015.1.fasta"]
+loose_roots = { "AF347015.1" = "eutils.ncbi.nlm.nih.gov/efetch/nuccore_AF347015.1.gb" }
+
+[[source]]
+name = "1000G-hs37d5"
+roles = ["input", "target"]
+note = """1000 Genomes' phase 2 reference, hs37d5 (b37 + EBV + the hs37d5 decoy): a recipe target, and the decoy's source.
+The decoy has no INSDC record: hs37d5cs.fa.gz is its sequence, hs37d5cs.bed its make-up (the GenBank spans it is
+built from), the README how it was made. 1000 Genomes publishes no checksum list: the lock alone covers these."""
+base = "ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence"
+files = ["README_human_reference_20110707", "hs37d5.fa.gz", "hs37d5.fa.gz.fai", "hs37d5cs.fa.gz", "hs37d5cs.bed"]
+
+# The published GRCh37 editions: recipe targets.
+
+[[source]]
+name = "1000G-b37"
+roles = ["target"]
+note = "1000 Genomes' GRCh37 reference, human_g1k_v37 (b37): the primary assembly, bare names, chrY's PARs as N."
+base = "ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference"
+files = ["README.human_g1k_v37.fasta.txt", "human_g1k_v37.fasta.gz", "human_g1k_v37.fasta.fai"]
+
+[[source]]
+name = "UCSC-hg19"
+roles = ["target", "input"]
+note = """hg19's bigZips: the initial release (93 sequences, the Yoruba chrM), p13.plusMT/ (298: p13 and both
+mitochondria) and analysisSet/ (full and no-alt, from p13.plusMT). The chromAlias files are inputs (names)."""
+base = "hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips"
+files = [
+  "README.txt", "md5sum.txt", "hg19.fa.gz", "hg19.chrom.sizes", "hg19.chromAlias.txt",
+  "p13.plusMT/md5sum.txt", "p13.plusMT/hg19.p13.plusMT.fa.gz", "p13.plusMT/hg19.p13.plusMT.chrom.sizes",
+  "p13.plusMT/hg19.p13.plusMT.chromAlias.txt",
+  "analysisSet/md5sum.txt", "analysisSet/hg19.p13.plusMT.full_analysis_set.fa.gz",
+  "analysisSet/hg19.p13.plusMT.no_alt_analysis_set.fa.gz",
+]
+optional = ["analysisSet/README.txt"]
+
+[[source]]
+name = "Ensembl-75"
+roles = ["target"]
+note = "Ensembl 75, the last release built on GRCh37: the primary assembly and the toplevel (alts and patches N-padded)."
+base = "ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna"
+files = ["Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz", "Homo_sapiens.GRCh37.75.dna.toplevel.fa.gz", "CHECKSUMS", "README"]
+
+[[source]]
+name = "Ensembl-GRCh37-116"
+roles = ["target"]
+note = "Ensembl's GRCh37 site at release 116 (grch37/current in 2026-11): primary assembly, toplevel and alt."
+base = "ftp.ensembl.org/pub/grch37/release-116/fasta/homo_sapiens/dna"
+files = [
+  "Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz", "Homo_sapiens.GRCh37.dna.toplevel.fa.gz",
+  "Homo_sapiens.GRCh37.dna.alt.fa.gz", "CHECKSUMS", "README",
+]
+
+[[source]]
+name = "GENCODE-19"
+roles = ["target"]
+note = """GENCODE 19, the last release on GRCh37 itself: the p13 genome (Ensembl's toplevel, renamed). Not _README.TXT:
+GENCODE edited it in 2026, and MD5SUMS (2018) still lists the old one."""
+base = "ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19"
+files = ["GRCh37.p13.genome.fa.gz", "MD5SUMS"]
+
+[[source]]
+name = "Broad-hg19-v0"
+roles = ["target"]
+note = """Broad/GATK's hg19/v0 Homo_sapiens_assembly19 (b37 + EBV). The .dict carries M5 per sequence; the FASTA (3.1 GB)
+checks the content too. Broad publishes no checksum list: the lock alone covers these."""
+base = "storage.googleapis.com/gcp-public-data--broad-references/hg19/v0"
+files = ["Homo_sapiens_assembly19.dict", "Homo_sapiens_assembly19.fasta.fai", "Homo_sapiens_assembly19.fasta"]
+
+[[source]]
+name = "iGenomes-GRCh37"
+roles = ["target"]
+note = "Illumina iGenomes (on AWS): metadata only, each genome.dict checked."
+base = "ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens"
+files = [
+  "Ensembl/GRCh37/Sequence/WholeGenomeFasta/genome.dict", "Ensembl/GRCh37/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "NCBI/build37.1/Sequence/WholeGenomeFasta/genome.dict", "NCBI/build37.1/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "NCBI/build37.2/Sequence/WholeGenomeFasta/genome.dict", "NCBI/build37.2/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "UCSC/hg19/Sequence/WholeGenomeFasta/genome.dict", "UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa.fai",
+  "GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.dict",
+  "GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.fasta.fai",
+]

@@ -7,7 +7,8 @@ raw/<host>/<url path>, so a file's path is its URL. A source declares its files 
 - `trees`: directories under `base` fetched whole (recursively), minus `reject` patterns.
 - `ncbi_assembly`: an NCBI assembly directory, `base` and its standard files (`<asm>_assembly_report.txt`, ...,
   `md5checksums.txt`, ...: all optional, since older releases lack some) and its `<asm>_assembly_structure/`
-  tree without sequence files; `also` lists more of its files, required.
+  tree without sequence files (`structure = false` if NCBI no longer keeps it: superseded GRCh37 releases keep
+  only the report, regions and stats); `also` lists more of its files, required.
 - `efetch`: GenBank records by accession, from NCBI's E-utilities, saved as
   eutils.ncbi.nlm.nih.gov/efetch/nuccore_<accession>.<rettype>.
 - `github_tree`: files of a repository tree (`repo`, `ref`, a `prefix` and `suffix` filter), listed by GitHub's
@@ -71,6 +72,7 @@ class Source:
     sequences: tuple[str, ...] = ()                  # raw paths of the files that hold roots
     loose_roots: tuple[tuple[str, str], ...] = ()    # (accession, raw path of its GenBank record)
     external: dict = field(default_factory=dict)     # collection, prefix, format
+    ncbi_assembly: bool = False                      # an NCBI assembly directory
     note: str = ""
 
 
@@ -89,7 +91,8 @@ def load(path: Path) -> dict[str, Source]:
             asm = base.rsplit("/", 1)[-1]
             optional += [f"{asm}_{x}" for x in NCBI_SUFFIXES] + NCBI_FILES
             files += s.get("also", [])
-            trees.append(Tree(f"{asm}_assembly_structure/", tuple(NCBI_TREE_REJECT)))
+            if s.get("structure", True):
+                trees.append(Tree(f"{asm}_assembly_structure/", tuple(NCBI_TREE_REJECT)))
         trees += [Tree(t["path"], tuple(t.get("reject", []))) for t in s.get("trees", [])]
         efetch = tuple((acc, rt) for acc in s.get("efetch", {}).get("accessions", [])
                        for rt in s.get("efetch", {}).get("rettypes", ["fasta"]))
@@ -98,7 +101,8 @@ def load(path: Path) -> dict[str, Source]:
                            github_tree=dict(s.get("github_tree", {})), checksums=tuple(s.get("checksums", [])),
                            sequences=tuple(_join(base, f) for f in s.get("sequences", [])),
                            loose_roots=tuple(sorted(s.get("loose_roots", {}).items())),
-                           external=dict(s.get("external", {})), note=s.get("note", ""))
+                           external=dict(s.get("external", {})), ncbi_assembly="ncbi_assembly" in s,
+                           note=s.get("note", ""))
     return out
 
 
@@ -108,8 +112,7 @@ def _join(base: str, rel: str) -> str:
 
 def reports(source: Source) -> list[str]:
     """The assembly report of an NCBI assembly source (raw path), if it is one."""
-    if not source.base.startswith("ftp.ncbi.nlm.nih.gov/genomes/all/") or not any(
-            t.path.endswith("_assembly_structure/") for t in source.trees):
+    if not source.ncbi_assembly:
         return []
     asm = source.base.rsplit("/", 1)[-1]
     return [f"{source.base}/{asm}_assembly_report.txt"]
