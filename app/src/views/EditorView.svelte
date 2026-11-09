@@ -8,8 +8,8 @@
   // The editor: a workbench for recipes, with the catalog to start from. A shelf on the
   // left holds every choice of the recipe, always in the same place (a choice
   // that doesn't apply is disabled, not hidden). The stage on the right shows
-  // the catalog (fixed, with how far each edition is from the recipe), the
-  // guide (analysis goals and the choices made for them), the recipe and the files it makes, and the details. The
+  // the guide first (analysis goals and the choices made for them), the catalog (fixed, with how far each edition
+  // is from the recipe), the recipe and the files it makes, and the details. The
   // recipe is compiled live by the core in the browser.
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
@@ -49,7 +49,7 @@
   }));
 
   type Tab = "catalog" | "guide" | "recipe" | "export" | "info";
-  const TABS: [Tab, string][] = [["catalog", "Catalog"], ["guide", "Guide"], ["recipe", "Recipe"], ["export", "Export"], ["info", "Info"]];
+  const TABS: [Tab, string][] = [["guide", "Guide"], ["catalog", "Catalog"], ["recipe", "Recipe"], ["export", "Export"], ["info", "Info"]];
   type Format = "sizes" | "dict" | "seqcol";
   const FORMATS: [Format, string][] = [["sizes", "chrom.sizes"], ["dict", ".dict"], ["seqcol", "seqcol.json"]];
 
@@ -59,7 +59,7 @@
   let jsonError = $state<string | null>(null);
   // The view is made anew on each navigation, so the link is read once.
   const asked = untrack(() => query.get("tab"));
-  let tab = $state<Tab>(TABS.some(([k]) => k === asked) ? (asked as Tab) : "catalog");
+  let tab = $state<Tab>(TABS.some(([k]) => k === asked) ? (asked as Tab) : "guide");
   let format = $state<Format>("sizes");
   let order = $state<Order>("name");
   let copied = $state<string | null>(null);
@@ -77,7 +77,7 @@
   /** The page's link: the tab, and the recipe once it has been edited or loaded. */
   function remember() {
     const q = new URLSearchParams();
-    if (tab !== "catalog") q.set("tab", tab);
+    if (tab !== "guide") q.set("tab", tab);
     if (recipe && JSON.stringify(recipe) !== JSON.stringify(scratch())) q.set("r", encodeRecipe(recipe));
     history.replaceState(null, "", editorHref(b.book, q));
     if (recipe) keptBy.set(b.book, { recipe: JSON.stringify(recipe), loaded });

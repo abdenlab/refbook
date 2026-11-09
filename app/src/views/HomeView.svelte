@@ -17,7 +17,7 @@
 <section class="home">
   <h1>The human reference genome, in every edition</h1>
   <blockquote class="motto"><p>Genome: Bought the book? Which edition?</p></blockquote>
-  <p class="lede">Refbook is a catalog of commonly used reference sequence collections for genomic analysis, as published by different authorities. We call these different "flavors" of the same genome assembly <b>editions</b>.</p><p class="lede">Using a small rule set, refbook reproduces all published editions from original submitted sequences. This provenance makes editions identifiable, comparable, and lets you reason about how they affect your analysis.</p>
+  <p class="lede"><i>Refbook</i> is a catalog of commonly used reference sequence collections for genomic analysis, as published by different authorities. We call these different "flavors" of the same genome assembly <b>editions</b>.</p><p class="lede">Using a small rule set, <i>refbook</i> reproduces all published editions from original submitted sequences. This provenance makes editions identifiable, comparable, and lets you reason about how they affect your analysis.</p>
   <nav class="doors" aria-label="Start here">
     {#each doors as d (d.href)}
       <a class="door" href={d.href}>

@@ -19,7 +19,7 @@
 <section>
   <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / {book.assembly}</p>
   <h1 class="act">{book.assembly}, as published
-    <a class="action" href={editorHref(book.book)} title={`Design a ${book.assembly} edition of your own`}><Icon name="load" /> Editor</a></h1>
+    <a class="action" href={editorHref(book.book, new URLSearchParams({ tab: "catalog" }))} title={`Design a ${book.assembly} edition of your own, starting from the catalog's`}><Icon name="load" /> Editor</a></h1>
   <p class="lede">
     {n(book.targets.length)} published files reduce to {n(book.editions.length)} editions: distinct sets of named
     sequences, each a recipe over the same original sequences, checked by rebuilding the file. They are drawn from
