@@ -20,16 +20,20 @@ sources = [
 release = "T2T-CHM13v1.0"
 why = "NCBI publishes no assembly structure for GCA_009914755.2; its chromosomes' INSDC records describe no gaps"
 
-# Mask layers read from the consortium's masked analysis sets: no file gives their spans (the per-chromosome BEDs
-# beside them each span a whole chromosome). Each is the N-runs of one file, on the chromosomes named, where the root
-# has bases; the layers task refuses unless masking the root with them gives the file. The other masked sets are
-# then checked against the same layers by their recipes.
+# Mask layers read from the consortium's masked analysis sets: no file beside them gives their spans (the
+# per-chromosome BEDs there each span a whole chromosome). Each is the N-runs of one file, on the chromosomes named,
+# where the root has bases; the layers task refuses unless masking the root with them gives the file. The other
+# masked sets are then checked against the same layers by their recipes. With `labels`, a BED in this directory
+# (by the file's chromosome names) names the spans and splits them where named regions meet, and must tile the
+# N-runs exactly: the acrocentric and 5S masks have T2T-Ref's README as an independent source (masked_regions.bed).
 [[derived_masks]]
 layer = "t2t_dj_rdna_phr"
 source = "T2T-masked-sets"
 file = "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa"
 chromosomes = ["chr13", "chr14", "chr15", "chr21", "chr22"]
 why = "the distal junctions, rDNA arrays and pseudo-homologous regions of the acrocentric short arms"
+labels = "masked_regions.bed"
+labels_from = "https://github.com/arangrhie/T2T-Ref/blob/0aa9717563a817ff71d6431b3259ea06296ced78/README.md"
 
 [[derived_masks]]
 layer = "t2t_5s_rdna"
@@ -37,6 +41,8 @@ source = "T2T-masked-sets"
 file = "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY.fa"
 chromosomes = ["chr1"]
 why = "the 5S rDNA array on chr1, masked in the _5S sets"
+labels = "masked_regions.bed"
+labels_from = "https://github.com/arangrhie/T2T-Ref/blob/0aa9717563a817ff71d6431b3259ea06296ced78/README.md"
 
 [[derived_masks]]
 layer = "chry"

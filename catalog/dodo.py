@@ -592,9 +592,11 @@ def task_layers():
                     missing = [c for c in m["chromosomes"] if c not in ucsc]
                     if missing:
                         raise Refused(f"derived mask {m['layer']}: no root named {missing} in {rels[-1].name}")
+                    # Its labels (a BED in the book, by the file's names) name and split its spans.
+                    labels = (layers.read_labels(layout.BOOKS / book.name / m["labels"]) if "labels" in m else None)
                     tables[f"layer_{m['layer']}"] = layers.build_derived_mask(
                         path, sources.url_of(path.relative_to(RAW).as_posix()), {c: ucsc[c] for c in m["chromosomes"]},
-                        lambda root: engine.root_bases(blocks, root))
+                        lambda root: engine.root_bases(blocks, root), labels, m.get("labels_from", ""))
                 for name, t in tables.items():
                     pq.write_table(t, tmp / f"{name}.parquet", compression="zstd")
                 (tmp / "notes.json").write_text(json.dumps(notes, indent=1) + "\n")
@@ -603,6 +605,7 @@ def task_layers():
 
         files = [RAW / f for s in srcs for f in sources.files(s, RAW)[0]] + ([mask_file] if mask else [])
         files += [RAW / m["agp_bed"] for m in beds] + [path for _, path in derived]
+        files += sorted({layout.BOOKS / book.name / m["labels"] for m, _ in derived if "labels" in m})
         dep = reads(srcs + mask_src + bed_srcs + derived_srcs)
         yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
                "file_dep": [table, lengths] + files + dep["file_dep"] + ([blocks] if derived else [])

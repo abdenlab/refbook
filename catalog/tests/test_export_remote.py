@@ -21,7 +21,7 @@ def release_from_build(out: Path) -> Path:
 
     files = {}
     for name, src in published().items():
-        role = export.PUBLISHED[name][1]
+        role = export.role(name)
         for f in ([src] if src.is_file() else sorted(src.glob("*"))):
             rel = f"{name}/{f.name}" if src.is_dir() else name
             (out / rel).parent.mkdir(parents=True, exist_ok=True)

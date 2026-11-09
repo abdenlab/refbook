@@ -53,8 +53,10 @@ def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
         if archive and archive not in b["sources"]:
             raise Refused(f"{b['name']}: structure_archive is not among its sources")
         for m in b.get("derived_masks", []):
-            if set(m) != {"layer", "source", "file", "chromosomes", "why"}:
-                raise Refused(f"{b['name']}: a derived mask has layer, source, file, chromosomes and why")
+            required, labelled = {"layer", "source", "file", "chromosomes", "why"}, {"labels", "labels_from"}
+            if not required <= set(m) or set(m) - required not in (set(), labelled):
+                raise Refused(f"{b['name']}: a derived mask has layer, source, file, chromosomes and why, and "
+                              "optionally labels with labels_from")
             if m["source"] not in b["sources"]:
                 raise Refused(f"{b['name']}: derived mask {m['layer']}: its source is not among the book's")
         unstructured = tuple(u["release"] for u in b.get("releases_without_structure", []))

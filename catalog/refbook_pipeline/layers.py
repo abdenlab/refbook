@@ -17,7 +17,8 @@
 - layer_par_y          chrY's pseudoautosomal regions, from the region definitions: what an edition writes as N
                        when it masks only the PARs
 - layer_<derived mask> spans a published masked file writes as N where the root has bases, read from the file
-                       itself where no file gives them (T2T's DJ/rDNA/PHR analysis sets: build_derived_mask)
+                       itself where no file gives them (T2T's DJ/rDNA/PHR analysis sets: build_derived_mask),
+                       named where another source names them (a BED in the book, which must tile them exactly)
 - layer_padding        each alt scaffold's and patch's placement in the latest release that places it, and its
                        parent's length: what the `pad` operation (N-padding into the parent's coordinates) reads
 
@@ -394,11 +395,42 @@ def build_par_y(regions: pa.Table, members: list[dict]) -> pa.Table:
                      "end": [e for _, (_, e) in rows], "name": [k[1] for k, _ in rows]})
 
 
-def build_derived_mask(path: Path, url: str, roots: dict[str, str], root_bases) -> pa.Table:
+def read_labels(path: Path) -> dict[str, list[tuple[int, int, str]]]:
+    """A BED of named spans (chrom, start, end, name; '#' lines are comments): chrom -> its spans, in order."""
+    out: dict[str, list] = {}
+    for line in path.read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            chrom, start, end, name = line.split("\t")[:4]
+            out.setdefault(chrom, []).append((int(start), int(end), name))
+    return {c: sorted(s) for c, s in out.items()}
+
+
+def label_spans(spans: list[tuple[int, int]], labels: list[tuple[int, int, str]], where: str) -> list[tuple]:
+    """Name the N-runs a derived mask read from a file by labels given elsewhere: the labels must tile the runs
+    exactly (no gap, no overlap, nothing outside them; a run may be several labels end to end). Returns the
+    labels, as (start, end, name)."""
+    merged: list[list[int]] = []
+    for s, e, name in labels:
+        if merged and s < merged[-1][1]:
+            raise Refused(f"{where}: label {name} overlaps the one before it")
+        if merged and s == merged[-1][1]:
+            merged[-1][1] = e
+        else:
+            merged.append([s, e])
+    if [tuple(m) for m in merged] != sorted(spans):
+        raise Refused(f"{where}: the labels {[tuple(m) for m in merged]} don't tile the file's N-runs {sorted(spans)}")
+    return labels
+
+
+def build_derived_mask(path: Path, url: str, roots: dict[str, str], root_bases,
+                       labels: dict[str, list[tuple[int, int, str]]] | None = None, labels_from: str = "") -> pa.Table:
     """A mask layer read from a published masked FASTA, for the publishers who give no BED of what they masked:
     on each of `roots` (its name in the file -> root ID), the runs of N in the file that cover a base the root has
     (`root_bases(root)` gives the root's). Refuses unless masking the root with those spans gives the file's
-    sequence, base for base (case aside): the layer then reproduces the file exactly, whatever it did."""
+    sequence, base for base (case aside): the layer then reproduces the file exactly, whatever it did.
+    With `labels` (name in the file -> named spans, as `labels_from` gives them), each root's runs are split and
+    named by them, which must tile the runs exactly (label_spans): an independent source for the spans, and their
+    names. Without, `name` and `labels_from` are null."""
     import re
 
     from refbook.parse import open_compressed
@@ -415,7 +447,7 @@ def build_derived_mask(path: Path, url: str, roots: dict[str, str], root_bases) 
         seqs[name] = b"".join(buf).upper()
     if set(seqs) != set(roots):
         raise Refused(f"{path.name}: no {sorted(set(roots) - set(seqs))}")
-    cols = {"root_id": [], "start": [], "end": [], "derived_from": []}
+    cols = {"root_id": [], "start": [], "end": [], "name": [], "derived_from": [], "labels_from": []}
     for name, root in sorted(roots.items(), key=lambda kv: kv[1]):
         s, r = seqs[name], bytes(root_bases(root))
         if len(s) != len(r):
@@ -426,11 +458,14 @@ def build_derived_mask(path: Path, url: str, roots: dict[str, str], root_bases) 
             masked[a:b] = b"N" * (b - a)
         if bytes(masked) != s:
             raise Refused(f"{path.name} {name}: masking root {root} with its N-runs doesn't give the file's sequence")
-        for a, b in spans:
-            for k, v in zip(cols, (root, a, b, url)):
+        named = (label_spans(spans, labels.get(name, []), f"{path.name} {name}") if labels is not None
+                 else [(a, b, None) for a, b in spans])
+        for a, b, label in named:
+            for k, v in zip(cols, (root, a, b, label, url, labels_from if labels is not None else None)):
                 cols[k].append(v)
     return pa.table(cols, schema=pa.schema([("root_id", pa.string()), ("start", pa.int64()), ("end", pa.int64()),
-                                            ("derived_from", pa.string())]))
+                                            ("name", pa.string()), ("derived_from", pa.string()),
+                                            ("labels_from", pa.string())]))
 
 
 def build_padding(placements: pa.Table, length: dict[str, int]) -> pa.Table:

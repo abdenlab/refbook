@@ -186,6 +186,27 @@ def test_par_y_takes_the_par_regions_on_the_y_chromosome_only():
         layers.build_par_y(pa.Table.from_pylist(regions[:1]), members)
 
 
+def test_a_derived_mask_reads_the_file_and_takes_labels_that_tile_it(tmp_path):
+    fa = tmp_path / "m.fa"
+    fa.write_text(">c1\nACNNNNGTAC\n>c2\nNacg\n")
+    roots = {"R1": b"ACGTACGTAC", "R2": b"NACG"}  # R2's N is its own: not masked
+    def build(labels=None):
+        return layers.build_derived_mask(fa, "u", {"c1": "R1", "c2": "R2"}, roots.__getitem__, labels, "L").to_pylist()
+    assert [(r["root_id"], r["start"], r["end"], r["name"], r["labels_from"]) for r in build()] == [
+        ("R1", 2, 6, None, None)]
+    named = build({"c1": [(2, 4, "dj"), (4, 6, "rdna")]})  # one run, two labels end to end
+    assert [(r["start"], r["end"], r["name"], r["labels_from"]) for r in named] == [(2, 4, "dj", "L"), (4, 6, "rdna", "L")]
+    for bad in ([(2, 5, "dj")], [(2, 4, "dj"), (3, 6, "rdna")], [(2, 6, "a"), (8, 9, "b")], []):
+        with pytest.raises(Refused, match="overlaps|don't tile"):
+            build({"c1": bad})
+    roots["R1"] = b"ACGTACGTAA"  # outside the run, the file has a base the root doesn't
+    with pytest.raises(Refused, match="doesn't give the file's sequence"):
+        build()
+    bed = tmp_path / "l.bed"
+    bed.write_text("# a comment\n#chrom\tstart\tend\tname\nc1\t4\t6\trdna\nc1\t2\t4\tdj\n")
+    assert layers.read_labels(bed) == {"c1": [(2, 4, "dj"), (4, 6, "rdna")]}
+
+
 def test_padding_takes_the_latest_placement_and_marks_revised_ones():
     import pyarrow as pa
     def placement(root, start, end, first, last, ori="+", parent="C.1"):

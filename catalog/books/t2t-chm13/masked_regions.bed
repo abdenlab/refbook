@@ -1,0 +1,20 @@
+# The regions the T2T consortium's masked analysis sets hard-mask, named, as Arang Rhie's T2T-Ref README lists them
+# (Phillippy lab; BED coordinates, 0-based half-open, on T2T-CHM13v2.0 with UCSC names):
+#   https://github.com/arangrhie/T2T-Ref/blob/0aa9717563a817ff71d6431b3259ea06296ced78/README.md
+# Only the masked rows: the README's kept representative copies (chr13's DJ, first rDNA unit and PHR; chr1's first
+# 5S unit) are left out. chrY's masks (all of it for XX samples, its PARs for XY) are layer_chry and layer_par_y.
+# The layers task refuses unless, on each chromosome a derived mask names, these rows tile the N-runs it reads from
+# the published file exactly (book.toml derived_masks, `labels`).
+#chrom	start	end	name
+chr1	227743723	228022744	chr1_5S_array
+chr13	5817416	9348041	chr13_rDNA
+chr14	1755893	2099537	chr14_DJ
+chr14	2099537	2817811	chr14_rDNA
+chr14	6582691	7707094	chr14_PHR
+chr15	2164544	2506442	chr15_DJ
+chr15	2506442	4707485	chr15_rDNA
+chr21	2762174	3108298	chr21_DJ
+chr21	3108298	5612715	chr21_rDNA
+chr21	8706141	9832742	chr21_PHR
+chr22	4448073	4793794	chr22_DJ
+chr22	4793794	5720650	chr22_rDNA
