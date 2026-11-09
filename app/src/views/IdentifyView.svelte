@@ -12,6 +12,7 @@
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
+  import { editionHref } from "../data/books.ts";
   import { inOrder, sequenceDictionary } from "../data/exports.ts";
   import { editions, manifest, OPERATION_LABELS, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
   import {
@@ -20,7 +21,6 @@
   } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import { download, n } from "../format.ts";
-  import { href } from "../route.svelte.ts";
   import ErrorBox from "../components/ErrorBox.svelte";
   import Icon from "../components/Icon.svelte";
 
@@ -192,6 +192,7 @@
 </script>
 
 <section class="identify-page">
+  <p class="crumbs"><a href="#/">Home</a> / Identify</p>
   <h1>Identify sequences</h1>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
@@ -239,7 +240,7 @@
         {@const fits = near.filter((x) => x.off === 0 && x.unsure > 0)}
         <div class="whole" class:match={exact.length > 0}>
           {#if exact.length}
-            <p><Icon name="check" /> Exactly the edition <a href={href("edition", exact[0].edition)}>{exact[0].edition}</a>, published as
+            <p><Icon name="check" /> Exactly the edition <a href={editionHref(exact[0].edition)}>{exact[0].edition}</a>, published as
               {#each byEdition.get(exact[0].edition) ?? [] as t, i (t.target)}{i ? "; " : ""}{t.publisher} <span class="alias">{t.alias}</span>{/each}.
               {#await sameOrder(exact[0].edition, ts) then same}
                 {@const all = byEdition.get(exact[0].edition) ?? []}
@@ -247,7 +248,7 @@
               {/await}
             </p>
           {:else if fits.length}
-            <p>The names and lengths are those of {#each fits as x, i (x.edition)}{i ? (i === fits.length - 1 ? " or " : ", ") : ""}<a href={href("edition", x.edition)}>{x.edition}</a>{/each}.
+            <p>The names and lengths are those of {#each fits as x, i (x.edition)}{i ? (i === fits.length - 1 ? " or " : ", ") : ""}<a href={editionHref(x.edition)}>{x.edition}</a>{/each}.
               <span class="muted">Without digests the bases can't be told apart: paste a .dict with MD5s, or FASTA, to know which.</span></p>
           {:else}
             <p>Not an edition in the catalog. The nearest:
@@ -279,7 +280,7 @@
                   <td>
                     {#if id.editions.length}
                       <details><summary>{editionsOf(id).length} edition{editionsOf(id).length === 1 ? "" : "s"}</summary>
-                        <ul class="plain">{#each id.editions as u (u.edition + u.name + u.sequence)}<li><a href={href("edition", u.edition, "seq", u.name)}>{u.edition}</a> as {u.name}</li>{/each}</ul>
+                        <ul class="plain">{#each id.editions as u (u.edition + u.name + u.sequence)}<li><a href={editionHref(u.edition, u.name)}>{u.edition}</a> as {u.name}</li>{/each}</ul>
                       </details>
                     {/if}
                   </td>

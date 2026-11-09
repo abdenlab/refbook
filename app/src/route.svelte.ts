@@ -1,5 +1,5 @@
-// The page, from the location hash: #/, #/edition/<label>,
-// #/edition/<label>/seq/<name>?start=&end=&width=. Links from before the rename (#/flavor/…) are read as #/edition/….
+// The page, from the location hash: #/, #/catalog, #/catalog/<assembly>[/edition/<label>[/seq/<name>?start=&end=]],
+// #/editor, #/editor/<assembly>, #/sequences?q=, #/sequence/<SQ.>, #/identify, #/learn.
 
 export interface Route {
   parts: string[];
@@ -9,7 +9,6 @@ export interface Route {
 function parse(): Route {
   const [path, query = ""] = location.hash.replace(/^#/, "").split("?");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  if (parts[0] === "flavor") parts[0] = "edition";
   return { parts, query: new URLSearchParams(query) };
 }
 

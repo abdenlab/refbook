@@ -9,19 +9,19 @@
   // left holds every choice of the recipe, always in the same place (a choice
   // that doesn't apply is disabled, not hidden). The stage on the right shows
   // the catalog (fixed, with how far each edition is from the recipe), the
-  // analysis goals, the recipe and the files it makes, and the details. The
+  // guide (analysis goals and the choices made for them), the recipe and the files it makes, and the details. The
   // recipe is compiled live by the core in the browser.
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
-  import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
+  import { bookOf, editionHref, editorHref } from "../data/books.ts";
+  import { DESIGN_BOOK, decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
   import { editions, manifest, OPERATION_LABELS, targets, type Edition, type ManifestRow } from "../data/editions.ts";
   import { pairs } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import * as edit from "../data/recipeEdit.ts";
   import { bp, download, message, n } from "../format.ts";
-  import { href } from "../route.svelte.ts";
   import Digest from "../components/Digest.svelte";
   import ErrorBox from "../components/ErrorBox.svelte";
   import Icon from "../components/Icon.svelte";
@@ -30,7 +30,8 @@
   let { cat, query }: { cat: Catalog; query: URLSearchParams } = $props();
 
   const ready = $derived(measure("catalog", async () => {
-    const [t, fs, ts] = await Promise.all([designTables(cat), editions(cat), targets(cat)]);
+    const [t, all, ts] = await Promise.all([designTables(cat), editions(cat), targets(cat)]);
+    const fs = all.filter((f) => f.book === DESIGN_BOOK);  // the Editor's assembly's editions only
     const manifests = new Map(await Promise.all(fs.map(async (f) => [f.edition, await manifest(cat, f.edition)] as const)));
     // The catalog's order is fixed: smallest first.
     const listed = [...fs].sort((a, b) => a.n_sequences - b.n_sequences || a.edition.localeCompare(b.edition));
@@ -38,8 +39,8 @@
     return { t, fs, listed, publishers, manifests };
   }));
 
-  type Tab = "catalog" | "goals" | "recipe" | "export" | "info";
-  const TABS: [Tab, string][] = [["catalog", "Catalog"], ["goals", "Goals"], ["recipe", "Recipe"], ["export", "Export"], ["info", "Info"]];
+  type Tab = "catalog" | "guide" | "recipe" | "export" | "info";
+  const TABS: [Tab, string][] = [["catalog", "Catalog"], ["guide", "Guide"], ["recipe", "Recipe"], ["export", "Export"], ["info", "Info"]];
   type Format = "sizes" | "dict" | "seqcol";
   const FORMATS: [Format, string][] = [["sizes", "chrom.sizes"], ["dict", ".dict"], ["seqcol", "seqcol.json"]];
 
@@ -48,7 +49,7 @@
   let jsonText = $state("");
   let jsonError = $state<string | null>(null);
   // The view is made anew on each navigation, so the link is read once.
-  const asked = untrack(() => (query.get("tab") === "files" ? "recipe" : query.get("tab")));
+  const asked = untrack(() => query.get("tab"));
   let tab = $state<Tab>(TABS.some(([k]) => k === asked) ? (asked as Tab) : "catalog");
   let format = $state<Format>("sizes");
   let order = $state<Order>("name");
@@ -69,7 +70,7 @@
     const q = new URLSearchParams();
     if (tab !== "catalog") q.set("tab", tab);
     if (recipe && JSON.stringify(recipe) !== JSON.stringify(edit.fromScratch())) q.set("r", encodeRecipe(recipe));
-    history.replaceState(null, "", `#/${q.size ? "?" + q : ""}`);
+    history.replaceState(null, "", editorHref(DESIGN_BOOK, q));
     if (recipe) kept = { recipe: JSON.stringify(recipe), loaded };
   }
 
@@ -169,6 +170,7 @@
 </script>
 
 <section class="bench">
+  <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {bookOf.get(DESIGN_BOOK)?.assembly ?? DESIGN_BOOK}</p>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
   {:then { t, fs, listed, publishers, manifests }}
@@ -192,9 +194,9 @@
       <div class="design workbench">
         <div class="form shelf">
           <p class="status band" class:match={!!d?.equals} aria-live="polite">
-            <span class="label">Recipe:</span>
+            <span class="label">Edition:</span>
             {#if attempted.error}<span class="bad">doesn't compile</span>
-            {:else if d?.equals}<Icon name="check" /><a href={href("edition", d.equals)}>{d.equals}</a>
+            {:else if d?.equals}<Icon name="check" /><a href={editionHref(d.equals)}>{d.equals}</a>
             {:else if d}not in catalog{/if}
             <button type="button" class="icon reset" disabled={fresh} onclick={() => loadEdition(null)}
                     title={fresh ? "A new recipe: the GRCh38 chromosomes" : "Start over: a new recipe, the GRCh38 chromosomes"}
@@ -291,7 +293,7 @@
                     <tr class:here={d?.equals === f.edition}>
                       <td class="edit"><button type="button" class="icon" title={`Edit ${f.edition}'s recipe`} aria-label={`Edit ${f.edition}'s recipe`}
                                   onclick={() => loadEdition(f)}><Icon name="load" /></button></td>
-                      <td class="edition"><a href={href("edition", f.edition)} target="_blank" rel="noopener" title={`${f.edition}, in a new tab`}>{f.edition}</a>{#if f.patch_release !== null}<span class="tag">p{f.patch_release}</span>{/if}</td>
+                      <td class="edition"><a href={editionHref(f.edition)} target="_blank" rel="noopener" title={`${f.edition}, in a new tab`}>{f.edition}</a>{#if f.patch_release !== null}<span class="tag">p{f.patch_release}</span>{/if}</td>
                       <td class="num">{n(f.n_sequences)}</td>
                       <td class="num">{bp(f.total_length, true)}</td>
                       <td>{#each f.operations as o (o)}<span class="op">{OPERATION_LABELS[o] ?? o}</span>{:else}<span class="muted">none</span>{/each}</td>
@@ -302,7 +304,7 @@
                 </tbody>
               </table>
             </div>
-          {:else if tab === "goals"}
+          {:else if tab === "guide"}
             <p class="muted small">Choices commonly made for an analysis goal. Switch one on or off, and watch the choices follow.</p>
             <ul class="guide">
               {#each edit.GUIDE as g (g.goal)}

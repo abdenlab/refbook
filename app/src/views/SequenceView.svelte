@@ -7,19 +7,19 @@
   // them 0-based, half-open (?start=&end=), and follows the view.
   import type { Blocks } from "../data/blocks.ts";
   import type { Catalog } from "../data/catalog.ts";
-  import { IUPAC_TO_N, PAD, manifest, onSequence, OPERATION_LABELS, padding, region, rootWindow, spans,
+  import { bookHref, editionHref, type Book } from "../data/books.ts";
+  import { IUPAC_TO_N, ORIENT, PAD, manifest, onSequence, OPERATION_LABELS, padding, region, rootWindow, spans,
            type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { bp, n } from "../format.ts";
-  import { href } from "../route.svelte.ts";
   import BaseScroller from "../components/BaseScroller.svelte";
   import Digest from "../components/Digest.svelte";
   import ErrorBox from "../components/ErrorBox.svelte";
   import Overview from "../components/Overview.svelte";
   import { parseLocus } from "./bases.ts";
 
-  let { cat, blocks, label, name, query }: {
-    cat: Catalog; blocks: () => Promise<Blocks>; label: string; name: string; query: URLSearchParams;
+  let { cat, blocks, book, label, name, query }: {
+    cat: Catalog; blocks: () => Promise<Blocks>; book: Book; label: string; name: string; query: URLSearchParams;
   } = $props();
 
   type Span = [number, number];
@@ -41,7 +41,7 @@
     if (p) gaps.push([0, p.before], [p.before + p.root_length, row.length]);
     const changed: Span[] = [];
     for (const op of row.operations) {
-      if (op === PAD) continue;
+      if (op === PAD || op === ORIENT) continue;
       if (op === IUPAC_TO_N) {
         const codes = await cat.table<{ root_id: string; pos: number }>("layer_iupac.parquet");
         changed.push(...codes.filter((c) => c.root_id === row.root_id).map((c) => onSequence(p, [c.pos, c.pos + 1])));
@@ -71,7 +71,7 @@
   function onview(s: number, e: number) {
     view = [s, e];
     if (input && document.activeElement !== input) input.value = `${n(s + 1)}-${n(e)}`;
-    history.replaceState(null, "", `${href("edition", label, "seq", name)}?${new URLSearchParams({ start: String(s), end: String(e) })}`);
+    history.replaceState(null, "", `${editionHref(label, name)}?${new URLSearchParams({ start: String(s), end: String(e) })}`);
   }
 
   function submit(e: SubmitEvent, row: ManifestRow) {
@@ -92,7 +92,7 @@
 </script>
 
 <section>
-  <p class="crumbs"><a href="#/catalog">Catalog</a> / <a href={href("edition", label)}>{label}</a> / {name}</p>
+  <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href={bookHref(book.book)}>{book.assembly}</a> / <a href={editionHref(label)}>{label}</a> / {name}</p>
   {#await loaded then v}
     {#if !v}
       <h1>No such sequence</h1>

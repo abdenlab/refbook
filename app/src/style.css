@@ -70,6 +70,7 @@ details > summary { cursor: pointer; }
 #app:has(.workbench) { height: 100dvh; display: flex; flex-direction: column; }
 #app:has(.workbench) > main { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 2.9rem; }
 section.bench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+section.bench > .crumbs { margin-bottom: 0.6rem; }
 .workbench { flex: 1; min-height: 0; display: grid; grid-template-columns: 24.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .workbench > .shelf, .workbench > .stage { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -261,10 +262,10 @@ pre.bases .pos { color: var(--muted); user-select: none; }
 .warn { color: var(--warn); }
 
 /* A heading with its section's action beside it (the edition page's Compare and Edit). */
-h2.act { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
-h2.act .action { font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem;
+h1.act, h2.act { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
+h1.act .action, h2.act .action { font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem;
   padding: 0.15rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
-h2.act .action:hover { border-color: var(--accent); text-decoration: none; }
+h1.act .action:hover, h2.act .action:hover { border-color: var(--accent); text-decoration: none; }
 
 /* A sequence's bases: an overview bar of the whole sequence, and a scroller of its lines (BaseScroller sets --lh). */
 .overview { margin: 0.8rem 0 0.2rem; user-select: none; }
@@ -294,3 +295,17 @@ h2.act .action:hover { border-color: var(--accent); text-decoration: none; }
 .seqs .c-i { width: 3.5rem; } .seqs .c-name { width: 13rem; } .seqs .c-role { width: 11.5rem; } .seqs .c-unit { width: 11rem; }
 .seqs .c-root { width: 13rem; } .seqs .c-len { width: 8rem; }  /* Operations takes the rest */
 .legend label.unmask { margin-left: 0.8rem; display: inline-flex; gap: 0.3rem; align-items: center; color: var(--text); }
+
+/* The Catalog menu in the header: the link, a chevron, and the assemblies below it. */
+.catalog-menu { position: relative; display: inline-flex; align-items: center; gap: 0.1rem; }
+.catalog-menu .open { border: none; background: none; color: var(--muted); padding: 0.1rem; font-size: 0.85rem; line-height: 1; display: inline-flex; cursor: pointer; }
+.catalog-menu .open:hover, .catalog-menu .open[aria-expanded="true"] { color: var(--text); }
+.catalog-menu .menu {
+  position: absolute; top: calc(100% + 0.5rem); left: -0.6rem; z-index: 10; min-width: 11rem;
+  list-style: none; margin: 0; padding: 0.35rem 0; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.1);
+}
+.catalog-menu .menu a { display: block; padding: 0.35rem 0.9rem; color: var(--text); }
+.catalog-menu .menu a:hover { background: var(--op-bg); text-decoration: none; }
+.catalog-menu .menu .all { border-top: 1px solid var(--line); margin-top: 0.3rem; padding-top: 0.3rem; }
+.catalog-menu .menu .all a { color: var(--muted); font-size: 0.9rem; }

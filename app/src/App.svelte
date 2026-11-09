@@ -12,8 +12,15 @@
   import Icon from "./components/Icon.svelte";
   import Mark from "./components/Mark.svelte";
   import ErrorBox from "./components/ErrorBox.svelte";
+  import { bookFor, bookHref, books, editorHref, type Book } from "./data/books.ts";
+  import { DESIGN_BOOK } from "./data/design.ts";
+  import BookView from "./views/BookView.svelte";
   import CatalogView from "./views/CatalogView.svelte";
+  import LearnView from "./views/LearnView.svelte";
+  import EditorLandingView from "./views/EditorLandingView.svelte";
   import EditorView from "./views/EditorView.svelte";
+  import HomeView from "./views/HomeView.svelte";
+  import SequencesView from "./views/SequencesView.svelte";
   import IdentifyView from "./views/IdentifyView.svelte";
   import EditionView from "./views/EditionView.svelte";
   import SequenceView from "./views/SequenceView.svelte";
@@ -21,10 +28,14 @@
   // The catalog: ?catalog=<url> on the page, else VITE_CATALOG_URL at build
   // time, else /catalog/ (the dev server's copy of the repository's build).
   const catalogUrl = new URLSearchParams(location.search).get("catalog") ?? import.meta.env.VITE_CATALOG_URL ?? "/catalog/";
+  // The download meter (requests, bytes and time per action): a measurement of the static catalog, for development.
+  // Shown by the dev server, and in a build with ?meter in the address.
+  const showMeter = import.meta.env.DEV || new URLSearchParams(location.search).has("meter");
 
   const opened = (async () => {
     await init();
-    return measure("open catalog", () => Catalog.open(catalogUrl));
+    const cat = await measure("open catalog", () => Catalog.open(catalogUrl));
+    return { cat, bs: await books(cat) };
   })();
 
   let blocks: Promise<Blocks> | null = null;
@@ -41,15 +52,41 @@
   $effect(() => {
     document.title = parts.length ? `${parts.at(-1)} · refbook` : "refbook";
   });
+  const bookNamed = (bs: Book[], name: string | undefined) => bs.find((b) => b.book === name);
+
+  // The Catalog menu: its assemblies, a shortcut past the catalog page. Closed by any navigation or click elsewhere.
+  let menu = $state(false);
+  $effect(() => {
+    void route.current;
+    menu = false;
+  });
+  function closeOutside(e: MouseEvent) {
+    if (menu && !(e.target as Element).closest(".catalog-menu")) menu = false;
+  }
 </script>
 
+<svelte:window onclick={closeOutside} />
 <header class="top">
   <a class="brand" href="#/"><Mark />refbook</a>
-  <span class="tagline">Genome: get the book, in any edition.</span>
+  <!-- <span class="tagline">Genome: Bought the book? Which edition?</span> -->
   <nav>
-    <a href="#/" class:here={!parts.length || parts[0] === "design"}>Editor</a>
-    <a href="#/catalog" class:here={parts[0] === "catalog" || parts[0] === "edition"}>Catalog</a>
-    <a href="#/identify" class:here={parts[0] === "identify" || parts[0] === "compare"}>Identify</a>
+    <span class="catalog-menu">
+      <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
+      <button type="button" class="open" aria-label="Assemblies" aria-expanded={menu} onclick={() => (menu = !menu)}><Icon name="chevron" /></button>
+      {#if menu}
+        {#await opened then { bs }}
+          <ul class="menu" role="menu">
+            {#each [...bs].sort((a, b) => b.assembly.localeCompare(a.assembly)) as b (b.book)}
+              <li role="none"><a role="menuitem" href={bookHref(b.book)}>{b.assembly}</a></li>
+            {/each}
+            <li role="none" class="all"><a role="menuitem" href="#/catalog">All assemblies</a></li>
+          </ul>
+        {/await}
+      {/if}
+    </span>
+    <a href="#/editor" class:here={parts[0] === "editor"}>Editor</a>
+    <a href="#/sequences" class:here={parts[0] === "sequences" || parts[0] === "sequence"}>Sequences</a>
+    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
     <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
@@ -59,22 +96,40 @@
 <main>
   {#await opened}
     <p class="muted">Loading the catalog…</p>
-  {:then cat}
+  {:then { cat, bs }}
+    {@const book = parts[0] === "catalog" || parts[0] === "editor" ? bookFor(parts[1], bs) : undefined}
     {#key route.current}
-      {#if parts[0] === "edition" && parts[2] === "seq" && parts[3]}
-        <SequenceView {cat} blocks={() => openBlocks(cat)} label={parts[1]} name={parts[3]} query={route.current.query} />
+      {#if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3] && parts[4] === "seq" && parts[5]}
+        <SequenceView {cat} {book} blocks={() => openBlocks(cat)} label={parts[3]} name={parts[5]} query={route.current.query} />
+      {:else if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3]}
+        <EditionView {cat} {book} label={parts[3]} />
+      {:else if parts[0] === "catalog" && book}
+        <BookView {book} />
       {:else if parts[0] === "catalog"}
-        <CatalogView {cat} />
+        <CatalogView {bs} />
+      {:else if parts[0] === "editor" && book}
+        {#if book.book === DESIGN_BOOK}
+          <EditorView {cat} query={route.current.query} />
+        {:else}
+          <section>
+            <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {book.assembly}</p>
+            <h1>The Editor doesn't know {book.assembly} yet</h1>
+            <p>It designs {bookNamed(bs, DESIGN_BOOK)?.assembly} editions for now: <a href={editorHref(DESIGN_BOOK)}>open it there</a>.
+              The {book.assembly} editions are in <a href={bookHref(book.book)}>the catalog</a>.</p>
+          </section>
+        {/if}
+      {:else if parts[0] === "editor"}
+        <EditorLandingView {bs} />
+      {:else if parts[0] === "learn"}
+        <LearnView {cat} />
+      {:else if parts[0] === "sequences"}
+        <SequencesView {cat} query={route.current.query} />
+      {:else if parts[0] === "sequence" && parts[1]}
+        <SequencesView {cat} query={route.current.query} sq={parts[1]} />
       {:else if parts[0] === "identify"}
         <IdentifyView {cat} query={route.current.query} />
-      {:else if parts[0] === "compare"}
-        <!-- The old compare page: A pasted, compared against B. -->
-        <IdentifyView {cat} query={new URLSearchParams({ from: route.current.query.get("a") ?? "", against: route.current.query.get("b") ?? "", tab: "compare" })} />
-      {:else if parts[0] === "edition" && parts[1]}
-        <EditionView {cat} label={parts[1]} />
       {:else}
-        <!-- The editor; #/design is its old address. -->
-        <EditorView {cat} query={route.current.query} />
+        <HomeView />
       {/if}
     {/key}
   {:catch e}
@@ -82,7 +137,7 @@
     <p class="muted">Catalog: {catalogUrl}</p>
   {/await}
 </main>
-{#if total.requests}
+{#if showMeter && total.requests}
   <footer class="meter" aria-live="polite">
     <span class="total">Downloaded this session: {total.requests} requests, {bytes(total.bytes)}</span>
     <ul>

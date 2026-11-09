@@ -12,7 +12,9 @@ import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
 import { editions, IUPAC_TO_N, manifest, onSequence, padding, region, targetOrder, targets, verify } from "../src/data/editions.ts";
-import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe } from "../src/data/design.ts";
+import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe, rootPlaces } from "../src/data/design.ts";
+import { bookFor, bookHref, books, editionHref, editorHref, familyOf, relations, releaseNumber } from "../src/data/books.ts";
+import { search, storedSequence } from "../src/data/sequences.ts";
 import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
@@ -71,7 +73,7 @@ test("the two export orders: by name, and karyotypic by role", { skip }, async (
   // The blocks, in order: as GRC's own files have them.
   const block = (r: (typeof k)[number]) => {
     const p = places.get(r.root_id);
-    return !p ? "ebv" : "rank" in p ? "hla" : p.grch38 ? p.role : "decoy";
+    return !p ? "ebv" : "rank" in p ? "hla" : p.primary ? p.role : "decoy";
   };
   const runs = k.map(block).filter((b, i, xs) => i === 0 || b !== xs[i - 1]);
   assert.deepEqual(runs, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "ebv", "decoy", "hla"]);
@@ -131,6 +133,62 @@ test("padded and oriented rows: their digests, and any slice agrees with the who
     }
     assert.deepEqual(onSequence(p, [0, p.root_length]), [p.before, p.before + p.root_length]);
   }
+});
+
+test("books: each assembly's releases and editions, and an edition's address", { skip }, async () => {
+  const bs = await books(cat);
+  assert.deepEqual(bs.map((b) => [b.book, b.assembly, b.releases.length, b.releases[0], b.editions.length, b.targets.length]),
+    [["grch37", "GRCh37", 14, "GRCh37", 17, 20], ["grch38", "GRCh38", 15, "GRCh38", 13, 17]]);
+  assert.equal(bs[0].releases.at(-1), "GRCh37.p13");
+  assert.deepEqual([releaseNumber("GRCh37.p13", "GRCh37"), releaseNumber("GRCh37", "GRCh37"), releaseNumber("hs38d1", "GRCh38")], [13, 0, null]);
+  assert.equal(editionHref("hs37d5", "1"), "#/catalog/GRCh37/edition/hs37d5/seq/1");
+  assert.deepEqual([bookHref("grch38"), editorHref("grch38", new URLSearchParams({ from: "hg38" }))],
+                   ["#/catalog/GRCh38", "#/editor/GRCh38?from=hg38"]);
+  assert.deepEqual(["GRCh37", "grch37", "GRCH37", "hg19", undefined].map((s) => bookFor(s, bs)?.book),
+                   ["grch37", "grch37", "grch37", undefined, undefined]);
+  const fam = (e: string) => familyOf(e, bs.flatMap((b) => b.targets));
+  // iGenomes only where nobody else publishes the edition.
+  assert.deepEqual(["hs37d5", "hg19", "grch37-full", "gencode-grch37-p13", "ncbi-build37.1"].map(fam),
+                   ["projects", "ucsc", "grc", "ensembl", "igenomes"]);
+  // A book's places: its own assembly's members are primary; GRCh37's chr1 is a chromosome there.
+  const places = await rootPlaces(cat, "grch37", "GRCh37");
+  assert.deepEqual(places.get("CM000663.1"), { primary: true, assembly: "GRCh37", role: "assembled-molecule",
+                                               unit: "Primary Assembly", molecule: "1" });
+});
+
+test("relations: how an edition stands to the others of its book", { skip }, async () => {
+  const rel = await relations(cat, "b37");
+  const find = (o: string) => rel.find((r) => r.other === o);
+  assert.deepEqual(find("hs37d5"), { kind: "within", other: "hs37d5", added: ["NC_007605", "hs37d5"] });
+  assert.deepEqual(find("b37-ebv"), { kind: "within", other: "b37-ebv", added: ["NC_007605"] });
+  assert.equal(rel[0].other, "b37-ebv");  // nearest first
+  // The GRC's and UCSC's copies of the analysis set: the same sequences, named otherwise.
+  const grc = (await relations(cat, "grch37-full")).find((r) => r.other === "hg19-p13-full-analysis-set")!;
+  assert.equal(grc.kind, "renamed");
+  // Ensembl's primary assembly and its iGenomes chromosomes: the same names and roots, but not a subset (Y differs?).
+  for (const r of await relations(cat, "ensembl-grch37-primary")) assert.notEqual(r.other, "ensembl-grch37-primary");
+});
+
+test("sequences: a name across books, and a stored sequence", { skip }, async () => {
+  const chr1 = await search(cat, "chr1");
+  assert.ok(chr1.exact);
+  assert.deepEqual(chr1.hits.map((h) => h.root_id), ["CM000663.1", "CM000663.2"]);
+  assert.deepEqual(chr1.hits.map((h) => h.books.map((b) => b.book)), [["grch37"], ["grch38"]]);
+  // chrM: the Yoruba mitochondrion (hg19's) and rCRS (in both books).
+  const chrM = await search(cat, "chrM");
+  assert.deepEqual(chrM.hits.map((h) => h.root_id), ["AF347015.1", "J01415.2"]);
+  assert.deepEqual(chrM.hits[1].books.map((b) => b.book), ["grch37", "grch38"]);
+  // GL383518.1: a GRCh37 novel patch and a GRCh38 alt.
+  const gl = (await search(cat, "GL383518.1")).hits[0];
+  assert.deepEqual(gl.books.map((b) => [b.book, b.role]), [["grch37", "novel-patch"], ["grch38", "alt-scaffold"]]);
+  // By digest, and the stored sequence's page: a padded patch belongs to the book whose placement pads it.
+  const padded = gl.stored.find((s) => s.operations.includes("pad"))!;
+  assert.equal(padded.book, "grch37");
+  assert.deepEqual((await search(cat, padded.md5)).hits.map((h) => h.root_id), ["GL383518.1"]);
+  const one = (await storedSequence(cat, padded.sha512t24u))!;
+  assert.deepEqual(one.byBook.map(([b]) => b), ["grch37"]);
+  assert.ok(one.byBook[0][1].some((u) => u.edition === "ensembl-grch37-toplevel"));
+  assert.equal((await search(cat, "HSCHR1_1_CT")).exact, false);
 });
 
 test("pasted headers parse in every format", () => {

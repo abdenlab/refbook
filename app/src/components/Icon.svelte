@@ -1,6 +1,7 @@
 <script lang="ts">
   // A small line icon (24-unit strokes, after Feather), sized to the text.
-  let { name }: { name: "copy" | "download" | "link" | "load" | "check" | "reset" | "sort" | "compare" | "sun" | "moon" | "system" } = $props();
+  let { name }: { name: "copy" | "download" | "link" | "load" | "check" | "reset" | "sort" | "compare" | "sun" | "moon" | "system"
+    | "books" | "search" | "question" | "info" | "chevron" | "arrow" } = $props();
 </script>
 
 <svg class="icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2"
@@ -23,6 +24,18 @@
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   {:else if name === "system"}
     <rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" />
+  {:else if name === "books"}
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  {:else if name === "search"}
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  {:else if name === "question"}
+    <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  {:else if name === "info"}
+    <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+  {:else if name === "chevron"}
+    <polyline points="6 9 12 15 18 9" />
+  {:else if name === "arrow"}
+    <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
   {:else if name === "check"}
     <polyline points="20 6 9 17 4 12" />
   {:else}

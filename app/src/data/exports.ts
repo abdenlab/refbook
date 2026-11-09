@@ -12,7 +12,7 @@ export function sequenceDictionary(rows: ManifestRow[]): string {
 
 /** Where a root goes in karyotypic order: an assembly member's role and molecule, or an external root's rank. */
 export type Place =
-  | { grch38: boolean; assembly: string; role: string; unit: string; molecule: string }
+  | { primary: boolean; assembly: string; role: string; unit: string; molecule: string }
   | { collection: string; rank: number };
 
 /** The two orders offered for exports. Neither is an identity: digests don't depend on order. */
@@ -23,10 +23,10 @@ const ROLES = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"
 const MOLECULES = [...Array.from({ length: 22 }, (_, i) => String(i + 1)), "X", "Y", "MT"];
 const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Karyotypic, by role: the GRCh38 assembly's sequences role by role (chromosomes,
+/** Karyotypic, by role: the book's assembly's sequences role by role (chromosomes,
  * unlocalized, unplaced, alts, novel patches, fix patches), then roots in no
- * assembly (EBV), then other assemblies' (the hs38d1 decoys), then external
- * collections (HLA) in their rank order. Within a role: by chromosome
+ * assembly (EBV, hg19's Yoruba chrM, the hs37d5 decoy), then other assemblies'
+ * (the hs38d1 decoys), then external collections (HLA) in their rank order. Within a role: by chromosome
  * (1-22, X, Y, MT, then none), then accession. Pure: the rows aren't changed. */
 export function karyotypic<R extends { root_id: string; name: string }>(rows: R[], places: Map<string, Place>): R[] {
   const key = (r: R): [number, number, number, number, string] => {
@@ -34,7 +34,7 @@ export function karyotypic<R extends { root_id: string; name: string }>(rows: R[
     if (!p) return [1, 0, 0, 0, r.root_id];
     if ("rank" in p) return [3, 0, 0, p.rank, p.collection];
     const role = ROLES.indexOf(p.role), mol = MOLECULES.indexOf(p.molecule);
-    return [p.grch38 ? 0 : 2, role < 0 ? ROLES.length : role, mol < 0 ? MOLECULES.length : mol, 0, r.root_id];
+    return [p.primary ? 0 : 2, role < 0 ? ROLES.length : role, mol < 0 ? MOLECULES.length : mol, 0, r.root_id];
   };
   const keyed = rows.map((r) => ({ r, k: key(r) }));
   keyed.sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.k[3] - b.k[3]

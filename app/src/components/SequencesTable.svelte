@@ -7,7 +7,7 @@
   import type { ManifestRow } from "../data/editions.ts";
   import { OPERATION_LABELS } from "../data/editions.ts";
   import { n } from "../format.ts";
-  import { href } from "../route.svelte.ts";
+  import { editionHref } from "../data/books.ts";
   import Icon from "./Icon.svelte";
 
   let { edition, rows, places, orders, order = $bindable() }: {
@@ -64,10 +64,10 @@
           {@const p = places?.get(r.root_id)}
           <tr>
             <td class="num muted">{n(i + 1)}</td>
-            <td title={r.name}><a href={href("edition", edition, "seq", r.name)}>{r.name}</a></td>
+            <td title={r.name}><a href={editionHref(edition, r.name)}>{r.name}</a></td>
             {#if p && "role" in p}
               <td>{p.role}</td>
-              <td>{p.unit}{#if !p.grch38}{" "}<span class="muted">({p.assembly})</span>{/if}</td>
+              <td>{p.unit}{#if !p.primary}{" "}<span class="muted">({p.assembly})</span>{/if}</td>
             {:else if p}
               <td class="muted">—</td><td class="muted" title={p.collection}>{p.collection}</td>
             {:else}

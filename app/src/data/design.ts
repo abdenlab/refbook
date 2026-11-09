@@ -5,6 +5,7 @@ import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
 import type { Place } from "./exports.ts";
 import type { Edition, ManifestRow } from "./editions.ts";
+import { releaseNumber } from "./books.ts";
 import { measure } from "./meter.ts";
 
 /** A recipe, in the grammar the core compiles (crates/refbook-core/src/recipe.rs; catalog/refbook_pipeline/engine.py). */
@@ -42,36 +43,47 @@ export interface DesignTables {
 }
 
 const key = (root: string, ops: string[]) => [root, ...ops].join(" ");
-const GRCH38 = "GCA_000001405.";
 /** The book the designer works in: its members, placements and padding (a root can be placed in two books). Until
- * the app picks an assembly, GRCh38's. */
-const BOOK = "grch38";
-const inBook = <T extends { book?: string | null }>(rows: T[]) => rows.filter((r) => r.book == null || r.book === BOOK);
+ * the Editor knows other books, GRCh38's. */
+export const DESIGN_BOOK = "grch38";
+const DESIGN_ASSEMBLY = "GRCh38";
+const ofBook = <T extends { book?: string | null }>(rows: T[], book: string) =>
+  rows.filter((r) => r.book == null || r.book === book);
+const inBook = <T extends { book?: string | null }>(rows: T[]) => ofBook(rows, DESIGN_BOOK);
 
 let loaded: Promise<DesignTables> | null = null;
 
 type PlaceMember = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string; assembly_unit: string; assigned_molecule: string | null };
 
-/** Where each root belongs: its assembly, role, unit and molecule (the first record; none differs), or its external collection. */
-function placesOf(members: PlaceMember[], external: { root_id: string; collection: string; rank: number }[]): Map<string, Place> {
+/** Where each root belongs in a book: its assembly (`assembly`, the book's, for a member of one of its releases),
+ * role, unit and molecule (the first record; none differs), or its external collection. */
+function placesOf(members: PlaceMember[], external: { root_id: string; collection: string; rank: number }[],
+                  assembly: string): Map<string, Place> {
   const places = new Map<string, Place>();
   for (const m of members) {
     if (places.has(m.genbank_accession)) continue;
-    const grch38 = m.assembly_accession.startsWith(GRCH38);
-    places.set(m.genbank_accession, { grch38, assembly: grch38 ? "GRCh38" : m.assembly_name, role: m.role, unit: m.assembly_unit, molecule: m.assigned_molecule ?? "" });
+    const primary = releaseNumber(m.assembly_name, assembly) !== null;
+    places.set(m.genbank_accession, { primary, assembly: primary ? assembly : m.assembly_name, role: m.role,
+                                      unit: m.assembly_unit, molecule: m.assigned_molecule ?? "" });
   }
   for (const e of external) places.set(e.root_id, { collection: e.collection, rank: e.rank });
   return places;
 }
 
-let placed: Promise<Map<string, Place>> | null = null;
+const placed = new Map<string, Promise<Map<string, Place>>>();
 
-/** Just the places (about 0.1 MB, once): for showing roles and units without the compiler's tables. */
-export function rootPlaces(cat: Catalog): Promise<Map<string, Place>> {
-  return (placed ??= Promise.all([
-    cat.table<PlaceMember & { book?: string }>("assembly_members.parquet"),
-    cat.table<{ root_id: string; collection: string; rank: number }>("roots_external.parquet"),
-  ]).then(([m, e]) => placesOf(inBook(m), e)));
+/** A book's places (assembly_members, about 0.1 MB, once): for showing roles and units without the compiler's
+ * tables. `assembly` is the book's (its editions record it). */
+export function rootPlaces(cat: Catalog, book: string, assembly: string): Promise<Map<string, Place>> {
+  let p = placed.get(book);
+  if (!p) {
+    p = Promise.all([
+      cat.table<PlaceMember & { book?: string }>("assembly_members.parquet"),
+      cat.table<{ root_id: string; collection: string; rank: number }>("roots_external.parquet"),
+    ]).then(([m, e]) => placesOf(ofBook(m, book), e, assembly));
+    placed.set(book, p);
+  }
+  return p;
 }
 
 /** The tables the compiler and the digests need (about 0.4 MB, once). */
@@ -117,7 +129,7 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       if (!g.includes(e.group)) g.push(e.group);
       collections.set(e.collection, g);
     }
-    const places = placesOf(members, ext);
+    const places = placesOf(members, ext, DESIGN_ASSEMBLY);
     return {
       compiler, rootLength, padded, collections, roleCounts, places, layers: ["hardmask_grc"],
       derived: new Map(inBook(derivations).map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
