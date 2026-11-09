@@ -69,7 +69,8 @@ def excluded(recipe: dict, members: list[dict], selected: set[str]) -> list[str]
         for m in members:
             if (m["assembly_accession"] == entry["assembly"] and m["role"] in entry["roles"]
                     and m["genbank_accession"] not in selected):
-                why = f"not placed on {' or '.join(entry['placed_on'])}" if "placed_on" in entry else "left out"
+                why = ("excluded" if m["genbank_accession"] in entry.get("exclude", ())
+                       else f"not placed on {' or '.join(entry['placed_on'])}" if "placed_on" in entry else "left out")
                 out[f"{m['role']} ({why})"] += 1
     return [f"{n} {what}" for what, n in sorted(out.items())]
 

@@ -112,9 +112,11 @@ def test_select_narrowings():
     roles = ["assembled-molecule", "alt-scaffold", "fix-patch"]
     assert selected([{"assembly": "GCA_1.1", "roles": roles, "placed_on": ["chromosome"]}]) == ["C1.1", "A1.1", "F1.1"]
     assert selected([{"assembly": "GCA_1.1", "roles": ["fix-patch"], "accessions": ["F2.1"]}]) == ["F2.1"]
+    assert selected([{"assembly": "GCA_1.1", "roles": roles, "exclude": ["A1.1", "F2.1"]}]) == ["C1.1", "F1.1"]
 
 
 @pytest.mark.parametrize("entries", [
+    [{"assembly": "GCA_1.1", "roles": ["assembled-molecule"], "exclude": ["EBV.1"]}],  # not a member: refused
     [{"assembly": "GCA_1.1", "roles": ["assembled-molecule"]}, {"assembly": "GCA_1.1", "roles": ["assembled-molecule"]}],
     [{"assembly": "GCA_9.9", "roles": ["assembled-molecule"]}],
     [{"roots": ["NOPE.1"]}],

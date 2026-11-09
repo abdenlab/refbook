@@ -36,10 +36,15 @@ def select(recipe: dict, members: list[dict], roots: dict, external: list[dict],
             sys.exit(f"{recipe['target']}: no assembly {entry['assembly']}")
         only = set(entry.get("accessions", [])) or None
         placed_on = set(entry.get("placed_on", [])) or None
+        exclude = set(entry.get("exclude", []))
+        if exclude - {m["genbank_accession"] for m in rows}:
+            sys.exit(f"{recipe['target']}: excludes {sorted(exclude)}, not all members of {entry['assembly']}")
         for m in rows:
             acc = m["genbank_accession"]
             if placed_on and parent_types.get(acc, placed_on) - placed_on:
                 continue  # placed on a parent type the edition leaves out
+            if acc in exclude:
+                continue
             if m["role"] in entry["roles"] and (only is None or acc in only):
                 out.append({"root_id": acc, "assembly": entry["assembly"], "member": m})
     ids = [s["root_id"] for s in out]

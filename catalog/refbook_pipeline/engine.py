@@ -6,8 +6,9 @@ fills in lengths and digests, and compares the result with what a target was obs
 A recipe (catalog/books/<book>/recipes/*.json) is data:
 
 - select   a list of entries, each either {"assembly": <GenBank assembly accession.version>, "roles": [...],
-           "accessions": [...]?} (rows of assembly_members, optionally only those accessions, and with
-           "placed_on": [...] only roots placed, if at all, on those parent types: layer_placements.parent_type),
+           "accessions": [...]?} (rows of assembly_members, optionally only those accessions, with
+           "placed_on": [...] only roots placed, if at all, on those parent types: layer_placements.parent_type,
+           and with "exclude": [...] without those members, each one of the assembly's: e.g. its mitochondrion),
            {"roots": [...]} (roots in no assembly, e.g. EBV) or {"collection": ..., "groups": [...]} (external
            roots, roots_external.parquet, in their collection's rank order; never materialized)
 - mask     [{"layer": <name>, "with": "N"}]: hard-mask the spans of layer_<name> that fall on selected roots

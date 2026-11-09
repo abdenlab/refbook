@@ -29,6 +29,7 @@
             <details class="long"><summary class="muted">only {n(e.accessions.length)} of them, by accession</summary>
               <div class="list">{#each e.accessions as a (a)}<code>{a}</code> {/each}</div></details>
           {/if}
+          {#if e.exclude?.length}<div class="muted">without {#each e.exclude as x, i (x)}{i ? ", " : ""}<code>{x}</code>{/each}</div>{/if}
         {:else if "roots" in e}
           <strong>Roots in no assembly</strong>
           <div>{#each e.roots as root (root)}<code>{root} </code>{/each}</div>

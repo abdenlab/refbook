@@ -5,9 +5,11 @@
 //!
 //! - `select`: entries, each one of
 //!   - `{"assembly": <accession.version>, "roles": [...], "accessions": [...]?,
-//!     "placed_on": [...]?}`: members of an assembly with one of the roles,
-//!     optionally only those accessions, and with `placed_on` only roots placed,
-//!     if at all, on those parent types;
+//!     "placed_on": [...]?, "exclude": [...]?}`: members of an assembly with one
+//!     of the roles, optionally only those accessions, with `placed_on` only
+//!     roots placed, if at all, on those parent types, and without the members
+//!     `exclude` names (each must be a member of the assembly: e.g. its
+//!     mitochondrion, for an edition that carries another);
 //!   - `{"roots": [...]}`: roots in no assembly (e.g. EBV);
 //!   - `{"collection": ..., "groups": [...]}`: external roots, in their
 //!     collection's rank order (never materialized).
@@ -55,6 +57,11 @@ pub enum RecipeError {
     /// Not valid recipe JSON, or not the grammar.
     Malformed(String),
     NoAssembly(String),
+    /// A root an assembly entry excludes that isn't a member of its assembly.
+    NotAMember {
+        assembly: String,
+        root: String,
+    },
     NoRoot(String),
     NothingInCollection {
         collection: String,
@@ -92,6 +99,12 @@ impl fmt::Display for RecipeError {
         match self {
             Malformed(m) => write!(f, "malformed recipe: {m}"),
             NoAssembly(a) => write!(f, "no assembly {a}"),
+            NotAMember { assembly, root } => {
+                write!(
+                    f,
+                    "{root} is excluded from {assembly}, but isn't a member of it"
+                )
+            }
             NoRoot(r) => write!(f, "no root {r}"),
             NothingInCollection { collection, groups } => {
                 write!(f, "nothing in {collection} {groups:?}")
@@ -161,6 +174,8 @@ pub struct AssemblyEntry {
     pub accessions: Vec<String>,
     #[serde(default)]
     pub placed_on: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -421,6 +436,7 @@ fn select<'a>(recipe: &'a Recipe, t: &'a Tables) -> Result<Vec<Selected<'a>>, Re
                             .get(&m.accession)
                             .is_some_and(|p| p.iter().any(|x| !a.placed_on.contains(x)));
                     if placed_elsewhere
+                        || a.exclude.contains(&m.accession)
                         || !a.roles.contains(&m.role)
                         || !(a.accessions.is_empty() || a.accessions.contains(&m.accession))
                     {
@@ -434,6 +450,16 @@ fn select<'a>(recipe: &'a Recipe, t: &'a Tables) -> Result<Vec<Selected<'a>>, Re
                 }
                 if !any {
                     return Err(RecipeError::NoAssembly(a.assembly.clone()));
+                }
+                if let Some(x) = a.exclude.iter().find(|x| {
+                    !t.members
+                        .iter()
+                        .any(|m| m.assembly == a.assembly && &m.accession == *x)
+                }) {
+                    return Err(RecipeError::NotAMember {
+                        assembly: a.assembly.clone(),
+                        root: x.clone(),
+                    });
                 }
             }
         }
@@ -630,9 +656,27 @@ mod tests {
             ]
             .into(),
             padding: [
-                ("A1.1".to_string(), Placed { revised: false, reverse: true }),
-                ("F1.1".to_string(), Placed { revised: false, reverse: false }),
-                ("F2.1".to_string(), Placed { revised: true, reverse: false }),
+                (
+                    "A1.1".to_string(),
+                    Placed {
+                        revised: false,
+                        reverse: true,
+                    },
+                ),
+                (
+                    "F1.1".to_string(),
+                    Placed {
+                        revised: false,
+                        reverse: false,
+                    },
+                ),
+                (
+                    "F2.1".to_string(),
+                    Placed {
+                        revised: true,
+                        reverse: false,
+                    },
+                ),
             ]
             .into(),
         }
@@ -676,6 +720,13 @@ mod tests {
                 "accessions": ["F2.1"]}], "rename": {"namespace": "ucsc"}}"#
             ),
             ["F2.1"].map(String::from)
+        );
+        assert_eq!(
+            roots(
+                r#"{"select": [{"assembly": "GCA_1.1", "roles": ["assembled-molecule",
+                "unlocalized-scaffold"], "exclude": ["C1.1"]}], "rename": {"namespace": "genbank"}}"#
+            ),
+            ["U1.1"].map(String::from)
         );
     }
 
@@ -730,6 +781,16 @@ mod tests {
         assert_eq!(
             err(&r(r#"{"assembly": "GCA_9.9", "roles": []}"#, "")),
             NoAssembly("GCA_9.9".into())
+        );
+        assert_eq!(
+            err(&r(
+                r#"{"assembly": "GCA_1.1", "roles": ["assembled-molecule"], "exclude": ["EBV.1"]}"#,
+                ""
+            )),
+            NotAMember {
+                assembly: "GCA_1.1".into(),
+                root: "EBV.1".into()
+            }
         );
         assert_eq!(err(&r(r#"{"roots": ["NOPE"]}"#, "")), NoRoot("NOPE".into()));
         assert!(matches!(
@@ -845,8 +906,12 @@ mod tests {
         };
         // A1.1 is on the minus strand: oriented; F1.1 on the plus strand: as is.
         assert_eq!(
-            compiled(&recipe("orient", r#"["alt-scaffold", "fix-patch"]"#, r#"["A1.1", "F1.1"]"#))
-                .unwrap(),
+            compiled(&recipe(
+                "orient",
+                r#"["alt-scaffold", "fix-patch"]"#,
+                r#"["A1.1", "F1.1"]"#
+            ))
+            .unwrap(),
             vec![
                 ("chr1_A1v1_alt".into(), "A1.1".into(), vec!["orient".into()]),
                 ("chr1_F1v1_fix".into(), "F1.1".into(), vec![]),
@@ -857,12 +922,18 @@ mod tests {
             Err(RecipeError::PlacementRevised("F2.1".into()))
         );
         assert_eq!(
-            compiled(&recipe("orient", r#"["assembled-molecule"]"#, r#"["C1.1"]"#)),
+            compiled(&recipe(
+                "orient",
+                r#"["assembled-molecule"]"#,
+                r#"["C1.1"]"#
+            )),
             Err(RecipeError::NotPlaced("C1.1".into()))
         );
         assert_eq!(
-            compiled(r#"{"select": [], "pad": {"roles": ["fix-patch"]}, "orient": {"roles": ["fix-patch"]},
-                        "rename": {"namespace": "ucsc"}}"#),
+            compiled(
+                r#"{"select": [], "pad": {"roles": ["fix-patch"]}, "orient": {"roles": ["fix-patch"]},
+                        "rename": {"namespace": "ucsc"}}"#
+            ),
             Err(RecipeError::PadAndOrient("fix-patch".into()))
         );
     }

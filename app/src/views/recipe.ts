@@ -2,7 +2,7 @@
 // words the app uses for its parts.
 
 export interface Recipe {
-  select: ({ assembly: string; roles: string[]; accessions?: string[]; placed_on?: string[] }
+  select: ({ assembly: string; roles: string[]; accessions?: string[]; placed_on?: string[]; exclude?: string[] }
     | { roots: string[] } | { collection: string; groups: string[] })[];
   mask?: { layer: string; with: string }[];
   alphabet?: { iupac?: string };
