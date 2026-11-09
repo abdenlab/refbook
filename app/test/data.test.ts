@@ -419,6 +419,32 @@ test("the form rebuilds T2T-CHM13's and GRCh37's editions: masks, mitochondria, 
   hg19 = edit.setIupacToN(edit.setMitochondrion(hg19, null, "AF347015.1"), true);
   assert.equal(edit.mitochondrion(hg19, null), "AF347015.1");
   assert.equal(is37(hg19), "hg19");
+  // Any mitochondrion with any release: rCRS added to p0 (which has none) is p13's own, and moving between them
+  // keeps one rCRS, a member or a root.
+  const mito = (a: string) => g.mito.get(a) ?? null;
+  const p0 = edit.setMitochondrion(edit.fromScratch("GCA_000001405.1"), null, "J01415.2");
+  assert.deepEqual(edit.mitochondria(p0, null), ["J01415.2"]);
+  const p13 = edit.setRelease(p0, g.start, mito);
+  assert.deepEqual(edit.mitochondria(p13, mito(g.start)), ["J01415.2"]);
+  assert.equal(edit.primary(p13)!.exclude, undefined);
+  assert.deepEqual(design(p13, g, fs).rows.find((r) => r.root_id === "J01415.2")?.name, "chrM");
+  assert.deepEqual(design(p0, g, fs).rows.filter((r) => r.root_id === "J01415.2").map((r) => [r.name, r.sha512t24u]),
+                   design(p13, g, fs).rows.filter((r) => r.root_id === "J01415.2").map((r) => [r.name, r.sha512t24u]));
+  assert.deepEqual(edit.mitochondria(edit.setRelease(p13, "GCA_000001405.1", mito), null), ["J01415.2"]);
+  // UCSC's hg19.p13.plusMT carries two: the Yoruba as chrM, rCRS as chrMT.
+  const plusMT = plainRecipe(JSON.parse(fs.find((f) => f.edition === "hg19-p13-plusmt")!.recipe));
+  assert.deepEqual(edit.mitochondria(plusMT, mito(g.start)).sort(), ["AF347015.1", "J01415.2"]);
+  // Its name: the chromosomes' style by default, following it; chrMT as UCSC's hg19.p13 analysis sets name rCRS.
+  const sets = plainRecipe(JSON.parse(fs.find((f) => f.edition === "hg19-p13-no-alt-analysis-set")!.recipe));
+  assert.equal(edit.mitochondrionOverride(sets, "J01415.2"), "chrMT");
+  const plainM = edit.setMitochondrionName(sets, mito(g.start), "J01415.2", null);
+  assert.equal(edit.mitochondrionOverride(plainM, "J01415.2"), null);
+  assert.equal(plainM.rename.map?.["J01415.2"], undefined);   // the release's own: named by its namespace
+  assert.equal(design(plainM, g, fs).rows.find((r) => r.root_id === "J01415.2")!.name, "chrM");
+  assert.equal(is37(edit.setMitochondrionName(plainM, mito(g.start), "J01415.2", "chrMT")), "hg19-p13-no-alt-analysis-set");
+  const added = edit.setNamespace(p0, "genbank");   // p0 with rCRS added: its default name follows the namespace
+  assert.equal(added.rename.map?.["J01415.2"], "J01415.2");
+  assert.equal(edit.setNamespace(edit.setMitochondrionName(p0, null, "J01415.2", "chrMT"), "genbank").rename.map?.["J01415.2"], "chrMT");
   const yoruba = SHELVES.grch37.guide.find((x) => x.goal === "Matching UCSC's hg19")!;
   assert.ok(yoruba.has(hg19, { hla: [], mito: null }));
   let top = edit.fromScratch(g.start);

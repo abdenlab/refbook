@@ -1,5 +1,5 @@
-// What the Editor offers for each book: its masks, the sequences it can add, the other mitochondria it can carry,
-// the guide's goals and the notes. The rest of the shelf (releases, roles and their counts, names, whether IUPAC
+// What the Editor offers for each book: its masks, the sequences it can add, the guide's goals and the notes.
+// (Every book can carry any of the catalog's mitochondria: recipeEdit.MITOCHONDRIA.) The rest of the shelf (releases, roles and their counts, names, whether IUPAC
 // codes or placements exist) comes from the catalog's tables (design.ts).
 import type { Recipe } from "./design.ts";
 import * as edit from "./recipeEdit.ts";
@@ -29,8 +29,6 @@ export interface Shelf {
   /** The masks the shelf offers, by layer (an edition's other masks are kept, and shown in its recipe). */
   masks: { layer: string; label: string }[];
   extras: Extra[];
-  /** Mitochondria besides the release's own an edition of the book carries. */
-  mitochondria: string[];
   guide: Goal[];
   /** Footnotes to the shelf, under its headings: what each choice is, where it comes from. */
   notes: [string, [string, string][]][];
@@ -77,7 +75,7 @@ const mitoGoal = (goal: string, choice: string, root: string): Goal => ({
 
 const NAMES_NOTE: [string, string] = ["Name style", "Every sequence is named from one namespace: UCSC (chr1), the GRC's sequence names (1), GenBank accessions or RefSeq accessions. A role's override names that role from another."];
 const ROLE_NOTE: [string, string] = ["Role", "Each sequence's role in the assembly, from its assembly report: chromosomes (1–22, X, Y and the mitochondrion); unlocalized scaffolds, on a known chromosome at an unknown position (chr1_…_random); unplaced scaffolds, on no known chromosome (chrUn_…); alt scaffolds, alternate haplotypes of a region (…_alt); and the patches, novel (new alternates) and fix (corrections). The counts are the release's."];
-const MITO_NOTE: [string, string] = ["Mitochondrion", "rCRS (J01415.2, NC_012920.1) is the standard mitochondrial reference: haplogroups, mtDNA variant databases and heteroplasmy tools use its coordinates. Another mitochondrion replaces the release's own and is named as the chromosomes are (chrM, MT, or its accession)."];
+const MITO_NOTE: [string, string] = ["Mitochondrial", "rCRS (J01415.2, NC_012920.1) is the standard mitochondrial reference: haplogroups, mtDNA variant databases and heteroplasmy tools use its coordinates. Any of them can go with any release: one the release doesn't have is added, and the release's own left out. It is named as the chromosomes are (chrM, MT, or its accession) unless overridden: UCSC's hg19.p13 files name rCRS chrMT, beside hg19's Yoruba chrM."];
 const EBV_NOTE: [string, string] = ["EBV", `The Epstein–Barr virus genome (${edit.EBV}), in no assembly: for reads from EBV-transformed cell lines. Named chrEBV with UCSC names, by accession otherwise.`];
 const IUPAC_NOTE: [string, string] = ["IUPAC → N", "Every ambiguity code (R, Y, M, …) becomes N, as some tools need."];
 const LAYOUT_NOTE: [string, string] = ["Laid out", "As submitted, or laid out in their parent's coordinates (N-padded to the chromosome's length, as Ensembl's GRCh37 toplevel), or turned to their parent's strand (as GENCODE 19)."];
@@ -86,7 +84,6 @@ export const SHELVES: Record<string, Shelf> = {
   grch38: {
     masks: [{ layer: "hardmask_grc", label: "GRC hard-mask" }],
     extras: [EXTRAS.ebv, EXTRAS.hs38d1, EXTRAS.hla],
-    mitochondria: [],
     guide: [
       COMPLETE_PRIMARY, EBV_GOAL,
       { goal: "Fewer false positives from reads of unassembled sequence",
@@ -104,8 +101,9 @@ export const SHELVES: Record<string, Shelf> = {
     notes: [
       ["GRCh38", [
         ["Release", "p0 is GRCh38 as first released (GCA_000001405.15). Each patch release adds fix and novel patches; none changes the chromosomes."],
-        ROLE_NOTE, NAMES_NOTE, MITO_NOTE,
+        ROLE_NOTE, NAMES_NOTE,
       ]],
+      ["Non-nuclear", [MITO_NOTE]],
       ["Alts and patches", [
         ["Placed on", "Every alt and patch is placed on the sequence it is an alternative to, or fixes. In p14 all are placed on chromosomes but 3 fix patches, which fix alt scaffolds; Ensembl and GENCODE leave those 3 out."],
         LAYOUT_NOTE,
@@ -124,7 +122,6 @@ export const SHELVES: Record<string, Shelf> = {
   grch37: {
     masks: [{ layer: "par_y", label: "chrY's PARs" }],
     extras: [EXTRAS.ebv, EXTRAS.hs37d5],
-    mitochondria: ["AF347015.1"],
     guide: [
       COMPLETE_PRIMARY, EBV_GOAL,
       { goal: "Fewer false positives from reads of unassembled sequence",
@@ -142,7 +139,10 @@ export const SHELVES: Record<string, Shelf> = {
     notes: [
       ["GRCh37", [
         ["Release", "p0 is GRCh37 as first released (GCA_000001405.1), and UCSC's hg19; p13 is the last. Each patch release adds fix and novel patches; none changes the chromosomes. p0 and p1 have no mitochondrion: the GRC added rCRS in p2."],
-        ROLE_NOTE, NAMES_NOTE, MITO_NOTE,
+        ROLE_NOTE, NAMES_NOTE,
+      ]],
+      ["Non-nuclear", [
+        MITO_NOTE,
         ["Yoruba", "The mitochondrion of a Yoruba individual (AF347015.1, NC_001807), UCSC's chrM in hg19: 16,571 bp, two longer than rCRS, on another numbering."],
       ]],
       ["Alts and patches", [
@@ -167,7 +167,6 @@ export const SHELVES: Record<string, Shelf> = {
       { layer: "t2t_5s_rdna", label: "5S rDNA array" },
     ],
     extras: [EXTRAS.ebv],
-    mitochondria: ["J01415.2"],
     guide: [
       { goal: "Short-read variant calling",
         choice: "chrY's PARs as N and rCRS for the mitochondrion: chm13v2.0_maskedY_rCRS, which the consortium recommends for mapping short reads (github.com/marbl/CHM13)",
@@ -191,7 +190,10 @@ export const SHELVES: Record<string, Shelf> = {
       ["T2T-CHM13", [
         ["Release", "v1.0 and v1.1 are the gapless CHM13 assembly, without chrY: CHM13 has none. v2.0 adds chrY, from a different individual (HG002). The consortium's chm13v2.0_noY is v1.1, for benchmarking assemblies of CHM13."],
         ["Role", "T2T-CHM13 is chromosomes only: no scaffolds, alts or patches."],
-        NAMES_NOTE, MITO_NOTE,
+        NAMES_NOTE,
+      ]],
+      ["Non-nuclear", [
+        MITO_NOTE,
         ["CHM13's mitochondrion", "CP068254.1, assembled with the rest: 16,569 bp like rCRS, but rotated to start at rCRS's 577 (tRNA-Phe), and three differences."],
       ]],
       ["Additional sequences", [EBV_NOTE]],
@@ -206,4 +208,4 @@ export const SHELVES: Record<string, Shelf> = {
 };
 
 /** A book's shelf: an empty one for a book the Editor has no words for yet. */
-export const shelfOf = (book: string): Shelf => SHELVES[book] ?? { masks: [], extras: [], mitochondria: [], guide: [], notes: [] };
+export const shelfOf = (book: string): Shelf => SHELVES[book] ?? { masks: [], extras: [], guide: [], notes: [] };

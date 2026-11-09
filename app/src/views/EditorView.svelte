@@ -177,8 +177,8 @@
       {@const release = p ? edit.releaseLabel(t.assemblies.get(p.assembly) ?? p.assembly, b.assembly, false).split(" ")[0] : ""}
       {@const rolesShown = edit.ROLES_SHOWN.filter((r) => releases.some((x) => t.roleCounts.get(x.accession)?.get(r)))}
       {@const own = p ? t.mito.get(p.assembly) ?? null : null}
-      {@const mito = edit.mitochondrion(recipe, own)}
-      {@const mitos = [...new Set([own, ...shelf.mitochondria].filter((x): x is string => !!x))]}
+      {@const carried = edit.mitochondria(recipe, own)}
+      {@const mito = carried[0] ?? null}
       {@const ctx = { hla: t.collections.get(edit.HLA) ?? [], mito: own }}
       {@const examples = p ? t.examples.get(p.assembly) : undefined}
       {@const anyIupac = [...t.iupac].some((x) => t.places.has(x))}
@@ -239,11 +239,26 @@
                 </select>
               </div>
             {/each}
-            <label class="choice"><strong>Mitochondrion</strong>
-              <select value={mito ?? ""} disabled={!p} onchange={(e) => set(edit.setMitochondrion(recipe!, own, e.currentTarget.value || null))}>
-                {#each mitos as x (x)}<option value={x} title={x}>{edit.MITOCHONDRIA[x] ?? x}{x === own ? " (the release's own)" : ""}</option>{/each}
-                <option value="">none</option>
-              </select>
+          </fieldset>
+
+          <fieldset>
+            <legend>Non-nuclear</legend>
+            <label class="choice"><span>Mitochondrial</span>
+              {#if carried.length > 1}
+                <span class="muted small" title={carried.join(", ")}>{carried.map((x) => edit.MITOCHONDRIA[x] ?? x).join(" and ")}, set in the recipe</span>
+              {:else}
+                <select value={mito ?? ""} disabled={!p} onchange={(e) => set(edit.setMitochondrion(recipe!, own, e.currentTarget.value || null))}>
+                  {#each Object.keys(edit.MITOCHONDRIA) as x (x)}<option value={x} title={x}>{edit.MITOCHONDRIA[x]}</option>{/each}
+                  <option value="">none</option>
+                </select>
+                {@const named = mito ? edit.mitochondrionOverride(recipe, mito) : null}
+                {@const names = mito ? [...new Set([...edit.MITOCHONDRION_NAMES, mito])] : []}
+                <select class="naming" class:inherit={!named} aria-label="Name of the mitochondrion" value={named ?? ""} disabled={!mito}
+                        onchange={(e) => set(edit.setMitochondrionName(recipe!, own, mito!, e.currentTarget.value || null))}>
+                  <option value="" title={mito ? `No override: ${edit.mitochondrionName(recipe, mito)}` : ""}>—</option>
+                  {#each names as x (x)}<option value={x}>{x}</option>{/each}
+                </select>
+              {/if}
             </label>
           </fieldset>
 

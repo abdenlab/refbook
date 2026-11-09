@@ -52,16 +52,15 @@ export function fromScratch(assembly: string): Recipe {
   return { select: [{ assembly, roles: ["assembled-molecule"] }], rename: { namespace: "ucsc" } };
 }
 
-/** Another release, keeping the choice of mitochondrion: the release's own if the recipe had the old one's
- * (`mito` gives a release's own, or null), else the same other one, or none. */
+/** Another release, keeping the same mitochondrion (`mito` gives a release's own, or null): a member of the new
+ * release if it has it, else added as a root. */
 export function setRelease(r: Recipe, accession: string, mito: (assembly: string) => string | null = () => null): Recipe {
   let out = clone(r);
   const p = primary(out);
-  const before = p ? mitochondrion(out, mito(p.assembly)) : null;
-  const own = p && before !== null && before === mito(p.assembly);
+  const carried = p ? mitochondria(out, mito(p.assembly)) : [];
   if (p) p.assembly = accession;
   else out.select.unshift({ assembly: accession, roles: ["assembled-molecule"] });
-  if (p) out = setMitochondrion(out, mito(accession), own ? mito(accession) : before);
+  if (p && carried.length <= 1) out = setMitochondrion(out, mito(accession), carried[0] ?? null);
   return out;
 }
 
@@ -163,14 +162,16 @@ export function setEbvName(r: Recipe, name: string): Recipe {
   return out;
 }
 
-/** The mitochondrion a recipe carries: its assembly's own (`own`, null if the release has none), unless its
- * assembly entry excludes it; another, as a root; or none (null). */
-export function mitochondrion(r: Recipe, own: string | null): string | null {
-  const other = Object.keys(MITOCHONDRIA).find((x) => x !== own && hasRoot(r, x));
-  if (other) return other;
+/** The mitochondria a recipe carries: its release's own (`own`, null if the release has none) unless its assembly
+ * entry excludes it, and any it adds as roots. One or none, but for a file such as UCSC's hg19.p13.plusMT. */
+export function mitochondria(r: Recipe, own: string | null): string[] {
   const p = primary(r);
-  return own && p?.roles.includes("assembled-molecule") && !p.exclude?.includes(own) ? own : null;
+  const kept = own && p?.roles.includes("assembled-molecule") && !p.exclude?.includes(own) ? [own] : [];
+  return [...kept, ...Object.keys(MITOCHONDRIA).filter((x) => hasRoot(r, x))];
 }
+
+/** The mitochondrion a recipe carries (the first, if it carries two), or null. */
+export const mitochondrion = (r: Recipe, own: string | null): string | null => mitochondria(r, own)[0] ?? null;
 
 /** A mitochondrion's name, as the chromosomes are named: chrM, MT, or its accession. */
 export function mitochondrionName(r: Recipe, root: string): string {
@@ -178,11 +179,43 @@ export function mitochondrionName(r: Recipe, root: string): string {
   return ns === "ucsc" ? "chrM" : ns === "grc" ? "MT" : root;
 }
 
-/** Carry `choice` as the mitochondrion: the assembly's own (`own`), another root, or none (null). Another
- * excludes the assembly's own from its entry and adds itself, named as the chromosomes are. */
+/** Names a mitochondrion is given besides the default (UCSC's hg19.p13 files name rCRS chrMT, beside hg19's chrM). */
+export const MITOCHONDRION_NAMES = ["chrM", "chrMT", "MT"];
+
+/** The name a recipe sets for a mitochondrion, if not the default (its chromosomes' style): null for the default. */
+export function mitochondrionOverride(r: Recipe, root: string): string | null {
+  const name = r.rename.map?.[root];
+  return name === undefined || name === mitochondrionName(r, root) ? null : name;
+}
+
+/** Name a mitochondrion `name`, or by default (null): as the chromosomes are, which for the release's own (`own`)
+ * needs no rule, and for one it adds is a map entry. */
+export function setMitochondrionName(r: Recipe, own: string | null, root: string, name: string | null): Recipe {
+  const out = clone(r);
+  const map = { ...out.rename.map };
+  if (name !== null) map[root] = name;
+  else if (root === own) delete map[root];
+  else map[root] = mitochondrionName(out, root);
+  if (Object.keys(map).length) out.rename.map = map; else delete out.rename.map;
+  return out;
+}
+
+/** After a change of the chromosomes' names (`before` -> `after`): an added mitochondrion named by default follows. */
+function followNames(before: Recipe, after: Recipe): Recipe {
+  for (const root of Object.keys(MITOCHONDRIA)) {
+    if (hasRoot(after, root) && after.rename.map?.[root] === mitochondrionName(before, root)) {
+      after.rename.map[root] = mitochondrionName(after, root);
+    }
+  }
+  return after;
+}
+
+/** Carry `choice` as the only mitochondrion, whatever the release (`own` is its own, or null): the release's own
+ * is kept as its member; any other is added as a root, named as the chromosomes are, and the release's own
+ * excluded; none (null) excludes the release's own. */
 export function setMitochondrion(r: Recipe, own: string | null, choice: string | null): Recipe {
   let out = clone(r);
-  for (const x of Object.keys(MITOCHONDRIA)) if (x !== own) out = withoutRoot(out, x);
+  for (const x of Object.keys(MITOCHONDRIA)) out = withoutRoot(out, x);
   const p = primary(out);
   if (!p) return out;
   const exclude = (p.exclude ?? []).filter((x) => !(x in MITOCHONDRIA));
@@ -256,7 +289,7 @@ export function setIupacToN(r: Recipe, on: boolean): Recipe {
 export function setNamespace(r: Recipe, namespace: string): Recipe {
   const out = clone(r);
   out.rename.namespace = namespace;
-  return out;
+  return followNames(r, out);
 }
 
 /** The namespace a role's sequences are named in: its own, or the default. */
@@ -269,14 +302,14 @@ export function setRoleNames(r: Recipe, role: string, namespace: string | null):
   if (namespace && namespace !== out.rename.namespace) by[role] = namespace;
   else delete by[role];
   if (Object.keys(by).length) out.rename.by_role = by; else delete out.rename.by_role;
-  return out;
+  return followNames(r, out);
 }
 
 /** Every role by the default namespace: no overrides. */
 export function clearRoleNames(r: Recipe): Recipe {
   const out = clone(r);
   delete out.rename.by_role;
-  return out;
+  return followNames(r, out);
 }
 
 /** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
