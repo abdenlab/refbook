@@ -1,0 +1,5 @@
+path	bytes	sha256	last_modified	url
+hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.chrom.sizes.txt	375	acd8997731252a8315286f89ac12a4f03d6cf84f2848189bba41463386cf9be7	2022-06-23T04:16:16+00:00	https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.chrom.sizes.txt
+hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.chromAlias.txt	866	388935028fb415f97e2510992ac9f51ad6d515f6a5503f1173eb7bd6ed86b71a	2022-07-18T18:38:28+00:00	https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.chromAlias.txt
+hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.fa.gz	974842401	402413ddb5c328a31b776f898d8ccde35296e8b244e45e4daf60625b8d38e279	2022-07-18T19:08:50+00:00	https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.fa.gz
+hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/md5sum.txt	658	5ab6cb529908a3b438e088223ba557da649dc99c63ed236050ed81e40487bd21	2022-09-15T18:21:06+00:00	https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/md5sum.txt

@@ -1,0 +1,3 @@
+path	bytes	sha256	last_modified	url
+ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/CHM13/Sequence/WholeGenomeFasta/genome.fa	3179638084	27c7aeddcebe237c93bf24b6c6cabae7bf863d13c69560fab83f114a1ec73d42	2022-09-09T18:16:23+00:00	https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/CHM13/Sequence/WholeGenomeFasta/genome.fa
+ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/CHM13/Sequence/WholeGenomeFasta/genome.fa.fai	787	b307db7d1f4ffb0bd06cc1323412c529dd2dc5e3690f4f36615d9a2e0d03af18	2022-09-09T18:16:55+00:00	https://ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/CHM13/Sequence/WholeGenomeFasta/genome.fa.fai

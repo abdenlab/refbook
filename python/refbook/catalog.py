@@ -31,6 +31,8 @@ KINDS = {"assembled-molecule": "chromosomes", "unlocalized-scaffold": "unlocaliz
          "unplaced-scaffold": "unplaced scaffolds", "alt-scaffold": "alt scaffolds",
          "fix-patch": "fix patches", "novel-patch": "novel patches"}
 OPERATIONS = {"hardmask_grc": "GRC hard-mask", "par_y": "chrY PARs to N", "iupac_to_n": "IUPAC -> N",
+              "t2t_dj_rdna_phr": "DJ, rDNA, PHR to N", "t2t_5s_rdna": "5S rDNA to N", "chry": "chrY to N",
+              "chry_from_2": "chrY from its 2nd base to N",
               "pad": "N-padded into its parent's coordinates", "orient": "turned to its parent's strand"}
 
 

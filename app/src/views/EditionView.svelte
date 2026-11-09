@@ -18,7 +18,7 @@
   import type { Recipe } from "./recipe.ts";
 
   let { cat, book, label }: { cat: Catalog; book: Book; label: string } = $props();
-  const places = () => rootPlaces(cat, book.book, book.assembly);
+  const places = () => rootPlaces(cat, book);
 
   async function assemblyNames(): Promise<Map<string, string>> {
     const members = await cat.table<{ assembly_accession: string; assembly_name: string }>("assembly_members.parquet");
@@ -72,7 +72,7 @@
       <h2>Assembly</h2>
       <dl class="ids">
         <dt>Release</dt>
-        <dd>{f.assembly}{f.patch_release !== null ? `.p${f.patch_release}` : ""}</dd>
+        <dd>{f.release ?? f.assembly}</dd>
         <dt>Sequences</dt>
         <dd>{n(f.n_sequences)}</dd>
         <dt>Total length</dt>

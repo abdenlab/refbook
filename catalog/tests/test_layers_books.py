@@ -135,6 +135,26 @@ def test_a_release_without_its_structure_needs_an_archive(tmp_path):
     assert [r.structure for r in books.releases(b, srcs, tmp_path)] == [tmp_path / "h/old/T.p1"]
 
 
+def test_releases_are_numbered_by_place_and_may_publish_no_structure(tmp_path):
+    (tmp_path / "s.toml").write_text(
+        '[[source]]\nname = "V1"\nroles = ["input"]\nncbi_assembly = "h/GCA_1.2_T-v1.0"\nstructure = false\n'
+        '[[source]]\nname = "V2"\nroles = ["input"]\nncbi_assembly = "h/GCA_1.3_T-v1.1"\n')
+    d = tmp_path / "books" / "t"
+    d.mkdir(parents=True)
+    (d / "book.toml").write_text('name = "t"\nreleases = ["V1", "V2"]\nsources = ["V1", "V2"]\n'
+                                 '[[releases_without_structure]]\nrelease = "V1"\nwhy = "none published"\n')
+    srcs = sources.load(tmp_path / "s.toml")
+    b = books.load(tmp_path / "books", srcs)["t"]
+    rels = books.releases(b, srcs, tmp_path)
+    # Named T-v1.0 and T-v1.1 (no patch number): numbered 0 and 1 by their place.
+    assert [(r.name, r.number, r.structure is None) for r in rels] == [("T-v1.0", 0, True), ("T-v1.1", 1, False)]
+    assert books.release_order(b, srcs, tmp_path) == {"T-v1.0": 0, "T-v1.1": 1}
+    (d / "book.toml").write_text('name = "t"\nreleases = ["V1", "V2"]\nsources = ["V1", "V2"]\n'
+                                 '[[releases_without_structure]]\nrelease = "V3"\nwhy = "x"\n')
+    with pytest.raises(Refused, match="releases_without_structure not among its releases"):
+        books.load(tmp_path / "books", srcs)
+
+
 def test_recipes_and_their_targets(tmp_path):
     declare(tmp_path, 'name = "t"\nsources = ["A"]\n', [
         {"target": "x", "published": "https://h/p/x.fa.gz"},

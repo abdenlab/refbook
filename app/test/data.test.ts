@@ -13,7 +13,7 @@ import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
 import { editions, IUPAC_TO_N, manifest, onSequence, padding, region, targetOrder, targets, verify } from "../src/data/editions.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe, rootPlaces } from "../src/data/design.ts";
-import { bookFor, bookHref, books, editionHref, editorHref, familyOf, relations, releaseNumber } from "../src/data/books.ts";
+import { bookFor, bookHref, books, editionHref, editorHref, familyOf, relations } from "../src/data/books.ts";
 import { search, storedSequence } from "../src/data/sequences.ts";
 import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
@@ -39,9 +39,9 @@ after(() => server.close());
 
 test("tables", { skip }, async () => {
   const fs = await editions(cat);
-  assert.equal(fs.length, 30);  // GRCh38's 13 and GRCh37's 17
-  assert.equal((await targets(cat)).length, 37);
-  assert.deepEqual(new Set(fs.map((f) => f.book)), new Set(["grch37", "grch38"]));
+  assert.equal(fs.length, 44);  // GRCh37's 17, GRCh38's 13, T2T-CHM13's 14
+  assert.equal((await targets(cat)).length, 55);
+  assert.deepEqual(new Set(fs.map((f) => f.book)), new Set(["grch37", "grch38", "t2t-chm13"]));
   const noAlt = fs.find((f) => f.edition === "grch38-no-alt")!;
   const rows = await manifest(cat, "grch38-no-alt");
   assert.equal(rows.length, noAlt.n_sequences);
@@ -138,9 +138,9 @@ test("padded and oriented rows: their digests, and any slice agrees with the who
 test("books: each assembly's releases and editions, and an edition's address", { skip }, async () => {
   const bs = await books(cat);
   assert.deepEqual(bs.map((b) => [b.book, b.assembly, b.releases.length, b.releases[0], b.editions.length, b.targets.length]),
-    [["grch37", "GRCh37", 14, "GRCh37", 17, 20], ["grch38", "GRCh38", 15, "GRCh38", 13, 17]]);
+    [["grch37", "GRCh37", 14, "GRCh37", 17, 20], ["grch38", "GRCh38", 15, "GRCh38", 13, 17],
+     ["t2t-chm13", "T2T-CHM13", 3, "T2T-CHM13v1.0", 14, 18]]);
   assert.equal(bs[0].releases.at(-1), "GRCh37.p13");
-  assert.deepEqual([releaseNumber("GRCh37.p13", "GRCh37"), releaseNumber("GRCh37", "GRCh37"), releaseNumber("hs38d1", "GRCh38")], [13, 0, null]);
   assert.equal(editionHref("hs37d5", "1"), "#/catalog/GRCh37/edition/hs37d5/seq/1");
   assert.deepEqual([bookHref("grch38"), editorHref("grch38", new URLSearchParams({ from: "hg38" }))],
                    ["#/catalog/GRCh38", "#/editor/GRCh38?from=hg38"]);
@@ -151,7 +151,7 @@ test("books: each assembly's releases and editions, and an edition's address", {
   assert.deepEqual(["hs37d5", "hg19", "grch37-full", "gencode-grch37-p13", "ncbi-build37.1"].map(fam),
                    ["projects", "ucsc", "grc", "ensembl", "igenomes"]);
   // A book's places: its own assembly's members are primary; GRCh37's chr1 is a chromosome there.
-  const places = await rootPlaces(cat, "grch37", "GRCh37");
+  const places = await rootPlaces(cat, bs.find((b) => b.book === "grch37")!);
   assert.deepEqual(places.get("CM000663.1"), { primary: true, assembly: "GRCh37", role: "assembled-molecule",
                                                unit: "Primary Assembly", molecule: "1" });
 });
@@ -172,12 +172,12 @@ test("relations: how an edition stands to the others of its book", { skip }, asy
 test("sequences: a name across books, and a stored sequence", { skip }, async () => {
   const chr1 = await search(cat, "chr1");
   assert.ok(chr1.exact);
-  assert.deepEqual(chr1.hits.map((h) => h.root_id), ["CM000663.1", "CM000663.2"]);
-  assert.deepEqual(chr1.hits.map((h) => h.books.map((b) => b.book)), [["grch37"], ["grch38"]]);
-  // chrM: the Yoruba mitochondrion (hg19's) and rCRS (in both books).
+  assert.deepEqual(chr1.hits.map((h) => h.root_id), ["CM000663.1", "CM000663.2", "CP068277.2"]);
+  assert.deepEqual(chr1.hits.map((h) => h.books.map((b) => b.book)), [["grch37"], ["grch38"], ["t2t-chm13"]]);
+  // chrM: the Yoruba mitochondrion (hg19's), CHM13's own (T2T-CHM13's) and rCRS (in both GRC books).
   const chrM = await search(cat, "chrM");
-  assert.deepEqual(chrM.hits.map((h) => h.root_id), ["AF347015.1", "J01415.2"]);
-  assert.deepEqual(chrM.hits[1].books.map((b) => b.book), ["grch37", "grch38"]);
+  assert.deepEqual(chrM.hits.map((h) => h.root_id), ["AF347015.1", "CP068254.1", "J01415.2"]);
+  assert.deepEqual(chrM.hits.find((h) => h.root_id === "J01415.2")!.books.map((b) => b.book), ["grch37", "grch38"]);
   // GL383518.1: a GRCh37 novel patch and a GRCh38 alt.
   const gl = (await search(cat, "GL383518.1")).hits[0];
   assert.deepEqual(gl.books.map((b) => [b.book, b.role]), [["grch37", "novel-patch"], ["grch38", "alt-scaffold"]]);
@@ -221,9 +221,10 @@ test("identify in the browser, like the catalog says", { skip }, async () => {
   assert.ok(byMd5.editions.some((u) => u.edition === "hg38-analysis-set" && u.name === "chr1"));
   assert.deepEqual([byName.evidence, byName.root_id], ["name_and_length", "CM000663.2"]);
   assert.ok(byName.cognates.includes(chr1.sha512t24u));
-  // chr1 names GRCh37's root and GRCh38's, so no one expected length: only that neither has length 5.
+  // chr1 names GRCh37's and GRCh38's roots, and T2T-CHM13 v1.0's and v1.1's (its editions call both chr1), so no
+  // one expected length: only that none has length 5.
   assert.deepEqual(wrong.notes.map((x) => x.kind), ["no_root_of_this_length"]);
-  assert.deepEqual([...(wrong.notes[0] as any).roots].sort(), ["CM000663.1", "CM000663.2"]);
+  assert.deepEqual([...(wrong.notes[0] as any).roots].sort(), ["CM000663.1", "CM000663.2", "CP068277.1", "CP068277.2"]);
 });
 
 test("two editions compared: seqcol's counts and refbook's pairs", { skip }, async () => {

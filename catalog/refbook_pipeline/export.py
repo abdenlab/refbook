@@ -27,7 +27,7 @@ FORMAT = 2
 PUBLISHED = {
     "roots.parquet": ("roots", "roots"), "roots_external.parquet": ("external", "roots"),
     "root_blocks.parquet": ("roots", "bases"),
-    "assembly_members.parquet": ("members", "assemblies"),
+    "assembly_members.parquet": ("members", "assemblies"), "books.parquet": ("members", "assemblies"),
     "aliases.parquet": ("aliases", "aliases"), "sequence_aliases.parquet": ("aliases", "aliases"),
     "layer_agp.parquet": ("layers", "layer"), "layer_regions.parquet": ("layers", "layer"),
     "layer_placements.parquet": ("layers", "layer"), "layer_hardmask_grc.parquet": ("layers", "layer"),
@@ -42,15 +42,23 @@ PUBLISHED = {
 CHECKS = ["check_gaps", "check_roots", "check_materialize"]
 
 
-def published(catalog: Path) -> dict[str, Path]:
-    """Each published name's file (or directory) in the build."""
-    return {name: catalog / task / name for name, (task, _) in PUBLISHED.items()}
+def published(catalog: Path, layers: tuple[str, ...] = ()) -> dict[str, Path]:
+    """Each published name's file (or directory) in the build: PUBLISHED's, and `layers`, the derived mask layers
+    the books declare (layer_<name>.parquet)."""
+    out = {name: catalog / task / name for name, (task, _) in PUBLISHED.items()}
+    out.update({f"layer_{n}.parquet": catalog / "layers" / f"layer_{n}.parquet" for n in layers})
+    return out
 
 
-def write_index(catalog: Path) -> None:
+def role(name: str) -> str:
+    """A published name's role in a release (a derived layer's: layer)."""
+    return PUBLISHED[name][1] if name in PUBLISHED else "layer"
+
+
+def write_index(catalog: Path, layers: tuple[str, ...] = ()) -> None:
     """catalog.json for a build: every published file by the name a release gives it, with its path."""
     files = {}
-    for name, path in published(catalog).items():
+    for name, path in published(catalog, layers).items():
         for f in sorted(path.glob("*")) if path.is_dir() else [path]:
             if not f.is_file():
                 raise Refused(f"{name}: not built ({f})")
@@ -62,10 +70,11 @@ def write_index(catalog: Path) -> None:
     tmp.replace(catalog / "catalog.json")
 
 
-def gate(catalog: Path, checks: dict[str, Path], lock_paths: list[Path], development: bool) -> tuple[dict, list[str]]:
+def gate(catalog: Path, checks: dict[str, Path], lock_paths: list[Path], development: bool,
+         layers: tuple[str, ...] = ()) -> tuple[dict, list[str]]:
     """Each check's recorded result, and why the build can't be exported, if it can't."""
     results, problems = {}, []
-    files = published(catalog)
+    files = published(catalog, layers)
     for check, path in checks.items():
         if not path.exists():
             problems.append(f"{check}: has not run")
@@ -116,28 +125,28 @@ def card(template: Path, catalog: Path, version: str, books: dict[str, tuple[str
 
 
 def export(catalog: Path, out: Path, version: str, checks: dict[str, Path], evidence: list[tuple[Path, str]],
-           lock_paths: list[Path], card_text: str, development: bool) -> dict:
-    """Copy the release into `out` (see the module). `evidence` is (file, path in the release) pairs."""
+           lock_paths: list[Path], card_text: str, development: bool, layers: tuple[str, ...] = ()) -> dict:
+    """Copy the release into `out` (see the module). `evidence` is (file, path in the release) pairs; `layers`, the
+    books' derived mask layers."""
     if out.exists():
         raise Refused(f"{out} exists: a release is never overwritten")
-    results, problems = gate(catalog, checks, lock_paths, development)
+    results, problems = gate(catalog, checks, lock_paths, development, layers)
     if problems:
         raise Refused("not exported:\n  " + "\n  ".join(problems))
     staging = out.with_name(out.name + ".partial")
     if staging.exists():
         shutil.rmtree(staging)  # left by an interrupted export
     entries = []
-    for name, path in published(catalog).items():
-        role = PUBLISHED[name][1]
-        entries += [(p, f"{name}/{p.name}" if path.is_dir() else name, role)
+    for name, path in published(catalog, layers).items():
+        entries += [(p, f"{name}/{p.name}" if path.is_dir() else name, role(name))
                     for p in (sorted(path.glob("*")) if path.is_dir() else [path])]
     entries += [(p, rel, "evidence") for p, rel in evidence]
     files = {}
-    for src, rel, role in entries:
+    for src, rel, kind in entries:
         dst = staging / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-        files[rel] = {"bytes": dst.stat().st_size, "sha256": sha256(dst), "role": role}
+        files[rel] = {"bytes": dst.stat().st_size, "sha256": sha256(dst), "role": kind}
     manifest = {
         "name": "refbook", "format": FORMAT, "version": version,
         "locks": {p.name: sha256(p) for p in lock_paths},

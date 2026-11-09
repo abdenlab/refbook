@@ -6,7 +6,7 @@ import type { Blocks } from "./blocks.ts";
 
 export interface Edition {
   edition: string; book: string; id: string; seqcol_digest: string; n_sequences: number; total_length: number;
-  assembly: string; patch_release: number | null; contents: { kind: string; count: number }[];
+  assembly: string; release: string | null; patch_release: number | null; contents: { kind: string; count: number }[];
   excluded: string[]; operations: string[]; naming: string; recipe: string; n_targets: number;
 }
 
@@ -27,6 +27,8 @@ export const ORIENT = "orient";
 
 export const OPERATION_LABELS: Record<string, string> = {
   hardmask_grc: "GRC hard-mask", par_y: "chrY PARs → N", [IUPAC_TO_N]: "IUPAC → N",
+  t2t_dj_rdna_phr: "DJ, rDNA, PHR → N", t2t_5s_rdna: "5S rDNA → N", chry: "chrY → N",
+  chry_from_2: "chrY from its 2nd base → N",
   [PAD]: "N-padding into its parent's coordinates", [ORIENT]: "turned to its parent's strand",
 };
 

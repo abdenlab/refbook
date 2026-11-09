@@ -438,3 +438,137 @@ files = [
   "GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.dict",
   "GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.fasta.fai",
 ]
+
+# ---------------------------------------------------------------------------------------------------------------
+# T2T-CHM13: versions v1.0, v1.1 and v2.0 (GCA_009914755.2..4), each gapless (v0.7, a 359-sequence draft, is left
+# out). NCBI keeps no assembly structure for v1.0 and no genome FASTA: its 23 nuclear chromosomes come by efetch (the
+# mitochondrion, CP068254.1, is unchanged since and comes with v1.1). See _scratch/t2t-edition-survey.md.
+
+[[source]]
+name = "T2T-CHM13v1.0"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/009/914/755/GCA_009914755.2_T2T-CHM13v1.0"
+structure = false
+
+[[source]]
+name = "T2T-CHM13v1.0-chromosomes"
+roles = ["input"]
+note = "T2T-CHM13v1.0's 23 nuclear chromosomes, from INSDC one by one: NCBI publishes no genome FASTA for v1.0."
+efetch = { accessions = ["CP068277.1", "CP068276.1", "CP068275.1", "CP068274.1", "CP068273.1", "CP068272.1", "CP068271.1", "CP068270.1", "CP068269.1", "CP068268.1", "CP068267.1", "CP068266.1", "CP068265.1", "CP068264.1", "CP068263.1", "CP068262.1", "CP068261.1", "CP068260.1", "CP068259.1", "CP068258.1", "CP068257.1", "CP068256.1", "CP068255.1"], rettypes = ["fasta"] }
+sequences = [
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068277.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068276.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068275.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068274.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068273.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068272.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068271.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068270.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068269.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068268.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068267.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068266.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068265.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068264.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068263.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068262.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068261.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068260.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068259.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068258.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068257.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068256.1.fasta",
+  "eutils.ncbi.nlm.nih.gov/efetch/nuccore_CP068255.1.fasta",
+]
+
+[[source]]
+name = "T2T-CHM13v1.1"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/009/914/755/GCA_009914755.3_T2T-CHM13v1.1"
+also = ["GCA_009914755.3_T2T-CHM13v1.1_genomic.fna.gz"]
+sequences = ["GCA_009914755.3_T2T-CHM13v1.1_genomic.fna.gz"]
+
+[[source]]
+name = "T2T-CHM13v2.0"
+roles = ["input"]
+ncbi_assembly = "ftp.ncbi.nlm.nih.gov/genomes/all/GCA/009/914/755/GCA_009914755.4_T2T-CHM13v2.0"
+also = ["GCA_009914755.4_T2T-CHM13v2.0_genomic.fna.gz"]
+sequences = ["GCA_009914755.4_T2T-CHM13v2.0_genomic.fna.gz"]
+
+# The published T2T-CHM13 editions: recipe targets.
+
+[[source]]
+name = "RefSeq-T2T-CHM13v2.0"
+roles = ["target"]
+note = "RefSeq's copy of v2.0 (GCF_009914755.1): RefSeq accessions as names."
+base = "ftp.ncbi.nlm.nih.gov/genomes/all/GCF/009/914/755/GCF_009914755.1_T2T-CHM13v2.0"
+files = ["GCF_009914755.1_T2T-CHM13v2.0_genomic.fna.gz", "md5checksums.txt", "GCF_009914755.1_T2T-CHM13v2.0_assembly_report.txt"]
+
+[[source]]
+name = "T2T-analysis-set"
+roles = ["target"]
+note = """The T2T consortium's v2.0 files (its analysis_set folder, bgzipped): the assembly with chr* names, without chrY
+(identical to v1.1, per github.com/marbl/CHM13), with chrY's PARs masked, and with rCRS for chrM. Its README lists
+their MD5s, in no checksum-list format: the lock alone covers them."""
+base = "s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set"
+files = [
+  "README.txt", "chm13v2.0_PAR.bed",
+  "chm13v2.0.fa.gz", "chm13v2.0_noY.fa.gz", "chm13v2.0_maskedY.fa.gz", "chm13v2.0_maskedY_rCRS.fa.gz",
+]
+
+[[source]]
+name = "T2T-drafts"
+roles = ["target"]
+note = "The T2T consortium's v1.0 and v1.1 FASTAs (chm13.draft_v1.x), as early T2T papers used them."
+base = "s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies"
+files = ["chm13.draft_v1.0.fasta.gz", "chm13.draft_v1.1.fasta.gz"]
+
+[[source]]
+name = "T2T-masked-sets"
+roles = ["target"]
+note = """The T2T consortium's v2.0 analysis sets with the distal junctions (DJ), rDNA and pseudo-homologous regions
+(PHR) hard-masked, and 5S rDNA too in the _5S sets: for XX and XY samples, with chrY masked or dropped, with rCRS.
+Published uncompressed (3.1 GB each) with BWA indexes (not fetched). No file gives the masked spans (the BEDs beside
+them each span a whole chromosome): they are read from the files themselves."""
+base = "s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set"
+files = [
+  "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa", "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa.fai",
+  "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXY.fa", "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXY.fa.fai",
+  "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY.fa",
+  "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY.fa.fai",
+  "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY.fa",
+  "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY.fa.fai",
+  "masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS.fa",
+  "masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS.fa.fai",
+  "masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS.fa",
+  "masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS.fa.fai",
+]
+
+[[source]]
+name = "UCSC-hs1"
+roles = ["target", "input"]
+note = "UCSC hs1 (T2T-CHM13v2.0): the genome, sizes and chromAlias (an input: its names)."
+base = "hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips"
+files = ["hs1.fa.gz", "hs1.chrom.sizes.txt", "hs1.chromAlias.txt", "md5sum.txt"]
+
+[[source]]
+name = "Ensembl-T2T-CHM13"
+roles = ["target"]
+note = "Ensembl's rapid release of T2T-CHM13v2.0 (GCA_009914755.4): the unmasked genome, and its chromosome table."
+base = "ftp.ensembl.org/pub/rapid-release/species/Homo_sapiens/GCA_009914755.4/ensembl/genome"
+files = ["Homo_sapiens-GCA_009914755.4-unmasked.fa.gz", "Homo_sapiens-GCA_009914755.4-chromosomes.tsv.gz", "md5sum.txt"]
+
+[[source]]
+name = "Broad-t2t-v2"
+roles = ["target"]
+note = """Broad/GATK's T2T references (t2t/v2): T2T's maskedY, and maskedY with rCRS and EBV. Checked by their .dict
+(MD5s); the FASTAs (3.2 GB each) are not fetched. Broad publishes no checksum list: the lock alone covers these."""
+base = "storage.googleapis.com/gcp-public-data--broad-references/t2t/v2"
+files = ["T2T_README.txt", "readme", "chm13v2.0.maskedY.dict", "chm13v2.0.maskedY.rCRS.EBV.dict"]
+
+[[source]]
+name = "iGenomes-CHM13"
+roles = ["target"]
+note = "Illumina iGenomes UCSC/CHM13: no .dict, so the FASTA itself (3.2 GB, uncompressed). NCBI/CHM13 has no genome."
+base = "ngi-igenomes.s3.amazonaws.com/igenomes/Homo_sapiens/UCSC/CHM13/Sequence/WholeGenomeFasta"
+files = ["genome.fa", "genome.fa.fai"]

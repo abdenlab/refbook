@@ -136,13 +136,13 @@ def test_metadata_of_a_root_and_a_derivative(svc):
     assert m["refbook"] == {**m["refbook"], "root_id": "CM000663.2", "operations": []}
     assert get(svc, f"/sequence/ga4gh:{sq}/metadata")[1] == m
     assert get(svc, "/sequence/insdc:CM000663.2/metadata")[1] == m
-    # ucsc:chr1 names the root, its IUPAC -> N derivative, and GRCh37's chr1 (UCSC names are a book's; refget has
-    # no books).
+    # ucsc:chr1 names the root, its IUPAC -> N derivative, GRCh37's chr1, and T2T-CHM13's with its 5S-rDNA-masked
+    # derivative (UCSC names are a book's; refget has no books).
     r, choices = get(svc, "/sequence/ucsc:chr1/metadata")
-    assert r.status == 300 and sq in choices["sequences"] and len(choices["sequences"]) == 3
+    assert r.status == 300 and sq in choices["sequences"] and len(choices["sequences"]) == 5
     others = {s: get(svc, f"/sequence/{s}/metadata")[1]["refbook"] for s in choices["sequences"] if s != sq}
     assert sorted((o["root_id"], tuple(o["operations"])) for o in others.values()) == [
-        ("CM000663.1", ()), ("CM000663.2", ("iupac_to_n",))]
+        ("CM000663.1", ()), ("CM000663.2", ("iupac_to_n",)), ("CP068277.2", ()), ("CP068277.2", ("t2t_5s_rdna",))]
     other = next(s for s, o in others.items() if o["operations"])
     _, d = get(svc, f"/sequence/{other}/metadata")
     assert {a["naming_authority"] for a in d["metadata"]["aliases"]} <= {"ucsc", "grc", "ensembl"}

@@ -44,6 +44,8 @@ BUILD.mkdir(parents=True, exist_ok=True)  # doit keeps its state beside it, and 
 CATALOG = BUILD / "catalog"
 SOURCES = sources.load(layout.SOURCES)
 BOOKS = books.load(layout.BOOKS, SOURCES)
+# The mask layers books derive from published masked files (book.toml derived_masks): published as layer_<name>.
+DERIVED = tuple(sorted({m["layer"] for b in BOOKS.values() for m in b.derived_masks}))
 
 DOIT_CONFIG = {
     "default_tasks": ["lock", "members", "assembly_members", "roots", "external_roots", "layers", "catalog_layers",
@@ -107,9 +109,11 @@ def task_members():
         reports = [RAW / r for s in srcs for r in sources.reports(s)]
         out = BUILD / "books" / book.name / "members"
 
-        def action(book=book, reports=reports, srcs=srcs, out=out):
+        order = books.release_order(book, SOURCES, RAW)
+
+        def action(book=book, reports=reports, srcs=srcs, out=out, order=order):
             with layout.output(out) as tmp:
-                pq.write_table(members.members(book.name, reports), tmp / "assembly_members.parquet",
+                pq.write_table(members.members(book.name, reports, order), tmp / "assembly_members.parquet",
                                compression="zstd")
                 layout.record_inputs(tmp, [lock_path(s.name) for s in srcs])
 
@@ -120,16 +124,22 @@ def task_members():
 
 
 def task_assembly_members():
-    """The catalog's assembly_members: every book's, in book order."""
+    """The catalog's assembly_members: every book's, in book order; and books.parquet: each book's assembly, its
+    releases (p0 first; a member's `release` is its place here) and those with no assembly structure published."""
     parts = [BUILD / "books" / b / "members" / "assembly_members.parquet" for b in BOOKS]
     out = CATALOG / "members"
+    rows = [{"book": b.name, "assembly": b.assembly,
+             "releases": [r.name for r in books.releases(b, SOURCES, RAW)],
+             "releases_without_structure": [r.name for r in books.releases(b, SOURCES, RAW) if r.structure is None]}
+            for b in BOOKS.values()]
 
     def action():
         with layout.output(out) as tmp:
             pq.write_table(pa.concat_tables([pq.read_table(p) for p in parts]), tmp / "assembly_members.parquet",
                            compression="zstd")
-    return {"actions": [action], "file_dep": parts + code("members"),
-            "targets": [out / "assembly_members.parquet"]}
+            pq.write_table(pa.Table.from_pylist(rows), tmp / "books.parquet", compression="zstd")
+    return {"actions": [action], "file_dep": parts + code("members") + [layout.BOOKS / b / "book.toml" for b in BOOKS],
+            "targets": [out / "assembly_members.parquet", out / "books.parquet"]}
 
 
 def task_roots():
@@ -220,7 +230,7 @@ def task_external_roots():
 
 def catalog_tables(recipes: list[dict]) -> dict:
     """The catalog tables the recipe engine reads, by name (engine.load_tables)."""
-    return engine.table_paths(export.published(CATALOG), recipes)
+    return engine.table_paths(export.published(CATALOG, DERIVED), recipes)
 
 
 def task_reproduce():
@@ -381,20 +391,20 @@ def task_aliases():
 
 CHECKS = BUILD / "checks"
 ENA_EXCEPTIONS = layout.PIPELINE / "roots_ena_exceptions.tsv"
-PUBLISHED = export.published(CATALOG)
+PUBLISHED = export.published(CATALOG, DERIVED)
 
 
 def task_index():
     """The build's catalog.json: every published table by its release name (refbook.Catalog opens the build)."""
     files = [p for name, p in PUBLISHED.items() if name != "collections"]
-    return {"actions": [call(export.write_index, CATALOG)], "file_dep": files + code("export"),
+    return {"actions": [call(export.write_index, CATALOG, DERIVED)], "file_dep": files + code("export"),
             "targets": [CATALOG / "catalog.json"]}
 
 
 def task_check_gaps():
     """Every run of N explained by the published AGP, and the GRC's genomic_gaps.txt agreeing (checks.py)."""
     out = CHECKS / "gaps"
-    names = ["layer_agp.parquet", "layer_n_runs.parquet", "roots.parquet", "assembly_members.parquet"]
+    names = ["layer_agp.parquet", "layer_n_runs.parquet", "roots.parquet", "assembly_members.parquet", "books.parquet"]
     releases = [layers.Release.of(RAW, SOURCES[n].base) for b in BOOKS.values() for n in b.releases]
     gg = {r.name: r.directory / f"{r.directory.name}_genomic_gaps.txt.gz" for r in releases
           if (r.directory / f"{r.directory.name}_genomic_gaps.txt.gz").exists()}
@@ -402,9 +412,13 @@ def task_check_gaps():
     def action():
         t = {n: pq.read_table(PUBLISHED[n]) for n in names}
         lengths = dict(zip(t["roots.parquet"]["root_id"].to_pylist(), t["roots.parquet"]["length"].to_pylist()))
+        ms = t["assembly_members.parquet"].to_pylist()
+        bare = {(b["book"], r) for b in pq.read_table(PUBLISHED["books.parquet"]).to_pylist()
+                for r in b["releases_without_structure"]}
+        elsewhere = {m["genbank_accession"] for m in ms if (m["book"], m["assembly_name"]) not in bare}
+        no_agp = {m["genbank_accession"] for m in ms if (m["book"], m["assembly_name"]) in bare} - elsewhere
         passed, details, report = checks.check_gaps(t["layer_agp.parquet"].to_pylist(),
-                                                    t["layer_n_runs.parquet"].to_pylist(), lengths,
-                                                    t["assembly_members.parquet"].to_pylist(), gg)
+                                                    t["layer_n_runs.parquet"].to_pylist(), lengths, ms, gg, no_agp)
         details["genomic_gaps_releases"] = sorted(gg)
         with layout.output(out) as tmp:
             (tmp / "check_gaps.tsv").write_text("root_id\tstart\tend\tkind\tgap_types\n"
@@ -478,7 +492,7 @@ def task_check_materialize():
 
     return {"actions": [action], "task_dep": ["index"],
             "file_dep": [PUBLISHED[n] for n in names if n != "collections"] + [CATALOG / "catalog.json"]
-                        + code("checks"),
+                        + [layout.BOOKS / b / "book.toml" for b in BOOKS] + code("checks"),
             "targets": [out / "check_materialize.json"]}
 
 
@@ -503,7 +517,7 @@ def task_export():
                   for b in BOOKS.values()}
         text = export.card(layout.PIPELINE / "catalog_card.md", CATALOG, version, books_)
         print(export.export(CATALOG, Path(out), version, checks_, evidence,
-                            sorted(layout.LOCKS.glob("*.lock")), text, development))
+                            sorted(layout.LOCKS.glob("*.lock")), text, development, DERIVED))
 
     return {"actions": [action], "uptodate": [False], "verbosity": 2,
             "task_dep": ["check_gaps", "check_roots", "check_materialize"],
@@ -526,7 +540,9 @@ def task_layers():
         if book.structure_archive:
             srcs.append(SOURCES[book.structure_archive])
         rels = books.releases(book, SOURCES, RAW)
-        dirs = [r.structure for r in rels] + [layers.structure_of(RAW / SOURCES[n].base) for n in book.addons]
+        dirs = [r.structure for r in rels if r.structure] + [layers.structure_of(RAW / SOURCES[n].base)
+                                                            for n in book.addons]
+        bare = {r.name for r in rels if r.structure is None}
         mask = book.hardmask_grc
         mask_src = [SOURCES[mask["source"]]] if mask else []
         mask_file = RAW / SOURCES[mask["source"]].base / mask["file"] if mask else None
@@ -535,9 +551,13 @@ def task_layers():
         out = BUILD / "books" / book.name / "layers"
         bed_srcs = [SOURCES[n] for n in book.sources if any("agp_bed" in m for m in SOURCES[n].minted_roots)]
         beds = [m for s in bed_srcs for m in s.minted_roots if "agp_bed" in m]
+        derived = [(m, RAW / SOURCES[m["source"]].base / m["file"]) for m in book.derived_masks]
+        derived_srcs = list({m["source"]: SOURCES[m["source"]] for m, _ in derived}.values())
+        blocks = CATALOG / "roots" / "root_blocks.parquet"
 
-        def action(book=book, rels=rels, dirs=dirs, mask=mask, mask_file=mask_file, srcs=srcs + mask_src + bed_srcs,
-                   table=table, lengths=lengths, out=out, beds=beds):
+        def action(book=book, rels=rels, dirs=dirs, mask=mask, mask_file=mask_file,
+                   srcs=srcs + mask_src + bed_srcs + derived_srcs, table=table, lengths=lengths, out=out, beds=beds,
+                   bare=bare, derived=derived, blocks=blocks):
             ms = pq.read_table(table).to_pylist()
             r = pq.read_table(lengths, columns=["root_id", "length"])
             length = dict(zip(r["root_id"].to_pylist(), r["length"].to_pylist()))
@@ -545,7 +565,9 @@ def task_layers():
                 extra = [r for m in beds for r in layers.build_agp_bed(
                     RAW / m["agp_bed"], sources.url_of(m["agp_bed"]), m["name"], m["root_id"], length[m["root_id"]])]
                 agp_notes = []
-                agp = layers.build_agp(RAW, dirs, {m["genbank_accession"] for m in ms}, extra, agp_notes,
+                # An AGP for every member of a release whose structure is published (or of an add-on).
+                structured = {m["genbank_accession"] for m in ms if m["assembly_name"] not in bare}
+                agp = layers.build_agp(RAW, dirs, structured, extra, agp_notes,
                                        {root for _, root in book.agp_revisions})
                 regions, spans = layers.build_regions(rels, ms, set(book.region_quirks))
                 placements, notes = layers.build_placements(rels, ms, length, spans)
@@ -563,6 +585,16 @@ def task_layers():
                     if hm != par:
                         raise Refused(f"layer_par_y's spans on {mask['par_root']} {sorted(par)} != the GRC "
                                       f"hard-mask's {sorted(hm)}")
+                # Derived masks: chromosome names in the file -> roots, by the latest release's UCSC names.
+                ucsc = {m["ucsc_name"]: m["genbank_accession"] for m in ms
+                        if m["assembly_name"] == rels[-1].name and m["ucsc_name"]}
+                for m, path in derived:
+                    missing = [c for c in m["chromosomes"] if c not in ucsc]
+                    if missing:
+                        raise Refused(f"derived mask {m['layer']}: no root named {missing} in {rels[-1].name}")
+                    tables[f"layer_{m['layer']}"] = layers.build_derived_mask(
+                        path, sources.url_of(path.relative_to(RAW).as_posix()), {c: ucsc[c] for c in m["chromosomes"]},
+                        lambda root: engine.root_bases(blocks, root))
                 for name, t in tables.items():
                     pq.write_table(t, tmp / f"{name}.parquet", compression="zstd")
                 (tmp / "notes.json").write_text(json.dumps(notes, indent=1) + "\n")
@@ -570,11 +602,13 @@ def task_layers():
                 print({name: t.num_rows for name, t in tables.items()}, notes)
 
         files = [RAW / f for s in srcs for f in sources.files(s, RAW)[0]] + ([mask_file] if mask else [])
-        files += [RAW / m["agp_bed"] for m in beds]
-        dep = reads(srcs + mask_src + bed_srcs)
+        files += [RAW / m["agp_bed"] for m in beds] + [path for _, path in derived]
+        dep = reads(srcs + mask_src + bed_srcs + derived_srcs)
         yield {"name": book.name, "actions": [action], "task_dep": dep["task_dep"],
-               "file_dep": [table, lengths] + files + dep["file_dep"] + code("layers", "members"),
+               "file_dep": [table, lengths] + files + dep["file_dep"] + ([blocks] if derived else [])
+                           + code("layers", "members", "engine"),
                "targets": [out / f"{n}.parquet" for n in LAYERS[:5] + (LAYERS[5:] if mask else [])]
+                          + [out / f"layer_{m['layer']}.parquet" for m, _ in derived]
                           + [out / "notes.json", out / "inputs.json"]}
 
 
@@ -598,13 +632,14 @@ def task_catalog_layers():
 
     def action():
         with layout.output(out) as tmp:
-            for name in LAYERS:
+            for name in LAYERS + [f"layer_{n}" for n in DERIVED]:
                 found = [(b, d / f"{name}.parquet") for b, d in parts.items() if (d / f"{name}.parquet").exists()]
                 tables = [pq.read_table(p) for _, p in found]
                 if name in BOOK_KEYED:
                     tables = [t.add_column(0, "book", pa.array([b] * t.num_rows, pa.string()))
                               for (b, _), t in sorted(zip(found, tables))]
-                    combined = pa.concat_tables(tables)
+                    # Permissive: a book with no rows (T2T-CHM13 places nothing) has untyped columns.
+                    combined = pa.concat_tables(tables, promote_options="permissive")
                 else:
                     combined, seen = [], {}
                     for t in tables:
@@ -615,13 +650,17 @@ def task_catalog_layers():
                                 seen[root] = rows
                                 combined += rows
                     combined.sort(key=lambda r: r["root_id"])  # stable: each root's rows keep their order
-                    combined = pa.Table.from_pylist(combined, schema=tables[0].schema)
+                    # One schema for every book's: a column a book leaves empty (T2T-CHM13's AGP has no gaps) has
+                    # no type of its own.
+                    schema = pa.unify_schemas([t.schema for t in tables], promote_options="permissive")
+                    combined = pa.Table.from_pylist(combined, schema=schema)
                 pq.write_table(combined, tmp / f"{name}.parquet", compression="zstd")
 
     deps = [d / f"{n}.parquet" for b, d in parts.items() for n in LAYERS
             if n != "layer_hardmask_grc" or BOOKS[b].hardmask_grc]
+    deps += [d / f"layer_{m['layer']}.parquet" for b, d in parts.items() for m in BOOKS[b].derived_masks]
     return {"actions": [action], "file_dep": deps + code("layers"),
-            "targets": [out / f"{n}.parquet" for n in LAYERS]}
+            "targets": [out / f"{n}.parquet" for n in LAYERS] + [out / f"layer_{n}.parquet" for n in DERIVED]}
 
 
 def _by_root(t: pa.Table) -> dict[str, list[dict]]:

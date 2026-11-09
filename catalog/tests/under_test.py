@@ -26,8 +26,11 @@ def table(name: str) -> list[dict]:
 
 
 def published() -> dict[str, Path]:
-    """Every published name's file in the catalog under test, as export.published gives a build's."""
-    return {name: file(name) for name in export.PUBLISHED}
+    """Every published name's file in the catalog under test, as export.published gives a build's: the fixed names,
+    and the derived mask layers its index lists."""
+    from refbook import Catalog
+    derived = [n for n in Catalog(CATALOG).manifest["files"] if n.startswith("layer_") and n not in export.PUBLISHED]
+    return {name: file(name) for name in [*export.PUBLISHED, *derived]}
 
 
 def recipes() -> list[dict]:

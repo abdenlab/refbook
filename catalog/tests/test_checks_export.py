@@ -43,6 +43,15 @@ def test_check_gaps_passes_explained_runs_and_catches_overlaps():
     assert not passed and details["runs"] == {"gap_not_all_N": 1}  # the gap has bases
 
 
+def test_a_member_of_a_release_without_structure_needs_no_agp():
+    members = [{"genbank_accession": "V1.1", "assembly_name": "T-v1.0"}]
+    runs = [{"root_id": "V1.1", "start": 2, "end": 4}]
+    passed, details, _ = checks.check_gaps([], runs, {"V1.1": 10}, members, {})
+    assert not passed and details["errors"] == ["V1.1: no AGP"]
+    passed, details, report = checks.check_gaps([], runs, {"V1.1": 10}, members, {}, {"V1.1"})
+    assert passed and details["no_agp_published"] == ["V1.1"] and report  # its run of N, reported unexplained
+
+
 @pytest.mark.parametrize(("ena", "grc", "masked", "want"), [
     ("not checked", "m", False, ("not checked", "match", True)),
     (9, "m", False, ("ok", "match", True)),

@@ -1,0 +1,37 @@
+{
+  "_doc": "The cataloged T2T-CHM13 editions: refbook's label for each, and the targets that reproduce it. A target is keyed by its recipe's id in recipes/*.json; `publisher` and `alias` are who made the file and the name they give it (an alias of the edition). The editions task checks that the targets listed under an edition are exactly those whose named sequence sets have one digest.",
+  "editions": [
+    {"label": "chm13v2.0", "targets": {
+      "T2T_chm13v2.0": {"publisher": "T2T consortium", "alias": "chm13v2.0"},
+      "UCSC_hs1": {"publisher": "UCSC", "alias": "hs1"},
+      "iGenomes_UCSC_CHM13": {"publisher": "Illumina iGenomes", "alias": "UCSC/CHM13"}}},
+    {"label": "chm13v1.1", "targets": {
+      "T2T_chm13v2.0_noY": {"publisher": "T2T consortium", "alias": "chm13v2.0_noY"},
+      "T2T_chm13.draft_v1.1": {"publisher": "T2T consortium", "alias": "chm13.draft_v1.1"}}},
+    {"label": "chm13v1.0", "targets": {
+      "T2T_chm13.draft_v1.0": {"publisher": "T2T consortium", "alias": "chm13.draft_v1.0"}}},
+    {"label": "chm13v2.0-maskedY", "targets": {
+      "T2T_chm13v2.0_maskedY": {"publisher": "T2T consortium", "alias": "chm13v2.0_maskedY"},
+      "Broad_chm13v2.0.maskedY": {"publisher": "Broad Institute", "alias": "chm13v2.0.maskedY"}}},
+    {"label": "chm13v2.0-maskedY-rCRS", "targets": {
+      "T2T_chm13v2.0_maskedY_rCRS": {"publisher": "T2T consortium", "alias": "chm13v2.0_maskedY_rCRS"}}},
+    {"label": "chm13v2.0-maskedY-rCRS-EBV", "targets": {
+      "Broad_chm13v2.0.maskedY.rCRS.EBV": {"publisher": "Broad Institute", "alias": "chm13v2.0.maskedY.rCRS.EBV"}}},
+    {"label": "chm13v2.0-refseq", "targets": {
+      "RefSeq_T2T-CHM13v2.0": {"publisher": "NCBI RefSeq", "alias": "GCF_009914755.1_T2T-CHM13v2.0"}}},
+    {"label": "ensembl-chm13v2.0", "targets": {
+      "Ensembl_T2T-CHM13v2.0": {"publisher": "Ensembl rapid release", "alias": "Homo_sapiens-GCA_009914755.4-unmasked"}}},
+    {"label": "chm13v2.0-dj-rdna-phr-xx", "targets": {
+      "T2T_masked_DJ_rDNA_PHR.forXX": {"publisher": "T2T consortium", "alias": "chm13v2.masked_DJ_rDNA_PHR.forXX"}}},
+    {"label": "chm13v2.0-dj-rdna-phr-xy", "targets": {
+      "T2T_masked_DJ_rDNA_PHR.forXY": {"publisher": "T2T consortium", "alias": "chm13v2.masked_DJ_rDNA_PHR.forXY"}}},
+    {"label": "chm13v2.0-dj-5s-rdna-phr-xy", "targets": {
+      "T2T_masked_DJ_5S_rDNA_PHR_hardMaskY": {"publisher": "T2T consortium", "alias": "chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY"}}},
+    {"label": "chm13v2.0-dj-5s-rdna-phr-noy", "targets": {
+      "T2T_masked_DJ_5S_rDNA_PHR_noY": {"publisher": "T2T consortium", "alias": "chm13v2.0_masked_DJ_5S_rDNA_PHR_noY"}}},
+    {"label": "chm13v2.0-dj-5s-rdna-phr-xy-rcrs", "targets": {
+      "T2T_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS": {"publisher": "T2T consortium", "alias": "chm13v2.0_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS"}}},
+    {"label": "chm13v2.0-dj-5s-rdna-phr-noy-rcrs", "targets": {
+      "T2T_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS": {"publisher": "T2T consortium", "alias": "chm13v2.0_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS"}}}
+  ]
+}

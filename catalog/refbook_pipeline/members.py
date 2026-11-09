@@ -39,8 +39,11 @@ def release_of(name: str) -> int:
     return int(name.split(".p")[1]) if ".p" in name else 0
 
 
-def members(book: str, reports: list[Path]) -> pa.Table:
-    """The book's assembly members, from its reports."""
+def members(book: str, reports: list[Path], order: dict[str, int] | None = None) -> pa.Table:
+    """The book's assembly members, from its reports. `order` numbers the book's releases (p0 first): a release's
+    number is its place there, not its name's patch number (T2T-CHM13's versions, v1.0..v2.0, have none). An add-on
+    assembly, not in `order`, is numbered by its name (0, for hs38d1)."""
+    order = order or {}
     na = lambda v: None if v in ("na", "") else v
     rows = []
     for path in reports:
@@ -48,7 +51,8 @@ def members(book: str, reports: list[Path]) -> pa.Table:
         name = meta["Assembly name"]
         for r in report:
             rows.append({"book": book, "assembly_accession": meta["GenBank assembly accession"],
-                         "assembly_name": name, "release": release_of(name), "sequence_name": r["Sequence-Name"],
+                         "assembly_name": name, "release": order.get(name, release_of(name)),
+                         "sequence_name": r["Sequence-Name"],
                          "role": r["Sequence-Role"], "assigned_molecule": na(r["Assigned-Molecule"]),
                          "location_type": na(r["Assigned-Molecule-Location/Type"]),
                          "genbank_accession": r["GenBank-Accn"], "relationship": r["Relationship"],

@@ -1,0 +1,58 @@
+# The T2T-CHM13 book: the T2T-CHM13 assembly in its gapless versions (v1.0, v1.1, v2.0), with the sequences its editions
+# add (rCRS in place of CHM13's own mitochondrion, EBV), and the published editions its recipes reproduce.
+# See _scratch/t2t-edition-survey.md.
+name = "t2t-chm13"
+assembly = "T2T-CHM13"   # the assembly's name, as its editions record it
+
+# The assembly's versions, oldest first: NCBI assembly sources. A version is numbered by its place here (0, 1, 2):
+# T2T-CHM13's names carry no patch number.
+releases = ["T2T-CHM13v1.0", "T2T-CHM13v1.1", "T2T-CHM13v2.0"]
+# Every source the book reads: the above, and the rest.
+sources = [
+  "T2T-CHM13v1.0", "T2T-CHM13v1.0-chromosomes", "T2T-CHM13v1.1", "T2T-CHM13v2.0", "EBV",
+  "RefSeq-T2T-CHM13v2.0", "T2T-analysis-set", "T2T-drafts", "T2T-masked-sets", "UCSC-hs1", "Ensembl-T2T-CHM13",
+  "Broad-t2t-v2", "iGenomes-CHM13",
+]
+
+# Releases with no assembly structure published anywhere: their members have no AGP (NCBI's v1.0 directory keeps
+# only its report and stats, and the INSDC records carry no CONTIG line or assembly_gap features).
+[[releases_without_structure]]
+release = "T2T-CHM13v1.0"
+why = "NCBI publishes no assembly structure for GCA_009914755.2; its chromosomes' INSDC records describe no gaps"
+
+# Mask layers read from the consortium's masked analysis sets: no file gives their spans (the per-chromosome BEDs
+# beside them each span a whole chromosome). Each is the N-runs of one file, on the chromosomes named, where the root
+# has bases; the layers task refuses unless masking the root with them gives the file. The other masked sets are
+# then checked against the same layers by their recipes.
+[[derived_masks]]
+layer = "t2t_dj_rdna_phr"
+source = "T2T-masked-sets"
+file = "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa"
+chromosomes = ["chr13", "chr14", "chr15", "chr21", "chr22"]
+why = "the distal junctions, rDNA arrays and pseudo-homologous regions of the acrocentric short arms"
+
+[[derived_masks]]
+layer = "t2t_5s_rdna"
+source = "T2T-masked-sets"
+file = "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY.fa"
+chromosomes = ["chr1"]
+why = "the 5S rDNA array on chr1, masked in the _5S sets"
+
+[[derived_masks]]
+layer = "chry"
+source = "T2T-masked-sets"
+file = "masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa"
+chromosomes = ["chrY"]
+why = "all of chrY, as the set for XX samples masks it"
+
+[[derived_masks]]
+layer = "chry_from_2"
+source = "T2T-masked-sets"
+file = "masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY.fa"
+chromosomes = ["chrY"]
+why = "chrY as the _noY sets mask it: all but its first base (an off-by-one in how they were made, reproduced as published)"
+
+# The checks' book-specific choices: the edition streamed in full (check_materialize). No analysis set with M5s for
+# check_roots: the roots are checked by Broad's .dict M5s (reproduce) and ENA (check_roots_ena).
+[checks]
+stream = "chm13v2.0-maskedY-rCRS"

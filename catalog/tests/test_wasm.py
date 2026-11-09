@@ -75,7 +75,7 @@ def test_wasm_agrees_on_sequences_and_collections(tmp_path):
 
 
 @pytest.mark.skipif(not (BUILD / "catalog.json").exists(), reason="no build")
-@pytest.mark.parametrize("book", ["grch37", "grch38"])
+@pytest.mark.parametrize("book", ["grch37", "grch38", "t2t-chm13"])
 def test_wasm_compiles_every_recipe_like_python(tmp_path, book):
     rs = books.recipes(layout.BOOKS, book)
     t = engine.load_tables(engine.table_paths(published(), rs), rs, book)

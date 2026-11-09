@@ -116,9 +116,10 @@ def read_genomic_gaps(path: Path) -> dict[str, set[tuple[int, int]]]:
 
 
 def check_gaps(agp: list[dict], n_runs: list[dict], lengths: dict[str, int], members: list[dict],
-               genomic_gaps: dict[str, Path]) -> tuple[bool, dict, list[tuple]]:
+               genomic_gaps: dict[str, Path], no_agp: set[str] = frozenset()) -> tuple[bool, dict, list[tuple]]:
     """(passed, details, the report's rows) for check_gaps (see the module). `genomic_gaps` gives, by release name,
-    the GRC's genomic_gaps.txt.gz where published."""
+    the GRC's genomic_gaps.txt.gz where published; `no_agp`, the members whose only releases publish no assembly
+    structure (T2T-CHM13v1.0's chromosomes): they have no AGP, and their runs of N are reported unexplained."""
     errors = []
     parts = defaultdict(list)
     for p in agp:
@@ -130,7 +131,7 @@ def check_gaps(agp: list[dict], n_runs: list[dict], lengths: dict[str, int], mem
         v.sort()
         if any(a[1] > b[0] for a, b in pairwise(v)):
             errors.append(f"{acc}: its runs of N overlap")
-    for acc in sorted({m["genbank_accession"] for m in members} - set(parts)):
+    for acc in sorted({m["genbank_accession"] for m in members} - set(parts) - set(no_agp)):
         errors.append(f"{acc}: no AGP")
     for acc, ps in parts.items():
         ps.sort(key=lambda p: p["part_number"])
@@ -161,7 +162,7 @@ def check_gaps(agp: list[dict], n_runs: list[dict], lengths: dict[str, int], mem
             if gg.get(acc, set()) != want:
                 errors.append(f"{acc}: genomic_gaps.txt in {name} != AGP gaps + component N-runs >= {MIN_COMPONENT_N}")
     passed = not errors and not stats["gap_not_all_N"]
-    return passed, {"errors": errors[:100], "runs": dict(stats)}, report
+    return passed, {"errors": errors[:100], "runs": dict(stats), "no_agp_published": sorted(no_agp)}, report
 
 
 # check_roots

@@ -16,6 +16,8 @@
 - layer_hardmask_grc   the spans the GRC's analysis sets replace with N, each with its unmasked cognate
 - layer_par_y          chrY's pseudoautosomal regions, from the region definitions: what an edition writes as N
                        when it masks only the PARs
+- layer_<derived mask> spans a published masked file writes as N where the root has bases, read from the file
+                       itself where no file gives them (T2T's DJ/rDNA/PHR analysis sets: build_derived_mask)
 - layer_padding        each alt scaffold's and patch's placement in the latest release that places it, and its
                        parent's length: what the `pad` operation (N-padding into the parent's coordinates) reads
 
@@ -44,17 +46,20 @@ class Release:
     name: str            # GRCh38.p2
     directory: Path      # its NCBI directory under raw/, e.g. raw/.../GCA_000001405.17_GRCh38.p2
     url: str             # that directory's URL
-    structure: Path      # its assembly structure: <directory>/<asm>_assembly_structure, or an archived copy
+    structure: Path | None  # its assembly structure: <directory>/<asm>_assembly_structure, an archived copy, or
+                            # none published (T2T-CHM13v1.0)
 
     @classmethod
-    def of(cls, raw: Path, base: str, archive: str = "") -> Release:
-        """The release whose NCBI directory is raw/<base>. `archive`: the raw path of a directory holding its
-        assembly structure as release-named subdirectories (NCBI's old_genbank archive, for a release whose
-        directory no longer has it)."""
+    def of(cls, raw: Path, base: str, archive: str = "", number: int | None = None,
+           unstructured: bool = False) -> Release:
+        """The release whose NCBI directory is raw/<base>, numbered `number` (its place among its book's releases;
+        by default its name's patch number). `archive`: the raw path of a directory holding its assembly structure
+        as release-named subdirectories (NCBI's old_genbank archive, for a release whose directory no longer has it).
+        `unstructured`: no assembly structure is published for it anywhere."""
         name = base.rsplit("/", 1)[-1].split("_", 2)[2]
         d = raw / base
-        structure = raw / archive / name if archive else structure_of(d)
-        return cls(release_of(name), name, d, f"https://{base}", structure)
+        structure = None if unstructured else raw / archive / name if archive else structure_of(d)
+        return cls(release_of(name) if number is None else number, name, d, f"https://{base}", structure)
 
 
 def structure_of(directory: Path) -> Path:
@@ -232,7 +237,12 @@ def build_regions(releases: list[Release], members: list[dict],
     release's assembly_regions.txt must agree, but for the book's `quirks`."""
     by_release, rtype = {}, {}
     for rel in releases:
+        if rel.structure is None:
+            continue  # no region definitions published (and no alts or patches to place)
         d, n = rel.directory, rel.number
+        if not (rel.structure / "genomic_regions_definitions.txt").exists() and \
+                not (d / f"{d.name}_assembly_regions.txt").exists():
+            continue  # a release that names no regions (T2T-CHM13v1.1: neither file); one file alone still refuses
         # The report's "Chromosome" is a chromosome name, or an alt scaffold's sequence name (patches to alts).
         chrom = {m["sequence_name"]: m["genbank_accession"] for m in members if m["assembly_name"] == rel.name}
         chrom.update({m["assigned_molecule"]: m["genbank_accession"] for m in members
@@ -298,6 +308,9 @@ def build_placements(releases: list[Release], members: list[dict], length: dict[
     the notes: members a release leaves unplaced, and units whose structure has no placements."""
     place, ptype, notes = {}, {}, []
     for rel in releases:
+        if rel.structure is None:
+            notes.append(f"{rel.name}: no assembly structure published, so no placements")
+            continue
         d, s = rel.directory, rel.structure
         rows, units = placement_rows(s)
         here = [m for m in members if m["assembly_name"] == rel.name]
@@ -379,6 +392,45 @@ def build_par_y(regions: pa.Table, members: list[dict]) -> pa.Table:
     rows = sorted(spans.items(), key=lambda kv: (kv[0][0], kv[1]))
     return pa.table({"root_id": [k[0] for k, _ in rows], "start": [s for _, (s, _) in rows],
                      "end": [e for _, (_, e) in rows], "name": [k[1] for k, _ in rows]})
+
+
+def build_derived_mask(path: Path, url: str, roots: dict[str, str], root_bases) -> pa.Table:
+    """A mask layer read from a published masked FASTA, for the publishers who give no BED of what they masked:
+    on each of `roots` (its name in the file -> root ID), the runs of N in the file that cover a base the root has
+    (`root_bases(root)` gives the root's). Refuses unless masking the root with those spans gives the file's
+    sequence, base for base (case aside): the layer then reproduces the file exactly, whatever it did."""
+    import re
+
+    from refbook.parse import open_compressed
+    seqs, name, buf = {}, None, []
+    with open_compressed(path) as f:
+        for line in f:
+            if line.startswith(b">"):
+                if name in roots:
+                    seqs[name] = b"".join(buf).upper()
+                name, buf = line[1:].split()[0].decode(), []
+            elif name in roots:
+                buf.append(line.rstrip())
+    if name in roots:
+        seqs[name] = b"".join(buf).upper()
+    if set(seqs) != set(roots):
+        raise Refused(f"{path.name}: no {sorted(set(roots) - set(seqs))}")
+    cols = {"root_id": [], "start": [], "end": [], "derived_from": []}
+    for name, root in sorted(roots.items(), key=lambda kv: kv[1]):
+        s, r = seqs[name], bytes(root_bases(root))
+        if len(s) != len(r):
+            raise Refused(f"{path.name} {name}: {len(s)} bases, root {root} has {len(r)}")
+        spans = [(m.start(), m.end()) for m in re.finditer(rb"N+", s) if r[m.start():m.end()].count(b"N") != m.end() - m.start()]
+        masked = bytearray(r)
+        for a, b in spans:
+            masked[a:b] = b"N" * (b - a)
+        if bytes(masked) != s:
+            raise Refused(f"{path.name} {name}: masking root {root} with its N-runs doesn't give the file's sequence")
+        for a, b in spans:
+            for k, v in zip(cols, (root, a, b, url)):
+                cols[k].append(v)
+    return pa.table(cols, schema=pa.schema([("root_id", pa.string()), ("start", pa.int64()), ("end", pa.int64()),
+                                            ("derived_from", pa.string())]))
 
 
 def build_padding(placements: pa.Table, length: dict[str, int]) -> pa.Table:

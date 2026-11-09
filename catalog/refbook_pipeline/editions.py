@@ -4,7 +4,8 @@ From a book's reproduced targets (reproduce: each target's sequences in its own 
 curated labels (books/<book>/editions.json):
 
 - editions          one row per edition: label, id (the named-sequence-set digest), the seqcol digest of its
-                    manifest, counts, the facets made from its recipe and manifest (assembly, patch_release,
+                    manifest, counts, the facets made from its recipe and manifest (assembly, release: the first of
+                    the book's releases with every root it draws from the assembly, patch_release,
                     contents by kind, excluded, operations, naming) and the recipe itself
 - manifests         one row per sequence of each edition, by name (code point): root, operations, length, digests
 - targets           one row per target: its edition, publisher, alias, URLs, the exact file it was checked against
@@ -114,6 +115,15 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
     in_releases = [m for m in members if m["assembly_name"] in releases]
     last = max(m["release"] for m in in_releases)
     latest = {m["genbank_accession"] for m in in_releases if m["release"] == last}
+    # Each release's members, oldest first: an edition's release is the first that has all its assembly's roots.
+    by_release = defaultdict(set)
+    for m in in_releases:
+        by_release[m["release"], m["assembly_name"]].add(m["genbank_accession"])
+    in_book = {m["genbank_accession"] for m in in_releases}
+
+    def first_release(roots: set[str]) -> str | None:
+        mine = roots & in_book
+        return next((name for (_, name), accs in sorted(by_release.items()) if mine and mine <= accs), None)
     collections = out / "collections"
     collections.mkdir()
     editions, manifests, targets, orders = [], [], [], []
@@ -150,7 +160,8 @@ def build(assembly: str, recipes: list[dict], curated: list[dict], reproduced: l
         editions.append({
             "edition": label, "id": digest, "seqcol_digest": top,
             "n_sequences": len(manifest), "total_length": sum(r["length"] for r in manifest),
-            "assembly": assembly, "patch_release": max(patch_releases) if patch_releases else None,
+            "assembly": assembly, "release": first_release(roots_used),
+            "patch_release": max(patch_releases) if patch_releases else None,
             "contents": [{"kind": k, "count": n} for k, n in sorted(kinds.items())],
             "excluded": excluded(recipe, members, roots_used),
             "operations": mask_layers + ([IUPAC_TO_N] if recipe.get("alphabet") else [])

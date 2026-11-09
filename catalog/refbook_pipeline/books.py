@@ -29,6 +29,8 @@ class Book:
     checks: dict | None = None               # analysis_set (source, file), stream (see checks.py)
     structure_archive: str = ""              # where releases without a structure tree have it (see book.toml)
     agp_revisions: tuple[tuple[int, str], ...] = ()  # (release, root): AGP layouts known to change
+    unstructured: tuple[str, ...] = ()       # releases with no assembly structure published anywhere (book.toml)
+    derived_masks: tuple[dict, ...] = ()     # mask layers read from a published masked file (see book.toml)
 
 
 def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
@@ -50,14 +52,24 @@ def load(books_dir: Path, sources: dict[str, Source]) -> dict[str, Book]:
         archive = b.get("structure_archive", "")
         if archive and archive not in b["sources"]:
             raise Refused(f"{b['name']}: structure_archive is not among its sources")
-        bare = [s for s in b.get("releases", []) if sources[s].ncbi_assembly and not sources[s].structure]
+        for m in b.get("derived_masks", []):
+            if set(m) != {"layer", "source", "file", "chromosomes", "why"}:
+                raise Refused(f"{b['name']}: a derived mask has layer, source, file, chromosomes and why")
+            if m["source"] not in b["sources"]:
+                raise Refused(f"{b['name']}: derived mask {m['layer']}: its source is not among the book's")
+        unstructured = tuple(u["release"] for u in b.get("releases_without_structure", []))
+        if set(unstructured) - set(b.get("releases", [])):
+            raise Refused(f"{b['name']}: releases_without_structure not among its releases: {sorted(set(unstructured) - set(b['releases']))}")
+        bare = [s for s in b.get("releases", []) if sources[s].ncbi_assembly and not sources[s].structure
+                and s not in unstructured]
         if bare and not archive:
             raise Refused(f"{b['name']}: releases without an assembly structure, and no structure_archive: {bare}")
         out[b["name"]] = Book(b["name"], tuple(b["sources"]), b.get("assembly", ""),
                               tuple(b.get("releases", [])), tuple(b.get("addons", [])),
                               tuple((q["release"], q["region"], q["root"]) for q in b.get("region_quirks", [])),
                               b.get("hardmask_grc"), tuple(b.get("aliases", [])), b.get("checks"),
-                              archive, tuple((q["release"], q["root"]) for q in b.get("agp_revisions", [])))
+                              archive, tuple((q["release"], q["root"]) for q in b.get("agp_revisions", [])),
+                              unstructured, tuple(b.get("derived_masks", [])))
     return out
 
 
@@ -68,10 +80,17 @@ def sources_of(books: dict[str, Book], sources: dict[str, Source]) -> list[Sourc
 
 
 def releases(book: Book, sources: dict[str, Source], raw: Path) -> list[Release]:
-    """The book's releases, p0 first, each with where its assembly structure is."""
+    """The book's releases, p0 first, each numbered by its place and with where its assembly structure is."""
     archive = sources[book.structure_archive].base if book.structure_archive else ""
-    return [Release.of(raw, sources[n].base, archive if sources[n].ncbi_assembly and not sources[n].structure else "")
-            for n in book.releases]
+    return [Release.of(raw, sources[n].base,
+                       archive if sources[n].ncbi_assembly and not sources[n].structure and n not in book.unstructured
+                       else "", number=i, unstructured=n in book.unstructured)
+            for i, n in enumerate(book.releases)]
+
+
+def release_order(book: Book, sources: dict[str, Source], raw: Path) -> dict[str, int]:
+    """Each release's name -> its number: its place among the book's releases."""
+    return {r.name: r.number for r in releases(book, sources, raw)}
 
 
 def recipes(books_dir: Path, book: str) -> list[dict]:

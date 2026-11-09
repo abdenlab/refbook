@@ -1,0 +1,5 @@
+path	bytes	sha256	last_modified	url
+storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/T2T_README.txt	7019	c67e1dab48b9a750bdc69d386b30b529cc9e2db358eadaf860004159598974c8	2023-10-06T00:00:35+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/T2T_README.txt
+storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.dict	3398	fead46f0fcf3fbb760b29138d70794a9bce53ae7aa8fb3f52bbad6f705afad0d	2023-09-22T00:00:36+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.dict
+storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.rCRS.EBV.dict	1596	1d3a6cb87a7d0455acec5ef098eccd601b3398fa8d08bf87f681cf05c0ca3ea5	2023-10-06T00:00:29+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.rCRS.EBV.dict
+storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/readme	516	666527e4ad76bc4453a22acf7dba60575729e9d886dab9cee4085ae3a9daa8de	2022-09-22T00:00:17+00:00	https://storage.googleapis.com/gcp-public-data--broad-references/t2t/v2/readme

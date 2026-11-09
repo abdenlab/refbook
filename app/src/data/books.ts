@@ -1,4 +1,4 @@
-// Books: one per assembly (grch37, grch38), each with its releases and its editions. Every edition belongs to one
+// Books: one per assembly (grch37, grch38, t2t-chm13), each with its releases and its editions. Every edition belongs to one
 // book; its label is unique across books (the pipeline refuses a label used twice), so a label alone finds its book.
 import type { Catalog } from "./catalog.ts";
 import { editions, manifest, targets, type Edition, type ManifestRow, type Target } from "./editions.ts";
@@ -7,7 +7,7 @@ export interface Book {
   book: string;
   /** The assembly's name, as its editions record it (GRCh37). */
   assembly: string;
-  /** Its releases, p0 first (GRCh37, GRCh37.p1, ...). */
+  /** Its releases, oldest first (GRCh37, GRCh37.p1, ...; T2T-CHM13v1.0, v1.1, v2.0), from books.parquet. */
   releases: string[];
   /** Distinct sequences across its releases. */
   nSequences: number;
@@ -16,28 +16,24 @@ export interface Book {
 }
 
 type Member = { book: string; assembly_name: string; genbank_accession: string };
-
-/** A release of `assembly`, and its patch number: GRCh37 is 0, GRCh37.p13 is 13; anything else (hs38d1) is null. */
-export function releaseNumber(name: string, assembly: string): number | null {
-  if (name === assembly) return 0;
-  const m = name.startsWith(`${assembly}.p`) ? /^\d+$/.exec(name.slice(assembly.length + 2)) : null;
-  return m ? Number(m[0]) : null;
-}
+type BookRow = { book: string; assembly: string; releases: string[] };
 
 let loaded: Promise<Book[]> | null = null;
 
 /** Every book, in name order. */
 export function books(cat: Catalog): Promise<Book[]> {
   return (loaded ??= (async () => {
-    const [fs, ts, members] = await Promise.all([editions(cat), targets(cat), cat.table<Member>("assembly_members.parquet")]);
+    const [fs, ts, members, rows] = await Promise.all([editions(cat), targets(cat),
+      cat.table<Member>("assembly_members.parquet"), cat.table<BookRow>("books.parquet")]);
     const out: Book[] = [];
-    for (const [book, eds] of Map.groupBy(fs, (f) => f.book)) {
-      const assembly = eds[0].assembly;
-      const mine = members.filter((m) => m.book === book && releaseNumber(m.assembly_name, assembly) !== null);
-      const releases = [...new Set(mine.map((m) => m.assembly_name))]
-        .sort((a, b) => releaseNumber(a, assembly)! - releaseNumber(b, assembly)!);
+    for (const row of rows) {
+      const eds = fs.filter((f) => f.book === row.book);
+      const releases = [...row.releases];
+      const inRelease = new Set(releases);
+      const mine = members.filter((m) => m.book === row.book && inRelease.has(m.assembly_name));
       const labels = new Set(eds.map((e) => e.edition));
-      out.push({ book, assembly, releases, nSequences: new Set(mine.map((m) => m.genbank_accession)).size,
+      out.push({ book: row.book, assembly: row.assembly, releases,
+                 nSequences: new Set(mine.map((m) => m.genbank_accession)).size,
                  editions: eds, targets: ts.filter((t) => labels.has(t.edition)) });
     }
     out.forEach((b) => bookOf.set(b.book, b));
@@ -81,8 +77,10 @@ export function editionHref(label: string, seq?: string): string {
 export const FAMILIES: { key: string; name: string; about: string }[] = [
   { key: "grc", name: "GRC",
     about: "The Genome Reference Consortium's analysis sets, made for read alignment: duplicated regions masked so reads map once." },
-  { key: "ucsc", name: "UCSC",
-    about: "The UCSC Genome Browser's builds: chr-style names, IUPAC codes written as N." },
+  { key: "t2t", name: "T2T consortium",
+    about: "The T2T consortium's own files: the assembly, its analysis sets (chrY masked or left out, rCRS for the mitochondrion), and sets with repetitive regions masked for short-read alignment." },
+  { key: "ncbi", name: "NCBI", about: "NCBI's RefSeq copy of the assembly, named by RefSeq accession." },
+  { key: "ucsc", name: "UCSC", about: "The UCSC Genome Browser's builds, with chr-style names." },
   { key: "ensembl", name: "Ensembl and GENCODE",
     about: "Ensembl's genome FASTA files, and GENCODE's, which carry Ensembl's gene annotation." },
   { key: "projects", name: "1000 Genomes and Broad",
@@ -92,6 +90,8 @@ export const FAMILIES: { key: string; name: string; about: string }[] = [
 
 function familyOfPublisher(p: string): string {
   if (p === "GRC") return "grc";
+  if (p === "T2T consortium") return "t2t";
+  if (p.startsWith("NCBI")) return "ncbi";
   if (p === "UCSC") return "ucsc";
   if (p.startsWith("Ensembl") || p.startsWith("GENCODE")) return "ensembl";
   if (p === "1000 Genomes" || p.startsWith("Broad")) return "projects";

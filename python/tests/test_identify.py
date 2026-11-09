@@ -234,12 +234,13 @@ def test_unknown_sequences_are_listed(cat, tmp_path):
 
 
 @needs_catalog
-def test_other_assembly_is_no_good_match(cat, tmp_path):
+def test_a_chm13_header_finds_its_assembly(cat, tmp_path):
+    # Three T2T-CHM13 names and lengths: a subset of its editions (chrM's length is rCRS's too, so not of GRCh38's).
     sizes = tmp_path / "chm13.chrom.sizes"
     sizes.write_text("chr1\t248387328\nchr2\t242696752\nchrM\t16569\n\n")
     res = run(sizes, cat)
-    assert res.best[0].verdict == "partial"
-    assert res.best[0].matched * 2 < 3
+    assert res.best[0].verdict == "subset"
+    assert all(c.edition.startswith(("chm13", "ensembl-chm13")) for c in res.best if c.verdict == "subset")
 
 
 @needs_catalog

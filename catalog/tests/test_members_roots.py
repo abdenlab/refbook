@@ -35,6 +35,13 @@ def test_a_report_becomes_members_of_its_book(tmp_path):
     assert members.lengths(t) == {"CM1.1": 12, "J1.2": 8}
 
 
+def test_a_books_order_numbers_its_releases(tmp_path):
+    (tmp_path / "r.txt").write_text(REPORT.replace("Test.p2", "T-v1.1"))
+    t = members.members("test", [tmp_path / "r.txt"], {"T-v1.0": 0, "T-v1.1": 1})
+    assert set(t["release"].to_pylist()) == {1}
+    assert set(members.members("test", [tmp_path / "r.txt"])["release"].to_pylist()) == {0}  # by name: no .pN
+
+
 def test_reports_that_disagree_on_a_length_refuse(tmp_path):
     (tmp_path / "a.txt").write_text(REPORT)
     (tmp_path / "b.txt").write_text(REPORT.replace("non-nuclear\t8", "non-nuclear\t9"))

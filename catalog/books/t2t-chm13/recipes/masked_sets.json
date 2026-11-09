@@ -1,0 +1,307 @@
+{
+  "_doc": "The T2T consortium's v2.0 analysis sets with the acrocentric short arms' distal junctions, rDNA arrays and pseudo-homologous regions hard-masked (layer_t2t_dj_rdna_phr), and the chr1 5S rDNA array too in the _5S sets (layer_t2t_5s_rdna); chrY masked whole for XX samples (layer_chry), at its PARs for XY (layer_par_y), or, in the _noY sets, all but its first base (layer_chry_from_2: an off-by-one, reproduced). rCRS as chrM in the forXX, forXY and _wi_rCRS sets; CHM13's own mitochondrion in the other two _5S sets. No file publishes the masked spans: the layers are read from the sets themselves (book.toml derived_masks).",
+  "recipes": [
+    {
+      "target": "T2T_masked_DJ_rDNA_PHR.forXX",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXX.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ],
+          "accessions": [
+            "CP068277.2",
+            "CP068276.2",
+            "CP068275.2",
+            "CP068274.2",
+            "CP068273.2",
+            "CP068272.2",
+            "CP068271.2",
+            "CP068270.2",
+            "CP068269.2",
+            "CP068268.2",
+            "CP068267.2",
+            "CP068266.2",
+            "CP068265.2",
+            "CP068264.2",
+            "CP068263.2",
+            "CP068262.2",
+            "CP068261.2",
+            "CP068260.2",
+            "CP068259.2",
+            "CP068258.2",
+            "CP068257.2",
+            "CP068256.2",
+            "CP068255.2",
+            "CP086569.2"
+          ]
+        },
+        {
+          "roots": [
+            "J01415.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "chry",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "J01415.2": "chrM"
+        }
+      }
+    },
+    {
+      "target": "T2T_masked_DJ_rDNA_PHR.forXY",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR/chm13v2.masked_DJ_rDNA_PHR.forXY.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ],
+          "accessions": [
+            "CP068277.2",
+            "CP068276.2",
+            "CP068275.2",
+            "CP068274.2",
+            "CP068273.2",
+            "CP068272.2",
+            "CP068271.2",
+            "CP068270.2",
+            "CP068269.2",
+            "CP068268.2",
+            "CP068267.2",
+            "CP068266.2",
+            "CP068265.2",
+            "CP068264.2",
+            "CP068263.2",
+            "CP068262.2",
+            "CP068261.2",
+            "CP068260.2",
+            "CP068259.2",
+            "CP068258.2",
+            "CP068257.2",
+            "CP068256.2",
+            "CP068255.2",
+            "CP086569.2"
+          ]
+        },
+        {
+          "roots": [
+            "J01415.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "J01415.2": "chrM"
+        }
+      }
+    },
+    {
+      "target": "T2T_masked_DJ_5S_rDNA_PHR_hardMaskY",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_hardMaskY.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "t2t_5s_rdna",
+          "with": "N"
+        },
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc"
+      }
+    },
+    {
+      "target": "T2T_masked_DJ_5S_rDNA_PHR_noY",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR_5S/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "t2t_5s_rdna",
+          "with": "N"
+        },
+        {
+          "layer": "chry_from_2",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc"
+      }
+    },
+    {
+      "target": "T2T_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_PAR_wi_rCRS.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ],
+          "accessions": [
+            "CP068277.2",
+            "CP068276.2",
+            "CP068275.2",
+            "CP068274.2",
+            "CP068273.2",
+            "CP068272.2",
+            "CP068271.2",
+            "CP068270.2",
+            "CP068269.2",
+            "CP068268.2",
+            "CP068267.2",
+            "CP068266.2",
+            "CP068265.2",
+            "CP068264.2",
+            "CP068263.2",
+            "CP068262.2",
+            "CP068261.2",
+            "CP068260.2",
+            "CP068259.2",
+            "CP068258.2",
+            "CP068257.2",
+            "CP068256.2",
+            "CP068255.2",
+            "CP086569.2"
+          ]
+        },
+        {
+          "roots": [
+            "J01415.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "t2t_5s_rdna",
+          "with": "N"
+        },
+        {
+          "layer": "par_y",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "J01415.2": "chrM"
+        }
+      }
+    },
+    {
+      "target": "T2T_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS",
+      "published": "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/masked_DJ_rDNA_PHR_5S_wi_rCRS/chm13v2.0_masked_DJ_5S_rDNA_PHR_noY_wi_rCRS.fa",
+      "select": [
+        {
+          "assembly": "GCA_009914755.4",
+          "roles": [
+            "assembled-molecule"
+          ],
+          "accessions": [
+            "CP068277.2",
+            "CP068276.2",
+            "CP068275.2",
+            "CP068274.2",
+            "CP068273.2",
+            "CP068272.2",
+            "CP068271.2",
+            "CP068270.2",
+            "CP068269.2",
+            "CP068268.2",
+            "CP068267.2",
+            "CP068266.2",
+            "CP068265.2",
+            "CP068264.2",
+            "CP068263.2",
+            "CP068262.2",
+            "CP068261.2",
+            "CP068260.2",
+            "CP068259.2",
+            "CP068258.2",
+            "CP068257.2",
+            "CP068256.2",
+            "CP068255.2",
+            "CP086569.2"
+          ]
+        },
+        {
+          "roots": [
+            "J01415.2"
+          ]
+        }
+      ],
+      "mask": [
+        {
+          "layer": "t2t_dj_rdna_phr",
+          "with": "N"
+        },
+        {
+          "layer": "t2t_5s_rdna",
+          "with": "N"
+        },
+        {
+          "layer": "chry_from_2",
+          "with": "N"
+        }
+      ],
+      "rename": {
+        "namespace": "ucsc",
+        "map": {
+          "J01415.2": "chrM"
+        }
+      }
+    }
+  ]
+}

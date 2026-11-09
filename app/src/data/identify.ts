@@ -147,6 +147,9 @@ export interface Mine {
   /** Its SQ. digest: given, or the store's for its MD5. Null without a digest, or for an MD5 the catalog lacks. */
   sq: string | null;
   root_id: string | null;
+  /** The roots it may be: its root, or, for a name several roots of its length go by (chrM: rCRS, and CHM13's own
+   * mitochondrion), each of them. */
+  candidates: string[];
   evidence: rb.Identity["evidence"];
 }
 
@@ -157,6 +160,8 @@ export function mine(entries: rb.Entry[], ids: rb.Identity[]): Mine[] {
     digested: !!(e.md5 || e.sq),
     sq: ids[i].sequence ?? e.sq ?? null,
     root_id: ids[i].root_id,
+    candidates: ids[i].root_id ? [ids[i].root_id!]
+      : ((ids[i].notes.find((n) => n.kind === "ambiguous_name") as { roots?: string[] } | undefined)?.roots ?? []),
     evidence: ids[i].evidence,
   }));
 }
@@ -176,7 +181,8 @@ export function matches(a: Mine[], b: ManifestRow[]): Match[] {
   const out: Match[] = [];
   const restA: Mine[] = [];
   const used = new Set<string>();
-  const fits = (x: Mine, y: ManifestRow) => x.root_id === y.root_id && (x.length === null || x.length === y.length);
+  // Its root, or (an ambiguous name) one of the roots it may be, at its length: only a digest could tell more.
+  const fits = (x: Mine, y: ManifestRow) => x.candidates.includes(y.root_id) && (x.length === null || x.length === y.length);
   for (const x of a) {
     const y = byName.get(x.name);
     if (!y || used.has(y.name)) { restA.push(x); continue; }
@@ -198,7 +204,7 @@ export function matches(a: Mine[], b: ManifestRow[]): Match[] {
   };
   for (const x of restA) {
     const exact = x.sq ? bySq.get(x.sq) : undefined;
-    const y = exact ?? byRoot.get(x.root_id ?? "")?.find((r) => fits(x, r));
+    const y = exact ?? x.candidates.map((c) => byRoot.get(c)?.find((r) => fits(x, r))).find((r) => r);
     if (y) { out.push({ kind: "renamed", a: x, b: y, by: exact ? "digest" : x.digested ? "root" : "root_and_length" }); take(y); }
     else out.push({ kind: "a_only", a: x });
   }

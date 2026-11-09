@@ -5,7 +5,6 @@ import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
 import type { Place } from "./exports.ts";
 import type { Edition, ManifestRow } from "./editions.ts";
-import { releaseNumber } from "./books.ts";
 import { measure } from "./meter.ts";
 
 /** A recipe, in the grammar the core compiles (crates/refbook-core/src/recipe.rs; catalog/refbook_pipeline/engine.py). */
@@ -55,14 +54,14 @@ let loaded: Promise<DesignTables> | null = null;
 
 type PlaceMember = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string; assembly_unit: string; assigned_molecule: string | null };
 
-/** Where each root belongs in a book: its assembly (`assembly`, the book's, for a member of one of its releases),
+/** Where each root belongs in a book: its assembly (`assembly`, the book's, for a member of one of its `releases`),
  * role, unit and molecule (the first record; none differs), or its external collection. */
 function placesOf(members: PlaceMember[], external: { root_id: string; collection: string; rank: number }[],
-                  assembly: string): Map<string, Place> {
+                  assembly: string, releases: Set<string>): Map<string, Place> {
   const places = new Map<string, Place>();
   for (const m of members) {
     if (places.has(m.genbank_accession)) continue;
-    const primary = releaseNumber(m.assembly_name, assembly) !== null;
+    const primary = releases.has(m.assembly_name);
     places.set(m.genbank_accession, { primary, assembly: primary ? assembly : m.assembly_name, role: m.role,
                                       unit: m.assembly_unit, molecule: m.assigned_molecule ?? "" });
   }
@@ -73,15 +72,15 @@ function placesOf(members: PlaceMember[], external: { root_id: string; collectio
 const placed = new Map<string, Promise<Map<string, Place>>>();
 
 /** A book's places (assembly_members, about 0.1 MB, once): for showing roles and units without the compiler's
- * tables. `assembly` is the book's (its editions record it). */
-export function rootPlaces(cat: Catalog, book: string, assembly: string): Promise<Map<string, Place>> {
-  let p = placed.get(book);
+ * tables. */
+export function rootPlaces(cat: Catalog, book: { book: string; assembly: string; releases: string[] }): Promise<Map<string, Place>> {
+  let p = placed.get(book.book);
   if (!p) {
     p = Promise.all([
       cat.table<PlaceMember & { book?: string }>("assembly_members.parquet"),
       cat.table<{ root_id: string; collection: string; rank: number }>("roots_external.parquet"),
-    ]).then(([m, e]) => placesOf(ofBook(m, book), e, assembly));
-    placed.set(book, p);
+    ]).then(([m, e]) => placesOf(ofBook(m, book.book), e, book.assembly, new Set(book.releases)));
+    placed.set(book.book, p);
   }
   return p;
 }
@@ -129,7 +128,8 @@ export function designTables(cat: Catalog): Promise<DesignTables> {
       if (!g.includes(e.group)) g.push(e.group);
       collections.set(e.collection, g);
     }
-    const places = placesOf(members, ext, DESIGN_ASSEMBLY);
+    const shelf = (await cat.table<{ book: string; releases: string[] }>("books.parquet")).find((b) => b.book === DESIGN_BOOK);
+    const places = placesOf(members, ext, DESIGN_ASSEMBLY, new Set(shelf?.releases ?? []));
     return {
       compiler, rootLength, padded, collections, roleCounts, places, layers: ["hardmask_grc"],
       derived: new Map(inBook(derivations).map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
