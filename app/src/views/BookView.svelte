@@ -1,7 +1,6 @@
 <script lang="ts">
   // A book: one assembly, its releases, and its editions grouped by who makes them. The top of the breadcrumbs
   // below home: assembly / edition / sequence.
-  import { DESIGN_BOOK } from "../data/design.ts";
   import Icon from "../components/Icon.svelte";
   import { editionHref, editorHref, familyOf, FAMILIES, type Book } from "../data/books.ts";
   import { OPERATION_LABELS } from "../data/editions.ts";
@@ -20,8 +19,7 @@
 <section>
   <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / {book.assembly}</p>
   <h1 class="act">{book.assembly}, as published
-    <a class="action" href={editorHref(book.book)} title={book.book === DESIGN_BOOK ? `Design a ${book.assembly} edition of your own`
-       : `The Editor doesn't handle ${book.assembly} yet`}><Icon name="load" /> Editor</a></h1>
+    <a class="action" href={editorHref(book.book)} title={`Design a ${book.assembly} edition of your own`}><Icon name="load" /> Editor</a></h1>
   <p class="lede">
     {n(book.targets.length)} published files reduce to {n(book.editions.length)} editions: distinct sets of named
     sequences, each a recipe over the same original sequences, checked by rebuilding the file. They are drawn from

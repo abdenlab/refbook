@@ -123,6 +123,8 @@ button.icon .icon, .ok .icon { vertical-align: -0.12em; }
 .design .names-head select { height: 1.9rem; box-sizing: border-box; }
 .design .group { display: flex; gap: 0.6rem; align-items: baseline; justify-content: space-between; }
 .design .group label.check { flex: 1; }
+.design label.choice { display: flex; align-items: center; gap: 0.6rem; margin: 0.5rem 0 0; }
+.design label.choice select { flex: 0 1 15rem; min-width: 0; height: 1.9rem; box-sizing: border-box; }
 .design .naming { font-size: 0.88rem; width: 6.5rem; max-width: 45%; flex: none; }
 .design .picker { display: grid; grid-template-columns: auto auto; column-gap: 0.3rem; row-gap: 0.15rem; align-items: end; flex: none; }
 .design .picker .ns-label { grid-column: 2; font-size: 0.88rem; }

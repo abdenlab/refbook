@@ -1,7 +1,6 @@
 <script lang="ts">
-  // The Editor's landing: pick the assembly to design an edition of. The Editor knows one assembly so far.
+  // The Editor's landing: pick the assembly to design an edition of.
   import { editorHref, type Book } from "../data/books.ts";
-  import { DESIGN_BOOK } from "../data/design.ts";
   import { n } from "../format.ts";
   import Icon from "../components/Icon.svelte";
 
@@ -16,17 +15,10 @@
     called, and get its digests and files. Start from scratch or from any cataloged edition.</p>
   <div class="books">
     {#each sorted as b (b.book)}
-      {#if b.book === DESIGN_BOOK}
-        <a class="book" href={editorHref(b.book)}>
-          <span class="name">{b.assembly} <Icon name="arrow" /></span>
-          <span class="muted">Start from any of its {n(b.editions.length)} editions.</span>
-        </a>
-      {:else}
-        <div class="book soon" aria-disabled="true">
-          <span class="name">{b.assembly}</span>
-          <span class="muted">Not in the Editor yet.</span>
-        </div>
-      {/if}
+      <a class="book" href={editorHref(b.book)}>
+        <span class="name">{b.assembly} <Icon name="arrow" /></span>
+        <span class="muted">Start from any of its {n(b.editions.length)} editions.</span>
+      </a>
     {/each}
   </div>
 </section>
@@ -41,7 +33,6 @@
     transition: border-color 120ms, box-shadow 120ms, transform 120ms;
   }
   a.book:hover { text-decoration: none; border-color: var(--accent); box-shadow: 0 2px 12px rgb(0 0 0 / 0.06); transform: translateY(-1px); }
-  .soon { opacity: 0.6; }
   .name { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; display: inline-flex; align-items: center; gap: 0.5rem; }
   .name :global(.icon) { font-size: 0.6em; color: var(--muted); }
 </style>

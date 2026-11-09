@@ -1,7 +1,7 @@
 <script lang="ts" module>
-  // The recipe being edited, kept for the session: leaving for an edition's page
+  // The recipe being edited in each book, kept for the session: leaving for an edition's page
   // and coming back (or clicking Editor) returns to it.
-  let kept: { recipe: string; loaded: string } | null = null;
+  const keptBy = new Map<string, { recipe: string; loaded: string }>();
 </script>
 
 <script lang="ts">
@@ -14,24 +14,33 @@
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
-  import { bookOf, editionHref, editorHref } from "../data/books.ts";
-  import { DESIGN_BOOK, decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
+  import { editionHref, editorHref, type Book } from "../data/books.ts";
+  import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
   import { editions, manifest, OPERATION_LABELS, targets, type Edition, type ManifestRow } from "../data/editions.ts";
   import { pairs } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import * as edit from "../data/recipeEdit.ts";
+  import { shelfOf } from "../data/shelves.ts";
   import { bp, download, message, n } from "../format.ts";
   import Digest from "../components/Digest.svelte";
   import ErrorBox from "../components/ErrorBox.svelte";
   import Icon from "../components/Icon.svelte";
   import { role } from "./recipe.ts";
 
-  let { cat, query }: { cat: Catalog; query: URLSearchParams } = $props();
+  let { cat, query, book }: { cat: Catalog; query: URLSearchParams; book: Book } = $props();
+
+  // The view is made anew for each book (App keys it), so the book is read once.
+  const b = untrack(() => book);
+  const shelf = shelfOf(b.book);
+  const kept = keptBy.get(b.book) ?? null;
+  let start = $state("");   // the release a new recipe starts from (the tables say)
+  const scratch = () => edit.fromScratch(start);
 
   const ready = $derived(measure("catalog", async () => {
-    const [t, all, ts] = await Promise.all([designTables(cat), editions(cat), targets(cat)]);
-    const fs = all.filter((f) => f.book === DESIGN_BOOK);  // the Editor's assembly's editions only
+    const [t, all, ts] = await Promise.all([designTables(cat, b.book, shelf.masks.map((m) => m.layer)), editions(cat), targets(cat)]);
+    start = t.start;
+    const fs = all.filter((f) => f.book === b.book);  // the book's editions only
     const manifests = new Map(await Promise.all(fs.map(async (f) => [f.edition, await manifest(cat, f.edition)] as const)));
     // The catalog's order is fixed: smallest first.
     const listed = [...fs].sort((a, b) => a.n_sequences - b.n_sequences || a.edition.localeCompare(b.edition));
@@ -62,16 +71,16 @@
       if (r) return decodeRecipe(r);
     } catch { /* a bad link: a new recipe */ }
     const from = fs.find((f) => f.edition === query.get("from"));
-    return from ? plainRecipe(JSON.parse(from.recipe)) : edit.fromScratch();
+    return from ? plainRecipe(JSON.parse(from.recipe)) : scratch();
   }
 
   /** The page's link: the tab, and the recipe once it has been edited or loaded. */
   function remember() {
     const q = new URLSearchParams();
     if (tab !== "catalog") q.set("tab", tab);
-    if (recipe && JSON.stringify(recipe) !== JSON.stringify(edit.fromScratch())) q.set("r", encodeRecipe(recipe));
-    history.replaceState(null, "", editorHref(DESIGN_BOOK, q));
-    if (recipe) kept = { recipe: JSON.stringify(recipe), loaded };
+    if (recipe && JSON.stringify(recipe) !== JSON.stringify(scratch())) q.set("r", encodeRecipe(recipe));
+    history.replaceState(null, "", editorHref(b.book, q));
+    if (recipe) keptBy.set(b.book, { recipe: JSON.stringify(recipe), loaded });
   }
 
   function set(r: Recipe) {
@@ -101,7 +110,7 @@
   function loadEdition(f: Edition | null) {
     const edited = recipe && JSON.stringify(recipe) !== loaded;
     if (edited && !confirm(`Replace the recipe you are editing with ${f ? f.edition + "'s" : "a new one"}?`)) return;
-    load(f ? plainRecipe(JSON.parse(f.recipe)) : edit.fromScratch());
+    load(f ? plainRecipe(JSON.parse(f.recipe)) : scratch());
   }
 
   function show(k: Tab) {
@@ -145,51 +154,42 @@
   }
 
   const ops = (o: string[]) => (o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "as submitted");
-  /** Footnotes to the shelf, under its headings: what each choice is, where it comes from. */
-  const NOTES: [string, [string, string][]][] = [
-    ["GRCh38", [
-      ["Release", "p0 is GRCh38 as first released (GCA_000001405.15). Each patch release adds fix and novel patches; none changes the chromosomes."],
-      ["Role", "Each sequence's role in the assembly, from GRC's assembly report: chromosomes (1–22, X, Y and the mitochondrion); unlocalized scaffolds, on a known chromosome at an unknown position (chr1_…_random); unplaced scaffolds, on no known chromosome (chrUn_…); alt scaffolds, alternate haplotypes of a region (…_alt); and the patches, novel (new alternates) and fix (corrections). The counts are the release's."],
-      ["Name style", "Every sequence is named from one namespace: UCSC (chr1), GRC's sequence names (1), GenBank accessions (CM000663.2) or RefSeq accessions (NC_000001.11). A role's override names that role from another."],
-    ]],
-    ["Filters", [
-      ["Placed on", "Every alt and patch is placed on the sequence it is an alternative to, or fixes. In p14 all are placed on chromosomes but 3 fix patches, which fix alt scaffolds; Ensembl and GENCODE leave those 3 out."],
-    ]],
-    ["Additional sequences", [
-      ["EBV", `The Epstein–Barr virus genome (${edit.EBV}), in no assembly: for reads from EBV-transformed cell lines. Named chrEBV with UCSC names, by accession otherwise.`],
-      ["hs38d1 decoys", `Sequence missing from GRCh38 (${edit.HS38D1}), so its reads don't land on similar sequence elsewhere. Named like chrUn_JTFH01000001v1_decoy with UCSC names, by accession otherwise.`],
-      ["HLA alleles", `Alleles of the six genes hs38DH has (${edit.HLA_TYPING_GROUPS.join(", ")}) from ${edit.HLA}, named like HLA-A*01:01:01:01. Their licence (CC BY-ND) keeps refbook from hosting their bases.`],
-    ]],
-    ["Bases", [
-      ["GRC hard-mask", "The spans GRC replaces with N in its analysis sets: duplicated centromeric and WGS arrays on chromosomes 5, 14, 19, 21 and 22, and the pseudoautosomal regions on chrY."],
-      ["IUPAC → N", "Every ambiguity code (R, Y, M, …) becomes N, as some tools need."],
-    ]],
-  ];
   const SHORT: Record<string, string> = { ucsc: "UCSC", grc: "GRC", genbank: "GenBank", refseq: "RefSeq" };
-  const PLACED = ["alt-scaffold", "fix-patch", "novel-patch"];
+  const LAYOUTS: [edit.Layout, string][] = [["none", "as submitted"], ["pad", "N-padded to their parent"], ["orient", "turned to their parent's strand"]];
+  /** A namespace's names for the release's first chromosome (and an unlocalized scaffold), as the menu shows them. */
+  const example = (names: string[] | undefined) => {
+    const shown = (names ?? []).filter((x) => x);
+    return shown.length ? shown.join(", ") : "none in this release";
+  };
 </script>
 
 <section class="bench">
-  <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {bookOf.get(DESIGN_BOOK)?.assembly ?? DESIGN_BOOK}</p>
+  <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {b.assembly}</p>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
   {:then { t, fs, listed, publishers, manifests }}
 
     {#if recipe}
       {@const p = edit.primary(recipe)}
-      {@const releases = [...t.assemblies].filter(([acc]) => acc.startsWith(edit.GRCH38)).sort(([a], [b]) => Number(a.split(".")[1]) - Number(b.split(".")[1]))}
-      {@const latest = releases.at(-1)?.[0]}
+      {@const releases = t.releases}
+      {@const latest = releases.at(-1)?.accession}
       {@const counts = p ? t.roleCounts.get(p.assembly) : undefined}
-      {@const release = p ? edit.releaseLabel(t.assemblies.get(p.assembly) ?? p.assembly, p.assembly === latest).split(" ")[0] : ""}
-      {@const hlaAll = t.collections.get(edit.HLA) ?? []}
+      {@const release = p ? edit.releaseLabel(t.assemblies.get(p.assembly) ?? p.assembly, b.assembly, false).split(" ")[0] : ""}
+      {@const rolesShown = edit.ROLES_SHOWN.filter((r) => releases.some((x) => t.roleCounts.get(x.accession)?.get(r)))}
+      {@const own = p ? t.mito.get(p.assembly) ?? null : null}
+      {@const mito = edit.mitochondrion(recipe, own)}
+      {@const mitos = [...new Set([own, ...shelf.mitochondria].filter((x): x is string => !!x))]}
+      {@const ctx = { hla: t.collections.get(edit.HLA) ?? [], mito: own }}
+      {@const examples = p ? t.examples.get(p.assembly) : undefined}
+      {@const anyIupac = [...t.iupac].some((x) => t.places.has(x))}
       {@const groups = edit.hlaGroups(recipe)}
       {@const attempted = attempt(recipe, t, fs)}
       {@const d = attempted.d}
       {@const diffs = d && !d.novel.length ? differences(d.rows as ManifestRow[], manifests) : null}
       {@const overrides = Object.keys(recipe.rename.by_role ?? {}).length}
-      {@const placed = !!p && p.roles.some((r) => PLACED.includes(r))}
+      {@const placed = !!p && p.roles.some((r) => edit.PLACED_ROLES.includes(r))}
       {@const kept = edit.placedOn(recipe)}
-      {@const fresh = JSON.stringify(recipe) === JSON.stringify(edit.fromScratch())}
+      {@const fresh = JSON.stringify(recipe) === JSON.stringify(scratch())}
 
       <div class="design workbench">
         <div class="form shelf">
@@ -199,17 +199,17 @@
             {:else if d?.equals}<Icon name="check" /><a href={editionHref(d.equals)}>{d.equals}</a>
             {:else if d}not in catalog{/if}
             <button type="button" class="icon reset" disabled={fresh} onclick={() => loadEdition(null)}
-                    title={fresh ? "A new recipe: the GRCh38 chromosomes" : "Start over: a new recipe, the GRCh38 chromosomes"}
+                    title={fresh ? `A new recipe: the ${b.assembly} chromosomes` : `Start over: a new recipe, the ${b.assembly} chromosomes`}
                     aria-label="Start over with a new recipe"><Icon name="reset" /></button>
           </p>
           <div class="pane">
           <fieldset>
-            <legend><b>GRCh38</b></legend>
+            <legend><b>{b.assembly}</b></legend>
             <div class="group names-head">
               <label class="release"><strong>Release</strong>
-                <select value={p?.assembly ?? ""} onchange={(e) => set(edit.setRelease(recipe!, e.currentTarget.value))}>
+                <select value={p?.assembly ?? ""} onchange={(e) => set(edit.setRelease(recipe!, e.currentTarget.value, (a) => t.mito.get(a) ?? null))}>
                   {#if !p}<option value="" disabled>none</option>{/if}
-                  {#each releases as [acc, name] (acc)}<option value={acc} title={acc}>{edit.releaseLabel(name, acc === latest)}</option>{/each}
+                  {#each releases as r (r.accession)}<option value={r.accession} title={r.accession}>{edit.releaseLabel(r.name, b.assembly, r.accession === latest)}</option>{/each}
                 </select>
               </label>
               <span class="picker">
@@ -219,12 +219,12 @@
                         aria-label="Clear the name overrides"><Icon name="reset" /></button>
                 <select class="naming" aria-label="Names of all sequences" value={recipe.rename.namespace}
                         onchange={(e) => set(edit.setNamespace(recipe!, e.currentTarget.value))}>
-                  {#each edit.NAMESPACES as x (x)}<option value={x} title={edit.NAMESPACE_LABELS[x]}>{SHORT[x]}</option>{/each}
+                  {#each edit.NAMESPACES as x (x)}<option value={x} title={`${SHORT[x]}: ${example(examples?.[x])}`}>{SHORT[x]}</option>{/each}
                 </select>
               </span>
             </div>
             <div class="group cols muted small"><span>Role</span><span class="naming">Name override</span></div>
-            {#each edit.ROLES_SHOWN as r (r)}
+            {#each rolesShown as r (r)}
               {@const on = !!p && p.roles.includes(r)}
               {@const count = counts?.get(r) ?? 0}
               {@const own = recipe.rename.by_role?.[r] ?? ""}
@@ -235,39 +235,55 @@
                 <select class="naming" class:inherit={!own} aria-label={`Names of ${role(r)}`} value={own} disabled={!on}
                         onchange={(e) => set(edit.setRoleNames(recipe!, r, e.currentTarget.value || null))}>
                   <option value="" title={`No override: ${SHORT[recipe.rename.namespace]}`}>—</option>
-                  {#each edit.NAMESPACES as x (x)}<option value={x} title={edit.NAMESPACE_LABELS[x]}>{SHORT[x]}</option>{/each}
+                  {#each edit.NAMESPACES as x (x)}<option value={x} title={`${SHORT[x]}: ${example(examples?.[x])}`}>{SHORT[x]}</option>{/each}
                 </select>
               </div>
             {/each}
+            <label class="choice"><strong>Mitochondrion</strong>
+              <select value={mito ?? ""} disabled={!p} onchange={(e) => set(edit.setMitochondrion(recipe!, own, e.currentTarget.value || null))}>
+                {#each mitos as x (x)}<option value={x} title={x}>{edit.MITOCHONDRIA[x] ?? x}{x === own ? " (the release's own)" : ""}</option>{/each}
+                <option value="">none</option>
+              </select>
+            </label>
           </fieldset>
 
+          {#if t.placed}
           <fieldset disabled={!placed} class:off={!placed}>
-            <legend>Filters</legend>
-            <p class="small">Include alts and patches placed on</p>
+            <legend>Alts and patches</legend>
+            <p class="small">Include those placed on</p>
             {#each edit.PARENT_TYPES as type (type)}
               <label class="check"><input type="checkbox" checked={kept.includes(type)}
                 disabled={kept.length === 1 && kept.includes(type)}
                 onchange={(e) => set(edit.setPlacedOn(recipe!, type, e.currentTarget.checked))} />
                 {type === "chromosome" ? "chromosomes" : "other scaffolds"}</label>
             {/each}
+            <label class="choice"><span class="small">Laid out</span>
+              <select value={edit.layoutOf(recipe)} onchange={(e) => set(edit.setLayout(recipe!, e.currentTarget.value as edit.Layout))}>
+                {#each LAYOUTS as [k, label] (k)}<option value={k}>{label}</option>{/each}
+              </select>
+            </label>
           </fieldset>
+          {/if}
 
           <fieldset>
             <legend>Additional sequences</legend>
-            <label class="check"><input type="checkbox" checked={edit.hasEbv(recipe)} onchange={(e) => set(edit.setEbv(recipe!, e.currentTarget.checked))} />
-              <span>EBV <span class="muted">(<code>{edit.EBV}</code>)</span></span></label>
-            <label class="check"><input type="checkbox" checked={edit.hasDecoys(recipe)} onchange={(e) => set(edit.setDecoys(recipe!, e.currentTarget.checked))} />
-              <span>hs38d1 decoys <span class="muted">({n(t.roleCounts.get(edit.HS38D1)?.get("unplaced-scaffold") ?? 0)})</span></span></label>
-            <label class="check"><input type="checkbox" checked={groups.length > 0}
-              onchange={(e) => set(edit.setHla(recipe!, e.currentTarget.checked ? edit.HLA_TYPING_GROUPS : [], hlaAll))} />
-              <span>HLA alleles <span class="muted">({edit.hlaKind(recipe) === "custom" ? `${groups.length} genes, set in the recipe` : "six genes"} from {edit.HLA})</span></span></label>
+            {#each shelf.extras as x (x.id)}
+              <label class="check"><input type="checkbox" checked={x.has(recipe)} onchange={(e) => set(x.set(recipe!, e.currentTarget.checked, ctx))} />
+                <span>{x.label} <span class="muted">({#if x.id === "ebv"}<code>{edit.EBV}</code>{:else if x.id === "hs38d1"}{n(t.roleCounts.get(edit.HS38D1)?.get("unplaced-scaffold") ?? 0)}{:else if x.id === "hla"}{edit.hlaKind(recipe) === "custom" ? `${groups.length} genes, set in the recipe` : "six genes"} from {edit.HLA}{:else}{bp(t.rootLength.get(edit.HS37D5) ?? 0, true)}{/if})</span></span></label>
+            {/each}
             {#if edit.others(recipe).length}<p class="muted small">And {edit.others(recipe).length} more entries, set in the recipe.</p>{/if}
           </fieldset>
 
           <fieldset>
             <legend>Bases</legend>
-            <label class="check"><input type="checkbox" checked={edit.hasMask(recipe, "hardmask_grc")} onchange={(e) => set(edit.setMask(recipe!, "hardmask_grc", e.currentTarget.checked))} /> GRC hard-mask</label>
-            <label class="check"><input type="checkbox" checked={!!recipe.alphabet} onchange={(e) => set(edit.setIupacToN(recipe!, e.currentTarget.checked))} /> IUPAC → N</label>
+            {#each shelf.masks as m (m.layer)}
+              <label class="check"><input type="checkbox" checked={edit.hasMask(recipe, m.layer)} onchange={(e) => set(edit.setMask(recipe!, m.layer, e.currentTarget.checked))} /> {m.label} → N</label>
+            {/each}
+            {#each (recipe.mask ?? []).filter((m) => !shelf.masks.some((x) => x.layer === m.layer)) as m (m.layer)}
+              <p class="muted small">And {OPERATION_LABELS[m.layer] ?? m.layer}, set in the recipe.</p>
+            {/each}
+            <label class="check"><input type="checkbox" checked={!!recipe.alphabet} disabled={!anyIupac && !recipe.alphabet} onchange={(e) => set(edit.setIupacToN(recipe!, e.currentTarget.checked))} />
+              <span>IUPAC → N{#if !anyIupac}<span class="muted">: none in {b.assembly}</span>{/if}</span></label>
           </fieldset>
           </div>
         </div>
@@ -307,12 +323,12 @@
           {:else if tab === "guide"}
             <p class="muted small">Choices commonly made for an analysis goal. Switch one on or off, and watch the choices follow.</p>
             <ul class="guide">
-              {#each edit.GUIDE as g (g.goal)}
-                {@const on = g.has(recipe)}
+              {#each shelf.guide as g (g.goal)}
+                {@const on = g.has(recipe, ctx)}
                 <li>
                   <label class="switch">
                     <input type="checkbox" role="switch" checked={on} aria-checked={on}
-                           onchange={(e) => set(g.set(recipe!, e.currentTarget.checked, { hla: hlaAll }))} />
+                           onchange={(e) => set(g.set(recipe!, e.currentTarget.checked, ctx))} />
                     <span class="goal">{g.goal}</span>
                   </label>
                   <span class="muted">{g.choice}</span>
@@ -383,7 +399,7 @@
             {/if}
             <div class="notes">
               <h3>Notes</h3>
-              {#each NOTES as [section, items] (section)}
+              {#each shelf.notes as [section, items] (section)}
                 <h4>{section}</h4>
                 <dl>{#each items as [term, note] (term)}<dt>{term}</dt><dd>{note}</dd>{/each}</dl>
               {/each}

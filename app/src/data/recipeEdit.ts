@@ -1,53 +1,67 @@
 // Edits to a recipe, one part at a time, for the design form. Each takes a
 // recipe and returns a new one; whatever an edit doesn't touch (other select
 // entries, maps, templates) is kept, so the form never loses what the JSON
-// says.
+// says. The edits know no book: what a book offers (its masks, extras, guide)
+// is in shelves.ts.
 import type { Recipe, SelectEntry } from "./design.ts";
 
-export const GRCH38 = "GCA_000001405";
 export const HS38D1 = "GCA_000786075.2";
 export const EBV = "AJ507799.2";
+export const HS37D5 = "1000G:hs37d5";
 export const HLA = "IMGT/HLA 3.18.0";
 export const HLA_TYPING_GROUPS = ["A", "B", "C", "DQA", "DQB", "DRB1"];   // hs38DH's
+/** Assemblies a recipe adds to its book's (the decoys): never the recipe's own assembly entry. */
+const ADDON_ASSEMBLIES = [HS38D1];
 export const ROLES = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "fix-patch", "novel-patch"];
 /** The roles in the form's order: novel patches (alternate loci) next to the alts. */
 export const ROLES_SHOWN = ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold", "novel-patch", "fix-patch"];
+/** The roles that are placed on a parent: what `placed_on`, `pad` and `orient` act on. */
+export const PLACED_ROLES = ["alt-scaffold", "fix-patch", "novel-patch"];
 export const NAMESPACES = ["ucsc", "grc", "genbank", "refseq"];
-/** Each namespace as the form shows it, with examples (a chromosome, an unlocalized scaffold). */
-export const NAMESPACE_LABELS: Record<string, string> = {
-  ucsc: "UCSC (chr1, chr1_KI270706v1_random)",
-  grc: "GRC (1, HSCHR1_CTG1_UNLOCALIZED)",
-  genbank: "GenBank (CM000663.2, KI270706.1)",
-  refseq: "RefSeq (NC_000001.11, NT_187361.1)",
+
+/** The mitochondria the catalog has, by root: an edition carries its assembly's own, another or none. */
+export const MITOCHONDRIA: Record<string, string> = {
+  "J01415.2": "rCRS", "AF347015.1": "Yoruba", "CP068254.1": "CHM13's",
 };
 
 type Assembly = Extract<SelectEntry, { assembly: string }>;
+type Roots = Extract<SelectEntry, { roots: string[] }>;
 const isAssembly = (e: SelectEntry): e is Assembly => "assembly" in e;
+const isRoots = (e: SelectEntry): e is Roots => "roots" in e;
 const clone = (r: Recipe): Recipe => structuredClone($raw(r));
 // Svelte's $state proxies can't be structuredCloned; JSON is enough for recipes.
 function $raw<T>(x: T): T { return JSON.parse(JSON.stringify(x)); }
 
-/** The GRCh38 entry: the first select entry of a GRCh38 release. */
+/** The recipe's own assembly entry: the first of a release of its book (not the decoys, not a list of accessions). */
 export function primary(r: Recipe): Assembly | undefined {
-  return r.select.find((e): e is Assembly => isAssembly(e) && e.assembly.startsWith(GRCH38) && !e.accessions);
+  return r.select.find((e): e is Assembly => isAssembly(e) && !ADDON_ASSEMBLIES.includes(e.assembly) && !e.accessions);
 }
+
+/** Roots the form adds and removes (EBV, the hs37d5 decoy, a mitochondrion). */
+const FORM_ROOTS = new Set([EBV, HS37D5, ...Object.keys(MITOCHONDRIA)]);
 
 /** Select entries the form doesn't edit (shown, edited as JSON). */
 export function others(r: Recipe): SelectEntry[] {
   const p = primary(r);
   return r.select.filter((e) => e !== p && !(isAssembly(e) && e.assembly === HS38D1)
-    && !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV) && !("collection" in e && e.collection === HLA));
+    && !(isRoots(e) && e.roots.every((x) => FORM_ROOTS.has(x))) && !("collection" in e && e.collection === HLA));
 }
 
-export function fromScratch(): Recipe {
-  return { select: [{ assembly: `${GRCH38}.15`, roles: ["assembled-molecule"] }], rename: { namespace: "ucsc" } };
+/** A new recipe: the chromosomes of a release, by UCSC name. */
+export function fromScratch(assembly: string): Recipe {
+  return { select: [{ assembly, roles: ["assembled-molecule"] }], rename: { namespace: "ucsc" } };
 }
 
-export function setRelease(r: Recipe, accession: string): Recipe {
-  const out = clone(r);
+/** Another release, keeping the choice of mitochondrion: the release's own if the recipe had the old one's
+ * (`mito` gives a release's own, or null), else the same other one, or none. */
+export function setRelease(r: Recipe, accession: string, mito: (assembly: string) => string | null = () => null): Recipe {
+  let out = clone(r);
   const p = primary(out);
+  const before = p ? mitochondrion(out, mito(p.assembly)) : null;
+  const own = p && before !== null && before === mito(p.assembly);
   if (p) p.assembly = accession;
   else out.select.unshift({ assembly: accession, roles: ["assembled-molecule"] });
+  if (p) out = setMitochondrion(out, mito(accession), own ? mito(accession) : before);
   return out;
 }
 
@@ -64,13 +78,13 @@ export function setRole(r: Recipe, role: string, on: boolean): Recipe {
 /** Parent types an alt or patch can be placed on (layer_placements.parent_type). */
 export const PARENT_TYPES = ["chromosome", "scaffold"];
 
-/** The parent types the GRCh38 entry keeps alts and patches placed on (all, without `placed_on`). */
+/** The parent types the recipe's assembly entry keeps alts and patches placed on (all, without `placed_on`). */
 export function placedOn(r: Recipe): string[] {
   return primary(r)?.placed_on ?? PARENT_TYPES;
 }
 
 /** Keep, or leave out, alts and patches placed on a parent type. Every alt and
- * patch is placed; in p14 all are on chromosomes but 3 fix patches, placed on
+ * patch is placed; in GRCh38.p14 all are on chromosomes but 3 fix patches, placed on
  * the alt scaffolds they fix (Ensembl and GENCODE leave those out). An empty
  * `placed_on` would mean no filter, so the last type can't be left out. */
 export function setPlacedOn(r: Recipe, type: string, on: boolean): Recipe {
@@ -85,7 +99,44 @@ export function setPlacedOn(r: Recipe, type: string, on: boolean): Recipe {
   return out;
 }
 
-export const hasEbv = (r: Recipe) => r.select.some((e) => "roots" in e && e.roots.includes(EBV));
+/** How alts and patches are laid out: as submitted, N-padded into their parent's coordinates, or turned to their
+ * parent's strand. */
+export type Layout = "none" | "pad" | "orient";
+export const layoutOf = (r: Recipe): Layout => (r.pad ? "pad" : r.orient ? "orient" : "none");
+
+export function setLayout(r: Recipe, layout: Layout): Recipe {
+  const out = clone(r);
+  delete out.pad;
+  delete out.orient;
+  if (layout !== "none") out[layout] = { roles: [...PLACED_ROLES] };
+  return out;
+}
+
+// Roots in no assembly (EBV, hs37d5, a mitochondrion): in any roots entry; added as their own entry, with a name.
+
+export const hasRoot = (r: Recipe, root: string) => r.select.some((e) => isRoots(e) && e.roots.includes(root));
+
+function withoutRoot(r: Recipe, root: string): Recipe {
+  const out = clone(r);
+  out.select = out.select
+    .map((e) => (isRoots(e) ? { roots: e.roots.filter((x) => x !== root) } : e))
+    .filter((e) => !isRoots(e) || e.roots.length);
+  if (out.rename.map) delete out.rename.map[root];
+  if (out.rename.map && !Object.keys(out.rename.map).length) delete out.rename.map;
+  return out;
+}
+
+/** Add or remove a root in no assembly, named `name` (it has no name in any namespace). */
+export function setRoot(r: Recipe, root: string, on: boolean, name: string): Recipe {
+  const out = withoutRoot(r, root);
+  if (on) {
+    out.select.push({ roots: [root] });
+    out.rename.map = { ...out.rename.map, [root]: name };
+  }
+  return out;
+}
+
+export const hasEbv = (r: Recipe) => hasRoot(r, EBV);
 export const hasDecoys = (r: Recipe) => r.select.some((e) => isAssembly(e) && e.assembly === HS38D1);
 export const hlaGroups = (r: Recipe) =>
   (r.select.find((e): e is Extract<SelectEntry, { collection: string }> => "collection" in e && e.collection === HLA)?.groups) ?? [];
@@ -100,23 +151,44 @@ export function hlaKind(r: Recipe): "none" | "typing" | "custom" {
 /** EBV is in no assembly report, so it has no name in any namespace: a recipe names it. */
 export const EBV_NAMES = ["chrEBV", EBV];
 
-export function setEbv(r: Recipe, on: boolean): Recipe {
-  const out = clone(r);
-  out.select = out.select.filter((e) => !("roots" in e && e.roots.length === 1 && e.roots[0] === EBV));
-  if (out.rename.map) delete out.rename.map[EBV];
-  if (on) {
-    out.select.push({ roots: [EBV] });
-    out.rename.map = { ...out.rename.map, [EBV]: out.rename.namespace === "ucsc" ? "chrEBV" : EBV };
-  }
-  if (out.rename.map && !Object.keys(out.rename.map).length) delete out.rename.map;
-  return out;
-}
+export const setEbv = (r: Recipe, on: boolean) => setRoot(r, EBV, on, r.rename.namespace === "ucsc" ? "chrEBV" : EBV);
+/** The 1000 Genomes decoy for GRCh37 (hs37d5's), one sequence: named hs37d5 by every edition that has it. */
+export const setHs37d5 = (r: Recipe, on: boolean) => setRoot(r, HS37D5, on, "hs37d5");
 
 export const ebvName = (r: Recipe) => r.rename.map?.[EBV] ?? "";
 
 export function setEbvName(r: Recipe, name: string): Recipe {
   const out = clone(r);
   out.rename.map = { ...out.rename.map, [EBV]: name.trim() || EBV };
+  return out;
+}
+
+/** The mitochondrion a recipe carries: its assembly's own (`own`, null if the release has none), unless its
+ * assembly entry excludes it; another, as a root; or none (null). */
+export function mitochondrion(r: Recipe, own: string | null): string | null {
+  const other = Object.keys(MITOCHONDRIA).find((x) => x !== own && hasRoot(r, x));
+  if (other) return other;
+  const p = primary(r);
+  return own && p?.roles.includes("assembled-molecule") && !p.exclude?.includes(own) ? own : null;
+}
+
+/** A mitochondrion's name, as the chromosomes are named: chrM, MT, or its accession. */
+export function mitochondrionName(r: Recipe, root: string): string {
+  const ns = roleNamespace(r, "assembled-molecule");
+  return ns === "ucsc" ? "chrM" : ns === "grc" ? "MT" : root;
+}
+
+/** Carry `choice` as the mitochondrion: the assembly's own (`own`), another root, or none (null). Another
+ * excludes the assembly's own from its entry and adds itself, named as the chromosomes are. */
+export function setMitochondrion(r: Recipe, own: string | null, choice: string | null): Recipe {
+  let out = clone(r);
+  for (const x of Object.keys(MITOCHONDRIA)) if (x !== own) out = withoutRoot(out, x);
+  const p = primary(out);
+  if (!p) return out;
+  const exclude = (p.exclude ?? []).filter((x) => !(x in MITOCHONDRIA));
+  if (own && choice !== own) exclude.push(own);
+  if (exclude.length) p.exclude = exclude; else delete p.exclude;
+  if (choice && choice !== own) out = setRoot(out, choice, true, mitochondrionName(out, choice));
   return out;
 }
 
@@ -210,46 +282,10 @@ export function clearRoleNames(r: Recipe): Recipe {
 /** The chromosomes' names, if not the default namespace's (Ensembl names them as GRC does, "1"; GENCODE as UCSC, "chr1"). */
 export const setChromosomeNames = (r: Recipe, namespace: string | null) => setRoleNames(r, "assembled-molecule", namespace);
 
-/** A release's name in the form: p0 is GRCh38 itself, with no patches. */
-export function releaseLabel(name: string, latest: boolean): string {
-  const m = /^GRCh38(?:\.p(\d+))?$/.exec(name);
-  if (!m) return name;
-  if (!m[1]) return "p0 (original)";
-  return `p${m[1]}${latest ? " (latest)" : ""}`;
+/** A release's name in the form, without its assembly's: GRCh38.p14 is p14, GRCh38 itself p0 (with no patches),
+ * T2T-CHM13v2.0 v2.0. */
+export function releaseLabel(name: string, assembly: string, latest: boolean): string {
+  const rest = name.startsWith(assembly) ? name.slice(assembly.length).replace(/^\./, "") : name;
+  const label = rest || "p0";
+  return `${label}${!rest && /^p\d/.test(label) ? " (original)" : ""}${latest ? " (latest)" : ""}`;
 }
-
-/** The guide: analysis goals, and the choices commonly made for them, each a
- * toggle: whether the recipe has the choice, and the edit that adds or removes it. */
-export interface Goal {
-  goal: string;
-  choice: string;
-  has: (r: Recipe) => boolean;
-  set: (r: Recipe, on: boolean, all: { hla: string[] }) => Recipe;
-}
-
-const SCAFFOLDS = ["unlocalized-scaffold", "unplaced-scaffold"];
-
-export const GUIDE: Goal[] = [
-  { goal: "Most alignment tasks",
-    choice: "the complete primary assembly: the chromosomes with the unlocalized and unplaced scaffolds, so reads from those sequences don't land on similar sequence elsewhere (bwa: \"recommended … for all analyses\")",
-    has: (r) => SCAFFOLDS.every((x) => primary(r)?.roles.includes(x)),
-    set: (r, on) => SCAFFOLDS.reduce((acc, x) => setRole(acc, x, on), r) },
-  { goal: "Catch EBV contamination",
-    choice: "the EBV genome, for reads from EBV (in EBV-transformed cell lines, for example) to align to",
-    has: hasEbv, set: (r, on) => setEbv(r, on) },
-  { goal: "Fewer false positives from reads of unassembled sequence",
-    choice: "the hs38d1 decoys: sequence missing from GRCh38, so its reads don't land on similar sequence in it",
-    has: hasDecoys, set: (r, on) => setDecoys(r, on) },
-  { goal: "Alternate haplotypes",
-    choice: "the alt scaffolds; without an ALT-aware aligner and their alignments (bwa-mem with an .alt file), reads in those regions lose mapping quality",
-    has: (r) => !!primary(r)?.roles.includes("alt-scaffold"), set: (r, on) => setRole(r, "alt-scaffold", on) },
-  { goal: "HLA typing",
-    choice: `HLA alleles (${HLA_TYPING_GROUPS.join(", ")}, as hs38DH)`,
-    has: (r) => hlaGroups(r).length > 0, set: (r, on, all) => setHla(r, on ? HLA_TYPING_GROUPS : [], all.hla) },
-  { goal: "Masking duplicated sequence",
-    choice: "the GRC hard-mask: chrY's PARs (chrX keeps them), and duplicate copies of centromeric and acrocentric arrays on chr5, 14, 19, 21 and 22",
-    has: (r) => hasMask(r, "hardmask_grc"), set: (r, on) => setMask(r, "hardmask_grc", on) },
-  { goal: "Tools that reject IUPAC codes",
-    choice: "IUPAC → N: the few ambiguity codes in GRCh38 written as N",
-    has: (r) => !!r.alphabet, set: (r, on) => setIupacToN(r, on) },
-];

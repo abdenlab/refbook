@@ -4,7 +4,7 @@
 import * as rb from "@abdenlab/refbook";
 import type { Catalog } from "./catalog.ts";
 import type { Place } from "./exports.ts";
-import type { Edition, ManifestRow } from "./editions.ts";
+import { editions, maskLayers, type Edition, type ManifestRow } from "./editions.ts";
 import { measure } from "./meter.ts";
 
 /** A recipe, in the grammar the core compiles (crates/refbook-core/src/recipe.rs; catalog/refbook_pipeline/engine.py). */
@@ -17,7 +17,7 @@ export interface Recipe {
   rename: { namespace: string; by_role?: Record<string, string>; map?: Record<string, string>; template?: Record<string, string> };
 }
 export type SelectEntry =
-  | { assembly: string; roles: string[]; accessions?: string[]; placed_on?: string[] }
+  | { assembly: string; roles: string[]; accessions?: string[]; placed_on?: string[]; exclude?: string[] }
   | { roots: string[] }
   | { collection: string; groups: string[] };
 
@@ -29,11 +29,23 @@ export interface DesignTables {
   padded: Map<string, number>;
   /** "root_id ops..." -> {sha512t24u, md5} of every known derivation. */
   derived: Map<string, { sha512t24u: string; md5: string }>;
-  /** Assembly releases: accession -> name (GRCh38, GRCh38.p1, ..., hs38d1). */
+  /** Assemblies: accession -> name (GRCh38, GRCh38.p1, ..., hs38d1). */
   assemblies: Map<string, string>;
+  /** The book's releases, oldest first: accession and name. */
+  releases: { accession: string; name: string }[];
+  /** The release most of the book's editions are of: where a new recipe starts. */
+  start: string;
+  /** Assembly accession -> its own mitochondrion (its chromosome MT), for the releases that have one. */
+  mito: Map<string, string>;
+  /** Assembly accession -> a chromosome's (and an unlocalized scaffold's) names in each namespace, as examples. */
+  examples: Map<string, Record<string, string[]>>;
+  /** Roots with IUPAC codes. */
+  iupac: Set<string>;
+  /** Whether the book places alts and patches (layer_padding): what pad and orient need. */
+  placed: boolean;
   /** External collections: name -> groups, in rank order. */
   collections: Map<string, string[]>;
-  /** The mask layers there are. */
+  /** The mask layers the compiler has: the shelf's and those the book's editions use. */
   layers: string[];
   /** Assembly accession -> role -> how many sequences it has. */
   roleCounts: Map<string, Map<string, number>>;
@@ -42,15 +54,11 @@ export interface DesignTables {
 }
 
 const key = (root: string, ops: string[]) => [root, ...ops].join(" ");
-/** The book the designer works in: its members, placements and padding (a root can be placed in two books). Until
- * the Editor knows other books, GRCh38's. */
-export const DESIGN_BOOK = "grch38";
-const DESIGN_ASSEMBLY = "GRCh38";
 const ofBook = <T extends { book?: string | null }>(rows: T[], book: string) =>
   rows.filter((r) => r.book == null || r.book === book);
-const inBook = <T extends { book?: string | null }>(rows: T[]) => ofBook(rows, DESIGN_BOOK);
 
-let loaded: Promise<DesignTables> | null = null;
+/** Each book's tables, loaded once. */
+const loaded = new Map<string, Promise<DesignTables>>();
 
 type PlaceMember = { assembly_accession: string; assembly_name: string; genbank_accession: string; role: string; assembly_unit: string; assigned_molecule: string | null };
 
@@ -85,57 +93,93 @@ export function rootPlaces(cat: Catalog, book: { book: string; assembly: string;
   return p;
 }
 
-/** The tables the compiler and the digests need (about 0.4 MB, once). */
-export function designTables(cat: Catalog): Promise<DesignTables> {
-  return (loaded ??= measure("design tables", async () => {
-    type Member = { book?: string; assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
-      assigned_molecule: string | null; assembly_unit: string; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
-    const [members, placements, padding, hardmask, iupac, external, sequences, derivations] = await Promise.all([
-      cat.table<Member>("assembly_members.parquet"),
-      cat.table<{ book?: string; root_id: string; parent_type: string }>("layer_placements.parquet"),
-      cat.table<{ book?: string; root_id: string; parent_start: number; parent_end: number; parent_length: number;
-        revised: boolean; orientation: string }>("layer_padding.parquet"),
-      cat.table<{ root_id: string }>("layer_hardmask_grc.parquet"),
-      cat.table<{ root_id: string }>("layer_iupac.parquet"),
-      cat.table<{ root_id: string; collection: string; group: string; name: string | null; rank: number }>("roots_external.parquet"),
-      cat.table<{ sha512t24u: string; md5: string; length: number; root_id: string; operations: string[] }>("sequences.parquet"),
-      cat.table<{ sha512t24u: string; root_id: string; operations: string[]; book?: string | null }>("derivations.parquet"),
-    ]).then(([m, pl, pd, ...rest]) => [inBook(m), inBook(pl), inBook(pd), ...rest] as const);
-    const md5 = new Map(sequences.map((s) => [s.sha512t24u, s.md5]));
-    const rootLength = new Map(sequences.filter((s) => !s.operations.length).map((s) => [s.root_id, s.length]));
-    const ext = [...external].sort((a, b) => a.rank - b.rank);
-    const compiler = rb.recipeTables({
-      members: members.map((m) => ({ assembly_accession: m.assembly_accession, genbank_accession: m.genbank_accession, role: m.role,
-        ucsc_name: m.ucsc_name, sequence_name: m.sequence_name, refseq_accession: m.refseq_accession })),
-      roots: [...rootLength.keys()],
-      iupac: [...new Set(iupac.map((r) => r.root_id))],
-      layers: { hardmask_grc: [...new Set(hardmask.map((r) => r.root_id))] },
-      external: ext.map((e) => ({ root_id: e.root_id, collection: e.collection, group: e.group, name: e.name })),
-      placements: placements.map((p) => ({ root_id: p.root_id, parent_type: p.parent_type })),
-      padding: padding.map((p) => ({ root_id: p.root_id, revised: p.revised, orientation: p.orientation })),
+/** The tables the compiler and the digests need, for one book (its members, placements and padding: a root can
+ * be placed in two books), with the mask layers `shelf` offers and its editions use (about 0.4 MB, once). */
+export function designTables(cat: Catalog, book: string, shelf: string[] = []): Promise<DesignTables> {
+  let p = loaded.get(book);
+  if (!p) {
+    p = measure("design tables", () => load(cat, book, shelf));
+    loaded.set(book, p);
+  }
+  return p;
+}
+
+async function load(cat: Catalog, book: string, shelf: string[]): Promise<DesignTables> {
+  type Member = { book?: string; assembly_accession: string; assembly_name: string; genbank_accession: string; role: string;
+    assigned_molecule: string | null; assembly_unit: string; ucsc_name: string | null; sequence_name: string | null; refseq_accession: string | null };
+  const fs = (await editions(cat)).filter((f) => f.book === book);
+  const layers = [...new Set([...shelf, ...fs.flatMap((f) => maskLayers(f.operations))])].sort();
+  const inBook = <T extends { book?: string | null }>(rows: T[]) => ofBook(rows, book);
+  const [members, placements, padding, iupac, external, sequences, derivations, shelves, masks] = await Promise.all([
+    cat.table<Member>("assembly_members.parquet").then(inBook),
+    cat.table<{ book?: string; root_id: string; parent_type: string }>("layer_placements.parquet").then(inBook),
+    cat.table<{ book?: string; root_id: string; parent_start: number; parent_end: number; parent_length: number;
+      revised: boolean; orientation: string }>("layer_padding.parquet").then(inBook),
+    cat.table<{ root_id: string }>("layer_iupac.parquet"),
+    cat.table<{ root_id: string; collection: string; group: string; name: string | null; rank: number }>("roots_external.parquet"),
+    cat.table<{ sha512t24u: string; md5: string; length: number; root_id: string; operations: string[] }>("sequences.parquet"),
+    cat.table<{ sha512t24u: string; root_id: string; operations: string[]; book?: string | null }>("derivations.parquet").then(inBook),
+    cat.table<{ book: string; assembly: string; releases: string[] }>("books.parquet"),
+    Promise.all(layers.map((l) => cat.table<{ root_id: string }>(`layer_${l}.parquet`))),
+  ]);
+  const md5 = new Map(sequences.map((s) => [s.sha512t24u, s.md5]));
+  const rootLength = new Map(sequences.filter((s) => !s.operations.length).map((s) => [s.root_id, s.length]));
+  const ext = [...external].sort((a, b) => a.rank - b.rank);
+  const compiler = rb.recipeTables({
+    members: members.map((m) => ({ assembly_accession: m.assembly_accession, genbank_accession: m.genbank_accession, role: m.role,
+      ucsc_name: m.ucsc_name, sequence_name: m.sequence_name, refseq_accession: m.refseq_accession })),
+    roots: [...rootLength.keys()],
+    iupac: [...new Set(iupac.map((r) => r.root_id))],
+    layers: Object.fromEntries(layers.map((l, i) => [l, [...new Set(masks[i].map((r) => r.root_id))]])),
+    external: ext.map((e) => ({ root_id: e.root_id, collection: e.collection, group: e.group, name: e.name })),
+    placements: placements.map((p) => ({ root_id: p.root_id, parent_type: p.parent_type })),
+    padding: padding.map((p) => ({ root_id: p.root_id, revised: p.revised, orientation: p.orientation })),
+  });
+  // What padding adds to a root's length: the Ns before and after it.
+  const padded = new Map(padding.map((p) => [p.root_id, p.parent_start + p.parent_length - p.parent_end]));
+  const roleCounts = new Map<string, Map<string, number>>();
+  for (const m of members) {
+    const c = roleCounts.get(m.assembly_accession) ?? new Map<string, number>();
+    c.set(m.role, (c.get(m.role) ?? 0) + 1);
+    roleCounts.set(m.assembly_accession, c);
+  }
+  const collections = new Map<string, string[]>();
+  for (const e of ext) {
+    const g = collections.get(e.collection) ?? [];
+    if (!g.includes(e.group)) g.push(e.group);
+    collections.set(e.collection, g);
+  }
+  const shelfRow = shelves.find((b) => b.book === book);
+  const assemblies = new Map(members.map((m) => [m.assembly_accession, m.assembly_name]));
+  const byName = new Map([...assemblies].map(([acc, name]) => [name, acc]));
+  const releases = (shelfRow?.releases ?? []).flatMap((name) => (byName.has(name) ? [{ accession: byName.get(name)!, name }] : []));
+  // Where a new recipe starts: the release most of the book's editions select from (the latest, if none).
+  const used = fs.flatMap((f) => {
+    const a = (JSON.parse(f.recipe) as Recipe).select.find((e): e is Extract<SelectEntry, { assembly: string }> =>
+      "assembly" in e && releases.some((r) => r.accession === e.assembly));
+    return a ? [a.assembly] : [];
+  });
+  const tally = [...Map.groupBy(used, (x) => x)].sort((a, b) => b[1].length - a[1].length);
+  const start = tally[0]?.[0] ?? releases.at(-1)?.accession ?? "";
+  const mito = new Map(members.filter((m) => m.role === "assembled-molecule" && m.assigned_molecule === "MT")
+    .map((m) => [m.assembly_accession, m.genbank_accession]));
+  const examples = new Map<string, Record<string, string[]>>();
+  for (const r of releases) {
+    const of = (role: string, molecule?: string) => members.find((m) => m.assembly_accession === r.accession && m.role === role
+      && (molecule === undefined || m.assigned_molecule === molecule));
+    const shown = [of("assembled-molecule", "1"), of("unlocalized-scaffold")].filter((m) => !!m);
+    examples.set(r.accession, {
+      ucsc: shown.map((m) => m.ucsc_name ?? ""), grc: shown.map((m) => m.sequence_name ?? ""),
+      genbank: shown.map((m) => m.genbank_accession), refseq: shown.map((m) => m.refseq_accession ?? ""),
     });
-    // What padding adds to a root's length: the Ns before and after it.
-    const padded = new Map(padding.map((p) => [p.root_id, p.parent_start + p.parent_length - p.parent_end]));
-    const roleCounts = new Map<string, Map<string, number>>();
-    for (const m of members) {
-      const c = roleCounts.get(m.assembly_accession) ?? new Map<string, number>();
-      c.set(m.role, (c.get(m.role) ?? 0) + 1);
-      roleCounts.set(m.assembly_accession, c);
-    }
-    const collections = new Map<string, string[]>();
-    for (const e of ext) {
-      const g = collections.get(e.collection) ?? [];
-      if (!g.includes(e.group)) g.push(e.group);
-      collections.set(e.collection, g);
-    }
-    const shelf = (await cat.table<{ book: string; releases: string[] }>("books.parquet")).find((b) => b.book === DESIGN_BOOK);
-    const places = placesOf(members, ext, DESIGN_ASSEMBLY, new Set(shelf?.releases ?? []));
-    return {
-      compiler, rootLength, padded, collections, roleCounts, places, layers: ["hardmask_grc"],
-      derived: new Map(inBook(derivations).map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
-      assemblies: new Map(members.map((m) => [m.assembly_accession, m.assembly_name])),
-    };
-  }));
+  }
+  const places = placesOf(members, ext, shelfRow?.assembly ?? book, new Set(shelfRow?.releases ?? []));
+  return {
+    compiler, rootLength, padded, collections, roleCounts, places, layers, releases, start, mito, examples,
+    iupac: new Set(iupac.map((r) => r.root_id)), placed: padding.length > 0,
+    derived: new Map(derivations.map((d) => [key(d.root_id, [...d.operations]), { sha512t24u: d.sha512t24u, md5: md5.get(d.sha512t24u)! }])),
+    assemblies,
+  };
 }
 
 /** A designed sequence: a manifest row, with digests if the catalog knows its derivation. */
@@ -189,6 +233,8 @@ export function plainRecipe(r: Recipe & Record<string, unknown>): Recipe {
   const out: Recipe = { select: r.select, rename: grcNames(r.rename) };
   if (r.mask?.length) out.mask = r.mask;
   if (r.alphabet) out.alphabet = r.alphabet;
+  if (r.pad) out.pad = r.pad;
+  if (r.orient) out.orient = r.orient;
   return out;
 }
 

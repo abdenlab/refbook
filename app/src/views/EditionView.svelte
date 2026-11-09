@@ -3,7 +3,7 @@
   // the files that reproduce it, exports, and its sequences.
   import * as rb from "@abdenlab/refbook";
   import type { Catalog } from "../data/catalog.ts";
-  import { DESIGN_BOOK, rootPlaces } from "../data/design.ts";
+  import { rootPlaces } from "../data/design.ts";
   import { bookHref, editionHref, editorHref, relations, type Book } from "../data/books.ts";
   import { chromSizes, ordered as inOrder, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
   import { inOrder as fileOrder } from "../data/exports.ts";
@@ -88,9 +88,7 @@
       </dl>
 
       <h2 class="act">Recipe
-        {#if book.book === DESIGN_BOOK}
-          <a class="action" href={editorHref(book.book, new URLSearchParams({ from: label, tab: "recipe" }))} title="Open this recipe in the Editor"><Icon name="load" /> Edit</a>
-        {/if}</h2>
+        <a class="action" href={editorHref(book.book, new URLSearchParams({ from: label, tab: "recipe" }))} title="Open this recipe in the Editor"><Icon name="load" /> Edit</a></h2>
       <p class="muted">The recipe builds this edition from root sequences. The result is uppercase: no soft masking is applied.</p>
       <RecipeDiagram edition={f} {recipe} {rows} {names} />
 

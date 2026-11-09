@@ -13,7 +13,6 @@
   import Mark from "./components/Mark.svelte";
   import ErrorBox from "./components/ErrorBox.svelte";
   import { bookFor, bookHref, books, editorHref, type Book } from "./data/books.ts";
-  import { DESIGN_BOOK } from "./data/design.ts";
   import BookView from "./views/BookView.svelte";
   import CatalogView from "./views/CatalogView.svelte";
   import LearnView from "./views/LearnView.svelte";
@@ -108,16 +107,7 @@
       {:else if parts[0] === "catalog"}
         <CatalogView {bs} />
       {:else if parts[0] === "editor" && book}
-        {#if book.book === DESIGN_BOOK}
-          <EditorView {cat} query={route.current.query} />
-        {:else}
-          <section>
-            <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {book.assembly}</p>
-            <h1>The Editor doesn't know {book.assembly} yet</h1>
-            <p>It designs {bookNamed(bs, DESIGN_BOOK)?.assembly} editions for now: <a href={editorHref(DESIGN_BOOK)}>open it there</a>.
-              The {book.assembly} editions are in <a href={bookHref(book.book)}>the catalog</a>.</p>
-          </section>
-        {/if}
+        <EditorView {cat} {book} query={route.current.query} />
       {:else if parts[0] === "editor"}
         <EditorLandingView {bs} />
       {:else if parts[0] === "learn"}

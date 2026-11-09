@@ -17,6 +17,7 @@ import { bookFor, bookHref, books, editionHref, editorHref, familyOf, relations 
 import { search, storedSequence } from "../src/data/sequences.ts";
 import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
+import { SHELVES, shelfOf } from "../src/data/shelves.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
 
 const dir = process.env.REFBOOK_CATALOG ?? fileURLToPath(new URL("../../catalog/output/build/catalog", import.meta.url));
@@ -62,7 +63,7 @@ test("exports in a target's order", { skip }, async () => {
 });
 
 test("the two export orders: by name, and karyotypic by role", { skip }, async () => {
-  const { places } = await designTables(cat);
+  const { places } = await designTables(cat, "grch38");
   const rows = await manifest(cat, "hs38dh");
   const byName = ordered(rows, "name", places).map((r) => r.name);
   assert.deepEqual(byName, [...byName].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
@@ -271,19 +272,24 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
 
 
 test("every edition's recipe, compiled in the browser, is that edition", { skip }, async () => {
-  const t = await designTables(cat);
-  assert.ok(measured["design tables"].bytes < 1e6, `${measured["design tables"].bytes} bytes`);
-  const fs = (await editions(cat)).filter((f) => f.book === "grch38");  // the designer is GRCh38's until the redesign
-  for (const f of fs) {
-    const d = design(plainRecipe(JSON.parse(f.recipe)), t, fs);
-    assert.deepEqual(d.novel, [], f.edition);
-    assert.equal(d.id, f.id, f.edition);
-    assert.equal(d.seqcolDigest, f.seqcol_digest, f.edition);
-    assert.equal(d.equals, f.edition);
-    const m = await manifest(cat, f.edition);
-    assert.deepEqual(d.rows.map((r) => [r.name, r.root_id, r.operations, r.length, r.md5, r.sha512t24u]),
-                     m.map((r) => [r.name, r.root_id, [...r.operations], r.length, r.md5, r.sha512t24u]), f.edition);
+  const all = await editions(cat);
+  for (const book of ["grch37", "grch38", "t2t-chm13"]) {
+    const t = await designTables(cat, book, shelfOf(book).masks.map((m) => m.layer));
+    assert.ok(measured["design tables"].bytes < 1e6, `${book}: ${measured["design tables"].bytes} bytes`);
+    const fs = all.filter((f) => f.book === book);
+    for (const f of fs) {
+      const d = design(plainRecipe(JSON.parse(f.recipe)), t, fs);
+      assert.deepEqual(d.novel, [], f.edition);
+      assert.equal(d.id, f.id, f.edition);
+      assert.equal(d.seqcolDigest, f.seqcol_digest, f.edition);
+      assert.equal(d.equals, f.edition);
+      const m = await manifest(cat, f.edition);
+      assert.deepEqual(d.rows.map((r) => [r.name, r.root_id, r.operations, r.length, r.md5, r.sha512t24u]),
+                       m.map((r) => [r.name, r.root_id, [...r.operations], r.length, r.md5, r.sha512t24u]), f.edition);
+    }
   }
+  const t = await designTables(cat, "grch38");
+  const fs = all.filter((f) => f.book === "grch38");
   const r = plainRecipe(JSON.parse(fs[0].recipe));
   assert.deepEqual(decodeRecipe(encodeRecipe(r)), r);
   const old = { ...r, rename: { namespace: "genbank", by_role: { "assembled-molecule": "sequence" } } };
@@ -294,11 +300,13 @@ test("every edition's recipe, compiled in the browser, is that edition", { skip 
 
 
 test("the form's edits rebuild published editions from scratch", { skip }, async () => {
-  const t = await designTables(cat);
+  const t = await designTables(cat, "grch38");
   const fs = await editions(cat);
-  const all = { hla: t.collections.get(edit.HLA)! };
+  const shelf = SHELVES.grch38;
+  const ctx = { hla: t.collections.get(edit.HLA)!, mito: "J01415.2" };
   const is = (r: ReturnType<typeof edit.fromScratch>) => design(r, t, fs).equals;
-  let r = edit.fromScratch();
+  assert.equal(t.start, "GCA_000001405.15");   // most of GRCh38's editions are of p0
+  let r = edit.fromScratch(t.start);
   for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) r = edit.setRole(r, role, true);
   r = edit.setMask(edit.setEbv(r, true), "hardmask_grc", true);
   assert.equal(is(r), "grch38-no-alt");
@@ -307,40 +315,40 @@ test("the form's edits rebuild published editions from scratch", { skip }, async
   assert.equal(is(r), "grch38-full");
   r = edit.setDecoys(r, true);
   assert.equal(is(r), "grch38-full-hs38d1");
-  const hla = edit.GUIDE.find((g) => g.goal === "HLA typing")!;
-  assert.equal(hla.has(r), false);
-  const dh = hla.set(r, true, all);
-  assert.equal(hla.has(dh), true);
+  const hla = shelf.guide.find((g) => g.goal === "HLA typing")!;
+  assert.equal(hla.has(r, ctx), false);
+  const dh = hla.set(r, true, ctx);
+  assert.equal(hla.has(dh, ctx), true);
   assert.equal(is(dh), "hs38dh");
   // And back: each edit undoes, keeping the rest.
-  assert.equal(is(edit.setHla(edit.setDecoys(dh, false), [], all.hla)), "grch38-full");
+  assert.equal(is(edit.setHla(edit.setDecoys(dh, false), [], ctx.hla)), "grch38-full");
   assert.deepEqual(edit.hlaGroups(dh), edit.HLA_TYPING_GROUPS);
   assert.equal(edit.hlaKind(dh), "typing");
   assert.equal(edit.hlaKind(r), "none");
-  assert.equal(edit.hlaKind(edit.setHla(r, ["A", "G"], all.hla)), "custom");
-  assert.notEqual(design(edit.setHla(r, ["A", "G"], all.hla), t, fs).rows.length, 0);   // still compiles
+  assert.equal(edit.hlaKind(edit.setHla(r, ["A", "G"], ctx.hla)), "custom");
+  assert.notEqual(design(edit.setHla(r, ["A", "G"], ctx.hla), t, fs).rows.length, 0);   // still compiles
   // Ensembl's names: GenBank by default, its own for chromosomes; IUPAC -> N.
-  let e = edit.setNamespace(edit.setRelease(edit.fromScratch(), "GCA_000001405.29"), "genbank");
+  let e = edit.setNamespace(edit.setRelease(edit.fromScratch(t.start), "GCA_000001405.29"), "genbank");
   for (const role of ["unlocalized-scaffold", "unplaced-scaffold"]) e = edit.setRole(e, role, true);
   e = edit.setChromosomeNames(edit.setIupacToN(e, true), "grc");
   assert.equal(is(e), "ensembl-grch38-primary");
   assert.deepEqual(edit.others(dh), []);
   // Every goal toggles: on adds it, off takes it away, each the other's inverse here.
-  for (const g of edit.GUIDE) {
-    const on = g.set(dh, true, all), off = g.set(dh, false, all);
-    assert.ok(g.has(on) && !g.has(off), g.goal);
-    assert.equal(is(g.set(off, true, all)), is(on), g.goal);
+  for (const g of shelf.guide) {
+    const on = g.set(dh, true, ctx), off = g.set(dh, false, ctx);
+    assert.ok(g.has(on, ctx) && !g.has(off, ctx), g.goal);
+    assert.equal(is(g.set(off, true, ctx)), is(on), g.goal);
   }
-  const scratch = edit.fromScratch();
-  const primaryGoal = edit.GUIDE[0];
-  assert.equal(primaryGoal.has(scratch), false);
-  assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, all))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
+  const scratch = edit.fromScratch(t.start);
+  const primaryGoal = shelf.guide[0];
+  assert.equal(primaryGoal.has(scratch, ctx), false);
+  assert.deepEqual(edit.primary(primaryGoal.set(scratch, true, ctx))!.roles, ["assembled-molecule", "unlocalized-scaffold", "unplaced-scaffold"]);
   const hg38p14 = JSON.parse(fs.find((f) => f.edition === "hg38-p14")!.recipe);
   assert.equal(edit.others(hg38p14).length, 1);   // the p13 fix patches, kept as JSON
   // Naming per group: EBV, decoys and HLA always get a rule, so any default namespace compiles.
   for (const ns of edit.NAMESPACES) {
-    let x = edit.setNamespace(edit.fromScratch(), ns);
-    x = edit.setHla(edit.setDecoys(edit.setEbv(x, true), true), edit.HLA_TYPING_GROUPS, all.hla);
+    let x = edit.setNamespace(edit.fromScratch(t.start), ns);
+    x = edit.setHla(edit.setDecoys(edit.setEbv(x, true), true), edit.HLA_TYPING_GROUPS, ctx.hla);
     const d = design(x, t, fs);
     assert.ok(d.rows.some((r) => r.name === (ns === "ucsc" ? "chrEBV" : edit.EBV)), ns);
     assert.ok(d.rows.some((r) => r.name === (ns === "ucsc" ? "chrUn_JTFH01000001v1_decoy" : "JTFH01000001.1")), ns);
@@ -359,8 +367,9 @@ test("the form's edits rebuild published editions from scratch", { skip }, async
   named = edit.setGroupTemplate(edit.setEbvName(dh, "EBV"), edit.HLA, "{name}");
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "EBV"));
   assert.ok(design(named, t, fs).rows.some((r) => r.name === "A*01:01:01:01"));
-  assert.deepEqual([edit.releaseLabel("GRCh38", false), edit.releaseLabel("GRCh38.p14", true), edit.releaseLabel("GRCh38.p3", false)],
-    ["p0 (original)", "p14 (latest)", "p3"]);
+  assert.deepEqual([edit.releaseLabel("GRCh38", "GRCh38", false), edit.releaseLabel("GRCh38.p14", "GRCh38", true),
+                    edit.releaseLabel("GRCh38.p3", "GRCh38", false), edit.releaseLabel("T2T-CHM13v2.0", "T2T-CHM13", true)],
+    ["p0 (original)", "p14 (latest)", "p3", "v2.0 (latest)"]);
   assert.equal(t.roleCounts.get("GCA_000001405.15")!.get("fix-patch") ?? 0, 0);
   assert.equal(t.roleCounts.get("GCA_000001405.29")!.get("fix-patch"), 164);
   // Filters: leaving out patches placed on scaffolds is Ensembl's toplevel recipe; on again, back to all.
@@ -371,4 +380,50 @@ test("the form's edits rebuild published editions from scratch", { skip }, async
   assert.equal(design(all2, t, fs).rows.length, design(top, t, fs).rows.length + 3);
   assert.equal(is(edit.setPlacedOn(all2, "scaffold", false)), "ensembl-grch38-toplevel");
   assert.deepEqual(edit.placedOn(edit.setPlacedOn(top, "chromosome", false)), ["chromosome"]);   // never none
+});
+
+
+test("the form rebuilds T2T-CHM13's and GRCh37's editions: masks, mitochondria, layouts", { skip }, async () => {
+  const fs = await editions(cat);
+  // T2T-CHM13: v2.0 by default; the consortium's short-read file is a guide goal; the masked sets from the shelf.
+  const t = await designTables(cat, "t2t-chm13", shelfOf("t2t-chm13").masks.map((m) => m.layer));
+  const is = (r: ReturnType<typeof edit.fromScratch>) => design(r, t, fs).equals;
+  const own = t.mito.get(t.start)!;
+  assert.deepEqual([t.start, own], ["GCA_009914755.4", "CP068254.1"]);
+  const ctx = { hla: [], mito: own };
+  const v2 = edit.fromScratch(t.start);
+  assert.equal(is(v2), "chm13v2.0");
+  const short = SHELVES["t2t-chm13"].guide[0];
+  const sr = short.set(v2, true, ctx);
+  assert.equal(is(sr), "chm13v2.0-maskedY-rCRS");
+  assert.ok(short.has(sr, ctx) && !short.has(short.set(sr, false, ctx), ctx));
+  assert.equal(is(short.set(sr, false, ctx)), "chm13v2.0");
+  assert.equal(edit.mitochondrion(sr, own), "J01415.2");
+  assert.deepEqual(edit.primary(sr)!.exclude, [own]);
+  assert.equal(is(edit.setNamespace(edit.setMitochondrion(v2, own, null), "grc")), "ensembl-chm13v2.0");
+  assert.equal(is(edit.setNamespace(edit.setMitochondrion(v2, own, null), "refseq")), "chm13v2.0-refseq");
+  assert.equal(is(edit.setEbv(sr, true)), "chm13v2.0-maskedY-rCRS-EBV");
+  const xx = edit.setMask(edit.setMask(edit.setMitochondrion(v2, own, "J01415.2"), "t2t_dj_rdna_phr", true), "chry", true);
+  assert.equal(is(xx), "chm13v2.0-dj-rdna-phr-xx");
+  assert.equal(is(edit.setMask(edit.setMask(xx, "chry", false), "par_y", true)), "chm13v2.0-dj-rdna-phr-xy");
+  // Another release keeps the choice: the release's own (v1.1's is the same root), or rCRS.
+  assert.equal(is(edit.setRelease(v2, "GCA_009914755.3", (a) => t.mito.get(a) ?? null)), "chm13v1.1");
+  assert.equal(edit.mitochondrion(edit.setRelease(sr, "GCA_009914755.3", (a) => t.mito.get(a) ?? null), own), "J01415.2");
+  // GRCh37: hg19 is p0 with the Yoruba mitochondrion (p0 has none of its own), IUPAC as N; Ensembl's toplevel pads.
+  const g = await designTables(cat, "grch37", shelfOf("grch37").masks.map((m) => m.layer));
+  const is37 = (r: ReturnType<typeof edit.fromScratch>) => design(r, g, fs).equals;
+  assert.equal(g.start, "GCA_000001405.14");
+  assert.equal(g.mito.get("GCA_000001405.1"), undefined);
+  let hg19 = edit.fromScratch("GCA_000001405.1");
+  for (const role of ["unlocalized-scaffold", "unplaced-scaffold", "alt-scaffold"]) hg19 = edit.setRole(hg19, role, true);
+  hg19 = edit.setIupacToN(edit.setMitochondrion(hg19, null, "AF347015.1"), true);
+  assert.equal(edit.mitochondrion(hg19, null), "AF347015.1");
+  assert.equal(is37(hg19), "hg19");
+  const yoruba = SHELVES.grch37.guide.find((x) => x.goal === "Matching UCSC's hg19")!;
+  assert.ok(yoruba.has(hg19, { hla: [], mito: null }));
+  let top = edit.fromScratch(g.start);
+  for (const role of edit.ROLES.slice(1)) top = edit.setRole(top, role, true);
+  top = edit.setLayout(edit.setMask(edit.setNamespace(edit.setChromosomeNames(top, "grc"), "genbank"), "par_y", true), "pad");
+  assert.equal(edit.layoutOf(top), "pad");
+  assert.ok(design(top, g, fs).rows.some((r) => r.operations.includes("pad")));
 });
