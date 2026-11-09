@@ -36,9 +36,12 @@ def read_chromalias(path: Path) -> list[dict[str, str]]:
 
 
 def book_aliases(book: str, members: list[dict], releases: set[str], declared: list[dict],
-                 reproduced: dict[str, list[dict]], chromalias: dict[str, Path]) -> tuple[set, list[str]]:
+                 reproduced: dict[str, list[dict]], chromalias: dict[str, Path],
+                 roots: set[str] | None = None) -> tuple[set, list[str]]:
     """One book's aliases, (book, root_id, namespace, alias, source), and its notes. `chromalias` gives the raw path
-    of each declared chromAlias file, by its source/file key."""
+    of each declared chromAlias file, by its source/file key. A chromAlias row counts only for an accession that is
+    one of the catalog's `roots` (hg19.p13.plusMT's lists the Yoruba chrM by its RefSeq accession, NC_001807.4, in
+    its GenBank column); the others are noted."""
     out, notes = set(), []
     for m in members:
         acc, src = m["genbank_accession"], f"{m['assembly_accession']} assembly report"
@@ -55,10 +58,16 @@ def book_aliases(book: str, members: list[dict], releases: set[str], declared: l
         ns = d["namespace"]
         if "chromalias" in d:
             path = chromalias[f"{d['chromalias']['source']}/{d['chromalias']['file']}"]
+            strays = []
             for rec in read_chromalias(path):
                 if rec.get(ns) and rec.get("genbank"):
+                    if roots is not None and rec["genbank"] not in roots:
+                        strays.append(f"{rec['genbank']} ({rec[ns]})")
+                        continue
                     have[ns][rec["genbank"]] = rec[ns]
                     out.add((book, rec["genbank"], ns, rec[ns], d["label"]))
+            if strays:
+                notes.append(f"{d['label']}: names for accessions that are no root, left out: {', '.join(strays)}")
         else:
             missing = [t for t in d["targets"] if t not in reproduced]
             if missing:

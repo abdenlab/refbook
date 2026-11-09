@@ -343,6 +343,8 @@ def task_aliases():
 
     def action():
         members_all = pq.read_table(tables[0]).to_pylist()
+        roots_all = set(pq.read_table(tables[1], columns=["root_id"])["root_id"].to_pylist())
+        roots_all |= set(pq.read_table(tables[2], columns=["root_id"])["root_id"].to_pylist())
         rows, notes = set(), []
         for book in BOOKS.values():
             releases = {layers.Release.of(RAW, SOURCES[n].base).name for n in book.releases}
@@ -350,7 +352,7 @@ def task_aliases():
             for r in pq.read_table(BUILD / "books" / book.name / "reproduced" / "reproduced.parquet").to_pylist():
                 by_target.setdefault(r["target"], []).append(r)
             got, n = aliases.book_aliases(book.name, [m for m in members_all if m["book"] == book.name], releases,
-                                          list(book.aliases), by_target, chromalias)
+                                          list(book.aliases), by_target, chromalias, roots_all)
             rows |= got
             notes += n
         rows |= aliases.global_aliases(pq.read_table(tables[1], columns=["root_id", "source"]).to_pylist(),

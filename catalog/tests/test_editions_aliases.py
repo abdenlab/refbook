@@ -52,7 +52,7 @@ def test_the_sequence_store_keeps_every_way_and_picks_the_fewest_operations():
 
 
 def test_book_aliases_scope_names_to_the_book(tmp_path):
-    (tmp_path / "chromAlias.txt").write_text("# genbank\tensembl\nCM1.1\t1\nJ1.2\tMT\n")
+    (tmp_path / "chromAlias.txt").write_text("# genbank\tensembl\nCM1.1\t1\nJ1.2\tMT\nNC_9.4\tchrM\n")
     ms = [member("CM1.1", ucsc_name="chr1", refseq_accession="NC_1.1"), member("J1.2", ucsc_name="chrM"),
           member("D1.1", "unplaced-scaffold", "hs38d1")]
     declared = [{"namespace": "ensembl", "chromalias": {"source": "U", "file": "c"}, "label": "chromAlias"},
@@ -62,7 +62,11 @@ def test_book_aliases_scope_names_to_the_book(tmp_path):
                         {"root_id": "D1.1", "name": "D1.1"}],
                   "G": [{"root_id": "CM1.1", "name": "chr1"}, {"root_id": "D1.1", "name": "chrUn_D1v1_decoy"},
                         {"root_id": "AJ1.2", "name": "chrEBV"}]}
-    got, notes = aliases.book_aliases("b", ms, RELEASES, declared, reproduced, {"U/c": tmp_path / "chromAlias.txt"})
+    got, notes = aliases.book_aliases("b", ms, RELEASES, declared, reproduced, {"U/c": tmp_path / "chromAlias.txt"},
+                                      {"CM1.1", "J1.2", "D1.1", "AJ1.2"})
+    assert not any(r[1] == "NC_9.4" for r in got)                                 # a chromAlias row for no root
+    assert any("NC_9.4 (chrM)" in x for x in notes)
+    notes = [x for x in notes if "no root" not in x]
     assert (None, "CM1.1", "genbank", "CM1.1", "GCA_1.1 assembly report") in got  # accessions: no book
     assert ("b", "CM1.1", "ucsc", "chr1", "GCA_1.1 assembly report") in got      # names: the book's
     assert ("b", "CM1.1", "grc", "CM1.1", "GCA_1.1 assembly report") in got
