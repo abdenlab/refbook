@@ -24,7 +24,6 @@
 </section>
 
 <style>
-  .editor-landing { max-width: 60rem; margin: 0 auto; }
   .lede { color: var(--muted); max-width: 70ch; }
   .books { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
   .book {

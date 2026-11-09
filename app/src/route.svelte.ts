@@ -1,5 +1,5 @@
 // The page, from the location hash: #/, #/catalog, #/catalog/<assembly>[/edition/<label>[/seq/<name>?start=&end=]],
-// #/editor, #/editor/<assembly>, #/sequences?q=, #/sequence/<SQ.>, #/identify, #/learn.
+// #/editor, #/editor/<assembly>, #/sequences?q=, #/sequence/<SQ.>, #/identify, #/about.
 
 export interface Route {
   parts: string[];

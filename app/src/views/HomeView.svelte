@@ -4,20 +4,20 @@
 
   const doors = [
     { href: "#/catalog", icon: "books", title: "Browse the catalog",
-      text: "Every published version of each human reference assembly, and how they differ." },
+      text: "Published editions of the major human reference assemblies, in detail. Learn their quirks and how they differ." },
     { href: "#/sequences", icon: "search", title: "Browse sequences",
-      text: "Find any sequence by name, accession or digest, and every assembly it appears in." },
-    { href: "#/identify", icon: "question", title: "What is my reference?",
-      text: "Paste a FASTA index, sequence dictionary, or BAM or VCF header to find out which edition it is." },
-    { href: "#/learn", icon: "info", title: "Learn more",
-      text: "Why one genome has so many files, and how refbook tells them apart." },
+      text: "Find a sequence by name, accession, or digest. See the published editions it appears in." },
+    { href: "#/identify", icon: "question", title: "What's my reference?",
+      text: "Paste a FASTA index, sequence dictionary, or BAM or VCF header to find out which edition it describes." },
+    { href: "#/editor", icon: "load", title: "Customize your own",
+      text: "Choose sequences, what they are called, and how their bases are modified. Fit to purpose." },
   ] as const;
 </script>
 
 <section class="home">
   <h1>The human reference genome, in every edition</h1>
   <blockquote class="motto"><p>Genome: Bought the book? Which edition?</p></blockquote>
-  <p class="lede">Refbook is a catalog of commonly used reference genome sequence collections, rebuilt from the original sequences.</p>
+  <p class="lede">Refbook is a catalog of commonly used reference sequence collections for genomic analysis, as published by different authorities. We call these different "flavors" of the same genome assembly <b>editions</b>.</p><p class="lede">Using a small rule set, refbook reproduces all published editions from original submitted sequences. This provenance makes editions identifiable, comparable, and lets you reason about how they affect your analysis.</p>
   <nav class="doors" aria-label="Start here">
     {#each doors as d (d.href)}
       <a class="door" href={d.href}>
@@ -30,9 +30,9 @@
 </section>
 
 <style>
-  .home { max-width: 60rem; margin: 3rem auto 0; }
+  .home { margin: 3rem 0 0; }
   h1 { font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
-  .lede { color: var(--muted); margin: 0 0 2rem; }
+  .lede { color: var(--muted); margin: 0 0 2rem; max-width: none; }
   .motto { position: relative; margin: 1.4rem 0 1.2rem; padding: 0.1rem 0 0.1rem 2.6rem; max-width: 36rem; }
   .motto::before {
     content: "\201C"; position: absolute; left: 0; top: -0.55rem;

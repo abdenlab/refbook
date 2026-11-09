@@ -68,7 +68,7 @@ details > summary { cursor: pointer; }
 /* The workbench: one frame, the shelf beside the stage, filling the window below the header and above the meter;
    each side scrolls on its own. A band across the top: the shelf's status, the stage's tabs. */
 #app:has(.workbench) { height: 100dvh; display: flex; flex-direction: column; }
-#app:has(.workbench) > main { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 2.9rem; }
+#app:has(.workbench) > main { max-width: 1240px; flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 2.9rem; }
 section.bench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 section.bench > .crumbs { margin-bottom: 0.6rem; }
 .workbench { flex: 1; min-height: 0; display: grid; grid-template-columns: 24.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
@@ -114,6 +114,9 @@ button.icon .icon, .ok .icon { vertical-align: -0.12em; }
 .formats button.here { background: var(--op-bg); color: var(--op-text); font-weight: 600; }
 .filebar .actions { display: inline-flex; gap: 0.3rem; align-items: center; }
 .filebar label.order { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--muted); margin: 0 0.4rem 0 0; }
+/* A select is as wide as its longest option (a publisher's file name): never wider than its container. */
+select { max-width: 100%; min-width: 0; }
+label.order { max-width: 100%; min-width: 0; }
 .design legend { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .design label { display: block; margin: 0.3rem 0; }
 .design label.check { display: flex; gap: 0.45rem; align-items: baseline; }
@@ -160,7 +163,10 @@ ul.small { font-size: 0.9rem; color: var(--muted); }
 .exports label { display: inline-flex; gap: 0.4rem; align-items: center; max-width: 100%; }
 .exports label select { min-width: 0; flex: 1; }
 
-main { max-width: 1240px; margin: 0 auto; padding: 1.25rem 16px 7rem; }
+/* The scrollbar's room kept, so the column doesn't shift between short and long pages. */
+html { scrollbar-gutter: stable; }
+/* Every page in one centered column (72rem of content), but the Editor's workbench, which takes the width. */
+main { max-width: calc(72rem + 32px); margin: 0 auto; padding: 1.25rem 16px 7rem; box-sizing: border-box; }
 h1 { font-size: 1.7rem; margin: 0.4rem 0 0.5rem; letter-spacing: -0.015em; }
 h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
 h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
@@ -177,7 +183,7 @@ th { font-weight: 600; color: var(--muted); font-size: 0.82rem; white-space: now
 ul.plain { list-style: none; margin: 0; padding: 0; }
 .publisher { font-weight: 500; }
 table.editions td:first-child { white-space: nowrap; }
-.alias { color: var(--muted); font-size: 0.88em; }
+.alias { color: var(--muted); font-size: 0.88em; overflow-wrap: anywhere; }   /* long file names break where they must */
 .naming { color: var(--muted); }
 .op, .tag {
   display: inline-block; margin: 0 0.3rem 0.15rem 0; padding: 0 0.45rem; border-radius: 999px;
@@ -250,6 +256,7 @@ pre.bases .pos { color: var(--muted); user-select: none; }
   .ids { grid-template-columns: 1fr; }
   .ids dd { margin-bottom: 0.6rem; }
   .tagline { display: none; }
+  .top nav { flex-wrap: wrap; gap: 0.3rem 0.85rem; font-size: 0.9rem; margin-left: 0; }
   h1 { font-size: 1.45rem; }
 }
 
@@ -300,15 +307,3 @@ h1.act .action:hover, h2.act .action:hover { border-color: var(--accent); text-d
 .legend label.unmask { margin-left: 0.8rem; display: inline-flex; gap: 0.3rem; align-items: center; color: var(--text); }
 
 /* The Catalog menu in the header: the link, a chevron, and the assemblies below it. */
-.catalog-menu { position: relative; display: inline-flex; align-items: center; gap: 0.1rem; }
-.catalog-menu .open { border: none; background: none; color: var(--muted); padding: 0.1rem; font-size: 0.85rem; line-height: 1; display: inline-flex; cursor: pointer; }
-.catalog-menu .open:hover, .catalog-menu .open[aria-expanded="true"] { color: var(--text); }
-.catalog-menu .menu {
-  position: absolute; top: calc(100% + 0.5rem); left: -0.6rem; z-index: 10; min-width: 11rem;
-  list-style: none; margin: 0; padding: 0.35rem 0; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.1);
-}
-.catalog-menu .menu a { display: block; padding: 0.35rem 0.9rem; color: var(--text); }
-.catalog-menu .menu a:hover { background: var(--op-bg); text-decoration: none; }
-.catalog-menu .menu .all { border-top: 1px solid var(--line); margin-top: 0.3rem; padding-top: 0.3rem; }
-.catalog-menu .menu .all a { color: var(--muted); font-size: 0.9rem; }

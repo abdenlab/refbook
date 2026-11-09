@@ -15,7 +15,7 @@
 <section class="catalog">
   <p class="crumbs"><a href="#/">Home</a> / Catalog</p>
   <h1>Catalog</h1>
-  <p class="lede">Each assembly, with every published file of it that refbook rebuilds and the editions they reduce to.</p>
+  <p class="lede">Each <b>book</b> in <i>refbook</i> corresponds to a reference genome assembly. Published FASTA files and their summaries and digests reduce to <b>editions</b>, independent of sequence order.</p>
   <div class="books">
     {#each cards as { b, publishers } (b.book)}
       <a class="book" href={bookHref(b.book)}>
@@ -34,7 +34,6 @@
 </section>
 
 <style>
-  .catalog { max-width: 60rem; margin: 0 auto; }
   .lede { color: var(--muted); }
   .books { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
   .book {

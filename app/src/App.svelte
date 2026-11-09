@@ -12,10 +12,10 @@
   import Icon from "./components/Icon.svelte";
   import Mark from "./components/Mark.svelte";
   import ErrorBox from "./components/ErrorBox.svelte";
-  import { bookFor, bookHref, books, editorHref, type Book } from "./data/books.ts";
+  import { bookFor, books } from "./data/books.ts";
   import BookView from "./views/BookView.svelte";
   import CatalogView from "./views/CatalogView.svelte";
-  import LearnView from "./views/LearnView.svelte";
+  import AboutView from "./views/AboutView.svelte";
   import EditorLandingView from "./views/EditorLandingView.svelte";
   import EditorView from "./views/EditorView.svelte";
   import HomeView from "./views/HomeView.svelte";
@@ -51,45 +51,21 @@
   $effect(() => {
     document.title = parts.length ? `${parts.at(-1)} · refbook` : "refbook";
   });
-  const bookNamed = (bs: Book[], name: string | undefined) => bs.find((b) => b.book === name);
-
-  // The Catalog menu: its assemblies, a shortcut past the catalog page. Closed by any navigation or click elsewhere.
-  let menu = $state(false);
-  $effect(() => {
-    void route.current;
-    menu = false;
-  });
-  function closeOutside(e: MouseEvent) {
-    if (menu && !(e.target as Element).closest(".catalog-menu")) menu = false;
-  }
 </script>
 
-<svelte:window onclick={closeOutside} />
 <header class="top">
   <a class="brand" href="#/"><Mark />refbook</a>
   <!-- <span class="tagline">Genome: Bought the book? Which edition?</span> -->
   <nav>
-    <span class="catalog-menu">
-      <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
-      <button type="button" class="open" aria-label="Assemblies" aria-expanded={menu} onclick={() => (menu = !menu)}><Icon name="chevron" /></button>
-      {#if menu}
-        {#await opened then { bs }}
-          <ul class="menu" role="menu">
-            {#each [...bs].sort((a, b) => b.assembly.localeCompare(a.assembly)) as b (b.book)}
-              <li role="none"><a role="menuitem" href={bookHref(b.book)}>{b.assembly}</a></li>
-            {/each}
-            <li role="none" class="all"><a role="menuitem" href="#/catalog">All assemblies</a></li>
-          </ul>
-        {/await}
-      {/if}
-    </span>
-    <a href="#/editor" class:here={parts[0] === "editor"}>Editor</a>
-    <a href="#/sequences" class:here={parts[0] === "sequences" || parts[0] === "sequence"}>Sequences</a>
-    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
     <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
     </button>
+    <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
+    <a href="#/sequences" class:here={parts[0] === "sequences" || parts[0] === "sequence"}>Sequences</a>
+    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
+    <a href="#/editor" class:here={parts[0] === "editor"}>Editor</a>
+    <a href="#/about" class:here={parts[0] === "about"}>About</a>
   </nav>
 </header>
 <main>
@@ -110,8 +86,8 @@
         <EditorView {cat} {book} query={route.current.query} />
       {:else if parts[0] === "editor"}
         <EditorLandingView {bs} />
-      {:else if parts[0] === "learn"}
-        <LearnView {cat} />
+      {:else if parts[0] === "about"}
+        <AboutView {cat} />
       {:else if parts[0] === "sequences"}
         <SequencesView {cat} query={route.current.query} />
       {:else if parts[0] === "sequence" && parts[1]}
