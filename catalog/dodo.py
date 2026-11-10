@@ -37,6 +37,7 @@ from refbook_pipeline import (
     observe,
     roots,
     sources,
+    upload,
 )
 
 RAW, BUILD = layout.raw_dir(), layout.build_dir()
@@ -525,6 +526,20 @@ def task_export():
                        {"name": "out", "long": "out", "default": "", "help": "the directory to create"},
                        {"name": "development", "long": "development", "type": bool, "default": False,
                         "help": "accept a root check that didn't consult ENA (not a release)"}]}
+
+
+def task_upload():
+    """Publish an exported release on Hugging Face: `doit upload --version 0.2.0 --release DIR`, one commit to
+    abdenlab/refbook tagged v<version>, after checking DIR against its catalog.json. Never run unless asked: it is
+    the one task that writes outside this machine (with your Hugging Face login). See refbook_pipeline/upload.py."""
+    def action(version, release):
+        if not version or not release:
+            raise Refused("upload needs --version and --release")
+        print(upload.upload(Path(release), version))
+
+    return {"actions": [action], "uptodate": [False], "verbosity": 2,
+            "params": [{"name": "version", "long": "version", "default": "", "help": "the release's version"},
+                       {"name": "release", "long": "release", "default": "", "help": "the exported release's directory"}]}
 
 
 LAYERS = ["layer_agp", "layer_regions", "layer_placements", "layer_par_y", "layer_padding", "layer_hardmask_grc"]

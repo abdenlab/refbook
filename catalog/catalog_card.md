@@ -7,6 +7,7 @@ tags:
   - GRCh38
   - GRCh37
   - hg19
+  - T2T-CHM13
   - refget
   - seqcol
 configs:

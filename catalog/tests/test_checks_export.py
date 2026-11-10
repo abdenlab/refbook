@@ -114,3 +114,30 @@ def test_a_release_is_never_overwritten(tmp_path):
     (tmp_path / "out").mkdir()
     with pytest.raises(Refused, match="never overwritten"):
         export.export(tmp_path, tmp_path / "out", "0", {}, [], [], "", True)
+
+
+def test_an_upload_wants_the_release_exactly_as_exported(tmp_path):
+    from refbook_pipeline import upload
+    rel = tmp_path / "0.9.0"
+    (rel / "evidence").mkdir(parents=True)
+    (rel / "a.parquet").write_bytes(b"a")
+    (rel / "evidence" / "b.tsv").write_text("b\n")
+    files = {p: {"bytes": (rel / p).stat().st_size, "sha256": checks.sha256(rel / p), "role": "x"}
+             for p in ("a.parquet", "evidence/b.tsv")}
+    (rel / "catalog.json").write_text(json.dumps({"version": "0.9.0", "files": files}))
+    assert upload.verify(rel, "0.9.0")["version"] == "0.9.0"
+    with pytest.raises(Refused, match="not '0.9.1'"):
+        upload.verify(rel, "0.9.1")
+    (rel / "a.parquet").write_bytes(b"A")
+    with pytest.raises(Refused, match="changed since the export: a.parquet"):
+        upload.verify(rel, "0.9.0")
+    (rel / "a.parquet").write_bytes(b"a")
+    (rel / "stray.txt").write_text("x")
+    with pytest.raises(Refused, match="not in catalog.json: stray.txt"):
+        upload.verify(rel, "0.9.0")
+    (rel / "stray.txt").unlink()
+    (rel / "evidence" / "b.tsv").unlink()
+    with pytest.raises(Refused, match="missing: evidence/b.tsv"):
+        upload.verify(rel, "0.9.0")
+    with pytest.raises(Refused, match="no catalog.json"):
+        upload.verify(tmp_path, "0.9.0")

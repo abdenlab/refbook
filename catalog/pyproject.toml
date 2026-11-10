@@ -8,6 +8,7 @@ dependencies = [
     "refbook[datafusion]",
     "pyarrow>=25",
     "doit>=0.37",
+    "huggingface-hub>=2.4.0",
 ]
 
 [tool.uv]

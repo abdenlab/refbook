@@ -1,0 +1,84 @@
+# The web app: build it (the wasm core from Rust, then the npm package and the app) and test it on every pull
+# request and push; on main, deploy it to Cloudflare (https://refbook.abdenlab.org) as a static-assets Worker
+# (app/wrangler.jsonc), as abdenlab/lefsim deploys its demo.
+# Needs the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
+name: app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "js/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/app.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "js/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The release the app reads: the catalog on Hugging Face (a local build is the dev server's).
+  VITE_CATALOG_URL: https://huggingface.co/datasets/abdenlab/refbook/resolve/v0.2.0/
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      # The wasm-bindgen CLI must be the version of the wasm-bindgen crate in Cargo.lock.
+      - name: wasm-bindgen's version, from Cargo.lock
+        id: wb
+        run: echo "version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.wb.outputs.version }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the npm package (the wasm core and its TypeScript)
+        run: pnpm --filter @abdenlab/refbook build
+      - name: Test the npm package
+        run: pnpm --filter @abdenlab/refbook test
+      - name: Build the app
+        run: pnpm --filter refbook-app build
+      # The app's data tests need a catalog build, which CI doesn't have: they skip, the rest run.
+      - name: Test the app
+        run: pnpm --filter refbook-app test
+
+      - name: Deploy
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: app
+          command: deploy
