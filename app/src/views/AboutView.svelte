@@ -35,14 +35,14 @@
 <section class="about">
   <p class="crumbs"><a href="#/">Home</a> / About</p>
   {#await loaded then { bs, nFiles, nEditions, mito }}
-    <h1>One genome, many files</h1>
+    <h1>One genome, one "version", many versions</h1>
     <p>
       A reference genome assembly like GRCh38 is deposited by a submitter (the Genome Reference Consortium) to GenBank. 
       In practice, what users align to is not that original submission but an "analysis set" derived from it.
       There are many of these, curated by different authorities: UCSC, Ensembl, GENCODE, the Broad, 1000 Genomes, Illumina.
     </p>
     <p>Analysis sets differ in which sequences they include or exclude, how the sequences are named, and whether
-      some bases are masked or rewritten. Furthermore, ancillary sequences may be included as decoys or to capture alternative alleles or known species or contaminants.
+      some bases are masked or rewritten. Furthermore, ancillary sequences may be included as "decoys" or to capture reads mapping to alternative alleles or known species or contaminants.
     </p>
     <p>
       <i>Refbook</i> catalogs {n(nEditions)} distinct editions covering {n(nFiles)} published collections across {n(bs.length)} genome assemblies. With a small rule set, each can be rebuilt from the original submitted sequences using a simple recipe.
