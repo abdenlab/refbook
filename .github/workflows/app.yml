@@ -81,4 +81,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: app
+          # The app's own wrangler (a pnpm dev dependency, so it's locked); pnpm-lock.yaml is at the root, so say
+          # which manager (npm can't install a workspace: dependency).
+          packageManager: pnpm
           command: deploy
