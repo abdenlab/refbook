@@ -28,8 +28,8 @@
   // time, else /catalog/ (the dev server's copy of the repository's build).
   const catalogUrl = new URLSearchParams(location.search).get("catalog") ?? import.meta.env.VITE_CATALOG_URL ?? "/catalog/";
   // The download meter (requests, bytes and time per action): a measurement of the static catalog, for development.
-  // Shown by the dev server, and in a build with ?meter in the address.
-  const showMeter = import.meta.env.DEV || new URLSearchParams(location.search).has("meter");
+  // Shown only with ?meter in the address (dev server or build).
+  const showMeter = new URLSearchParams(location.search).has("meter");
 
   const opened = (async () => {
     await init();
@@ -75,7 +75,7 @@
     {@const book = parts[0] === "catalog" || parts[0] === "editor" ? bookFor(parts[1], bs) : undefined}
     {#key route.current}
       {#if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3] && parts[4] === "seq" && parts[5]}
-        <SequenceView {cat} {book} blocks={() => openBlocks(cat)} label={parts[3]} name={parts[5]} query={route.current.query} />
+        <SequenceView {cat} blocks={() => openBlocks(cat)} at={{ book, label: parts[3], name: parts[5] }} query={route.current.query} />
       {:else if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3]}
         <EditionView {cat} {book} label={parts[3]} />
       {:else if parts[0] === "catalog" && book}
@@ -91,7 +91,7 @@
       {:else if parts[0] === "sequences"}
         <SequencesView {cat} query={route.current.query} />
       {:else if parts[0] === "sequence" && parts[1]}
-        <SequencesView {cat} query={route.current.query} sq={parts[1]} />
+        <SequenceView {cat} blocks={() => openBlocks(cat)} sq={parts[1]} query={route.current.query} />
       {:else if parts[0] === "identify"}
         <IdentifyView {cat} query={route.current.query} />
       {:else}

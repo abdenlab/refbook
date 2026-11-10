@@ -16,8 +16,8 @@
   import type { Catalog } from "../data/catalog.ts";
   import { editionHref, editorHref, type Book } from "../data/books.ts";
   import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
-  import { chromSizes, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
-  import { editions, manifest, OPERATION_LABELS, targets, type Edition, type ManifestRow } from "../data/editions.ts";
+  import { chromSizes, inOrder as fileOrder, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
+  import { editions, manifest, OPERATION_LABELS, targetOrder, targets, type Edition, type ManifestRow } from "../data/editions.ts";
   import { pairs } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import * as edit from "../data/recipeEdit.ts";
@@ -44,8 +44,9 @@
     const manifests = new Map(await Promise.all(fs.map(async (f) => [f.edition, await manifest(cat, f.edition)] as const)));
     // The catalog's order is fixed: smallest first.
     const listed = [...fs].sort((a, b) => a.n_sequences - b.n_sequences || a.edition.localeCompare(b.edition));
-    const publishers = new Map([...Map.groupBy(ts, (x) => x.edition)].map(([f, xs]) => [f, [...new Set(xs.map((x) => x.publisher))]]));
-    return { t, fs, listed, publishers, manifests };
+    const published = new Map(Map.groupBy(ts, (x) => x.edition));
+    const publishers = new Map([...published].map(([f, xs]) => [f, [...new Set(xs.map((x) => x.publisher))]]));
+    return { t, fs, listed, publishers, published, manifests };
   }));
 
   type Tab = "catalog" | "guide" | "recipe" | "export" | "info";
@@ -61,7 +62,16 @@
   const asked = untrack(() => query.get("tab"));
   let tab = $state<Tab>(TABS.some(([k]) => k === asked) ? (asked as Tab) : "guide");
   let format = $state<Format>("sizes");
-  let order = $state<Order>("name");
+  // The export's order: by name, karyotypic by role (the default), or, when the recipe makes a cataloged edition, as
+  // in one of its published files (file:<target>, the file's own order, loaded when chosen).
+  let order = $state<string>("karyotypic");
+  let fileOrders = $state<Record<string, string[]>>({});
+  $effect(() => {
+    const target = order.startsWith("file:") ? order.slice(5) : null;
+    if (target && !(target in untrack(() => fileOrders))) {
+      targetOrder(cat, target).then((names) => { fileOrders = { ...fileOrders, [target]: names }; });
+    }
+  });
   let copied = $state<string | null>(null);
 
   function initial(fs: Edition[]): Recipe {
@@ -137,9 +147,14 @@
     return new Map([...manifests].map(([edition, m]) => [edition, pairs(rows, m).filter((p) => p.kind !== "same")]));
   }
 
-  /** A file the recipe makes, or why it can't be made yet. */
-  function file(k: Format, d: NonNullable<ReturnType<typeof attempt>["d"]>, places: Parameters<typeof ordered>[2]): { text: string } | { missing: string } {
-    const rows = ordered(d.rows as ManifestRow[], order, places);
+  /** A file the recipe makes, in order `o`, or why it can't be made yet. */
+  function file(k: Format, d: NonNullable<ReturnType<typeof attempt>["d"]>, places: Parameters<typeof ordered>[2], o: string): { text: string } | { missing: string } {
+    let rows: ManifestRow[];
+    if (o.startsWith("file:")) {
+      const names = fileOrders[o.slice(5)];
+      if (!names) return { missing: "waits for the published file's order" };
+      rows = fileOrder(d.rows as ManifestRow[], names);
+    } else rows = ordered(d.rows as ManifestRow[], o as Order, places);
     if (k === "sizes") return { text: chromSizes(rows) };
     if (d.novel.length) return { missing: `needs every sequence's digests, and ${n(d.novel.length)} have never been built` };
     if (k === "dict") return { text: sequenceDictionary(rows) };
@@ -167,7 +182,7 @@
   <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {b.assembly}</p>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
-  {:then { t, fs, listed, publishers, manifests }}
+  {:then { t, fs, listed, publishers, published, manifests }}
 
     {#if recipe}
       {@const p = edit.primary(recipe)}
@@ -290,7 +305,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>Bases</legend>
+            <legend>Base operations</legend>
             {#each shelf.masks as m (m.layer)}
               <label class="check"><input type="checkbox" checked={edit.hasMask(recipe, m.layer)} onchange={(e) => set(edit.setMask(recipe!, m.layer, e.currentTarget.checked))} /> {m.label} → N</label>
             {/each}
@@ -336,7 +351,7 @@
               </table>
             </div>
           {:else if tab === "guide"}
-            <p class="muted small">Choices commonly made for an analysis goal. Switch one on or off, and watch the choices follow.</p>
+            <p class="muted small">Choices commonly made for an analysis goal. Switch each one on or off.</p>
             <ul class="guide">
               {#each shelf.guide as g (g.goal)}
                 {@const on = g.has(recipe, ctx)}
@@ -368,7 +383,10 @@
             {#if jsonError}<p class="bad small">Not JSON: {jsonError}</p>{/if}
           {:else if tab === "export"}
             {@const stem = d?.equals ?? "design"}
-            {@const made = d ? file(format, d, t.places) : { missing: "needs a recipe that compiles" }}
+            {@const orders = [...ORDERS, ...(d?.equals ? published.get(d.equals) ?? [] : [])
+              .map((x) => [`file:${x.target}`, `as in ${x.publisher}: ${x.alias}`] as [string, string])]}
+            {@const o = orders.some(([k]) => k === order) ? order : "karyotypic"}
+            {@const made = d ? file(format, d, t.places, o) : { missing: "needs a recipe that compiles" }}
             <div class="filebar">
               <div class="formats" role="radiogroup" aria-label="File">
                 {#each FORMATS as [k, label] (k)}
@@ -378,8 +396,8 @@
               <span class="actions">
                 <label class="order" title="The order of the sequences in the file">
                   <Icon name="sort" />
-                  <select aria-label="Order" bind:value={order}>
-                    {#each ORDERS as [k, label] (k)}<option value={k}>{label}</option>{/each}
+                  <select aria-label="Order" value={o} onchange={(e) => (order = e.currentTarget.value)}>
+                    {#each orders as [k, label] (k)}<option value={k}>{label}</option>{/each}
                   </select>
                 </label>
                 <button type="button" class="icon" disabled={!("text" in made)} title="Copy to the clipboard" aria-label="Copy to the clipboard"
@@ -390,7 +408,7 @@
             </div>
             {#if "text" in made}
               <textarea class="paste" rows="24" spellcheck="false" readonly aria-label={FORMATS.find(([k]) => k === format)![1]} value={made.text}></textarea>
-              <p class="muted small">{n(d?.rows.length ?? 0)} sequences, {ORDERS.find(([k]) => k === order)![1]}.{#if format === "seqcol"}
+              <p class="muted small">{n(d?.rows.length ?? 0)} sequences, {orders.find(([k]) => k === o)![1]}.{#if format === "seqcol"}
                 A seqcol digest depends on the order: this file's differs from the one in Info unless the order is by name.{/if}</p>
             {:else}
               <p class="muted">This file {made.missing}.</p>

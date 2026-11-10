@@ -385,7 +385,8 @@ test("the form's edits rebuild published editions from scratch", { skip }, async
 
 test("the form rebuilds T2T-CHM13's and GRCh37's editions: masks, mitochondria, layouts", { skip }, async () => {
   const fs = await editions(cat);
-  // T2T-CHM13: v2.0 by default; the consortium's short-read file is a guide goal; the masked sets from the shelf.
+  // T2T-CHM13: v2.0 by default; the consortium's short-read file is two guide goals, each a choice of its own; the
+  // masked sets from the shelf.
   const t = await designTables(cat, "t2t-chm13", shelfOf("t2t-chm13").masks.map((m) => m.layer));
   const is = (r: ReturnType<typeof edit.fromScratch>) => design(r, t, fs).equals;
   const own = t.mito.get(t.start)!;
@@ -393,11 +394,17 @@ test("the form rebuilds T2T-CHM13's and GRCh37's editions: masks, mitochondria, 
   const ctx = { hla: [], mito: own };
   const v2 = edit.fromScratch(t.start);
   assert.equal(is(v2), "chm13v2.0");
-  const short = SHELVES["t2t-chm13"].guide[0];
-  const sr = short.set(v2, true, ctx);
+  const pars = SHELVES["t2t-chm13"].guide.find((g) => edit.hasMask(g.set(v2, true, ctx), "par_y"))!;
+  const rcrs = SHELVES["t2t-chm13"].guide.find((g) => edit.mitochondrion(g.set(v2, true, ctx), own) === "J01415.2")!;
+  assert.notEqual(pars, rcrs);
+  assert.equal(is(pars.set(v2, true, ctx)), "chm13v2.0-maskedY");
+  const sr = rcrs.set(pars.set(v2, true, ctx), true, ctx);
   assert.equal(is(sr), "chm13v2.0-maskedY-rCRS");
-  assert.ok(short.has(sr, ctx) && !short.has(short.set(sr, false, ctx), ctx));
-  assert.equal(is(short.set(sr, false, ctx)), "chm13v2.0");
+  assert.ok(pars.has(sr, ctx) && rcrs.has(sr, ctx));
+  // Each goal off undoes its own choice only.
+  assert.ok(!pars.has(pars.set(sr, false, ctx), ctx) && rcrs.has(pars.set(sr, false, ctx), ctx));
+  assert.equal(is(rcrs.set(sr, false, ctx)), "chm13v2.0-maskedY");
+  assert.equal(is(rcrs.set(pars.set(sr, false, ctx), false, ctx)), "chm13v2.0");
   assert.equal(edit.mitochondrion(sr, own), "J01415.2");
   assert.deepEqual(edit.primary(sr)!.exclude, [own]);
   assert.equal(is(edit.setNamespace(edit.setMitochondrion(v2, own, null), "grc")), "ensembl-chm13v2.0");

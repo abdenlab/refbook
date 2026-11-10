@@ -59,12 +59,13 @@ type PaddingRow = {
   book?: string; root_id: string; parent_start: number; parent_end: number; orientation: string; parent_length: number;
 };
 
-/** How a row lays its root out by its placement in its edition's book (layer_padding: a root can be placed in two
- * books, on other parents): padded (pad), or only turned to its parent's strand (orient: no Ns); null if neither. */
-export async function padding(cat: Catalog, row: ManifestRow): Promise<rb.Padding | null> {
+/** How a row lays its root out by its placement in its book (`row.book`, else its edition's; layer_padding: a root can
+ * be placed in two books, on other parents): padded (pad), or only turned to its parent's strand (orient: no Ns);
+ * null if neither. */
+export async function padding(cat: Catalog, row: ManifestRow & { book?: string | null }): Promise<rb.Padding | null> {
   const orient = row.operations.includes(ORIENT);
   if (!row.operations.includes(PAD) && !orient) return null;
-  const book = (await editions(cat)).find((e) => e.edition === row.edition)?.book;
+  const book = row.book ?? (await editions(cat)).find((e) => e.edition === row.edition)?.book;
   const p = (await cat.table<PaddingRow>("layer_padding.parquet"))
     .find((r) => r.root_id === row.root_id && (r.book === undefined || r.book === book));
   if (!p) throw new Error(`${row.root_id}: no placement in layer_padding for ${book}`);

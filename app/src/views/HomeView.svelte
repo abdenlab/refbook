@@ -15,9 +15,9 @@
 </script>
 
 <section class="home">
-  <h1>The human reference genome, in every edition</h1>
+  <!-- <h1>The human reference genome, in every edition</h1> -->
   <blockquote class="motto"><p>Genome: Bought the book? Which edition?</p></blockquote>
-  <p class="lede"><i>Refbook</i> is a catalog of commonly used reference sequence collections for genomic analysis, as published by different authorities. We call these different "flavors" of the same genome assembly <b>editions</b>.</p><p class="lede">Using a small rule set, <i>refbook</i> reproduces all published editions from original submitted sequences. This provenance makes editions identifiable, comparable, and lets you reason about how they affect your analysis.</p>
+  <p class="lede"><i>Refbook</i> is a catalog of commonly used reference sequence collections for genomic analysis, as published by different authorities. We call different collections derived from the same genome assembly <b>editions</b>.</p><p class="lede">Using a small rule set, <i>refbook</i> reproduces all published editions from original submitted sequences. This provenance makes editions identifiable, specifiable, comparable, and lets you reason about how they affect your analysis.</p>
   <nav class="doors" aria-label="Start here">
     {#each doors as d (d.href)}
       <a class="door" href={d.href}>
@@ -31,14 +31,13 @@
 
 <style>
   .home { margin: 3rem 0 0; }
-  h1 { font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
   .lede { color: var(--muted); margin: 0 0 2rem; max-width: none; }
-  .motto { position: relative; margin: 1.4rem 0 1.2rem; padding: 0.1rem 0 0.1rem 2.6rem; max-width: 36rem; }
+  .motto { position: relative; margin: 0 0 1.6rem; padding: 0.1rem 0 0.1rem 3.6rem; }
   .motto::before {
-    content: "\201C"; position: absolute; left: 0; top: -0.55rem;
-    font: 700 3.6rem/1 Georgia, "Times New Roman", serif; color: var(--accent); opacity: 0.75;
+    content: "\201C"; position: absolute; left: 0; top: -0.7rem;
+    font: 700 5rem/1 Georgia, "Times New Roman", serif; color: var(--accent); opacity: 0.75;
   }
-  .motto p { margin: 0; font: italic 1.3rem/1.4 Georgia, "Times New Roman", serif; color: var(--text); }
+  .motto p { margin: 0; font: italic 2rem/1.3 Georgia, "Times New Roman", serif; color: var(--text); }
   .doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
   .door {
     display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 1rem; row-gap: 0.35rem;
@@ -54,7 +53,9 @@
   .text { color: var(--muted); font-size: 0.95rem; }
   @media (max-width: 640px) {
     .home { margin-top: 1.5rem; }
-    h1 { font-size: 1.5rem; }
+    .motto { padding-left: 2.6rem; }
+    .motto::before { font-size: 3.6rem; top: -0.5rem; }
+    .motto p { font-size: 1.45rem; }
     .doors { grid-template-columns: 1fr; }
   }
 </style>
