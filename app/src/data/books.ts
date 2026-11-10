@@ -48,6 +48,9 @@ export const editionBook = new Map<string, string>();
 
 const path = (...parts: string[]) => "#/" + parts.map(encodeURIComponent).join("/");
 
+/** The books in the app's order (the catalog's cards, the Editor's switch): by assembly name, GRCh37 first. */
+export const inCatalogOrder = (bs: Book[]): Book[] => [...bs].sort((a, b) => a.assembly.localeCompare(b.assembly));
+
 /** A book's segment in addresses: its assembly's name (GRCh38), which reads better than the book's key. */
 const segment = (book: string) => bookOf.get(book)?.assembly ?? book;
 
@@ -57,19 +60,24 @@ export function bookFor(seg: string | undefined, bs: Book[]): Book | undefined {
   return s ? bs.find((b) => b.assembly.toLowerCase() === s || b.book === s) : undefined;
 }
 
-/** A book's page in the catalog: #/catalog/<assembly>. */
-export const bookHref = (book: string) => path("catalog", segment(book));
+/** A book's page in the catalog: #/catalog/books/<assembly>. */
+export const bookHref = (book: string) => path("catalog", "books", segment(book));
+
+/** The catalog's sequences: the search (#/catalog/sequences?q=), and a stored sequence by digest
+ * (#/catalog/sequences/<SQ.>). */
+export const sequencesHref = (q?: string) => path("catalog", "sequences") + (q ? `?${new URLSearchParams({ q })}` : "");
+export const sequenceHref = (sq: string) => path("catalog", "sequences", sq);
 
 /** A book's Editor: #/editor/<assembly>, with a query (the recipe to open, the tab). */
 export const editorHref = (book: string, query?: URLSearchParams) =>
   path("editor", segment(book)) + (query?.size ? `?${query}` : "");
 
-/** The address of an edition, or of one of its sequences: #/catalog/<assembly>/edition/<label>[/seq/<name>]. Its
+/** The address of an edition, or of one of its sequences: #/catalog/books/<assembly>/edition/<label>[/seq/<name>]. Its
  * book is known once books() has loaded, which the app does before it shows any page. */
 export function editionHref(label: string, seq?: string): string {
   const book = editionBook.get(label);
   if (!book) throw new Error(`${label}: no such edition, or the books aren't loaded`);
-  return path("catalog", segment(book), "edition", label, ...(seq !== undefined ? ["seq", seq] : []));
+  return path("catalog", "books", segment(book), "edition", label, ...(seq !== undefined ? ["seq", seq] : []));
 }
 
 // Families: who makes an edition, from its publishers. iGenomes repackages others' files, so an edition belongs to

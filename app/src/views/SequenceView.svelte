@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A stored sequence, by its digest (#/sequence/<SQ.>) or by its name in an edition (…/edition/<label>/seq/<name>,
+  // A stored sequence, by its digest (#/catalog/sequences/<SQ.>) or by its name in an edition (…/edition/<label>/seq/<name>,
   // a lookup: the same page, with the edition kept in the crumbs). The same digest is the same bases, so this is the
   // one page for them: its digests and how it is made, an overview of the whole sequence (its runs of N, what the
   // operations change, where the view is) above a scroller of its bases, built in the browser from the root's bases
@@ -8,15 +8,16 @@
   // (?start=&end=), and follows the view.
   import type { Blocks } from "../data/blocks.ts";
   import type { Catalog } from "../data/catalog.ts";
-  import { bookHref, bookOf, editionHref, type Book } from "../data/books.ts";
+  import { bookHref, bookOf, editionHref, sequenceHref, sequencesHref, type Book } from "../data/books.ts";
   import { IUPAC_TO_N, ORIENT, PAD, manifest, onSequence, OPERATION_LABELS, padding, region, rootWindow, spans,
            type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { storedSequence } from "../data/sequences.ts";
-  import { bp, n } from "../format.ts";
+  import { bp, n, ncbiUrl } from "../format.ts";
   import BaseScroller from "../components/BaseScroller.svelte";
   import Digest from "../components/Digest.svelte";
   import ErrorBox from "../components/ErrorBox.svelte";
+  import Icon from "../components/Icon.svelte";
   import Overview from "../components/Overview.svelte";
   import { parseLocus } from "./bases.ts";
 
@@ -84,7 +85,7 @@
   }));
 
   /** The page's own address, which the view's range follows. */
-  const here = () => (at ? editionHref(at.label, at.name) : `#/sequence/${encodeURIComponent(sq!)}`);
+  const here = () => (at ? editionHref(at.label, at.name) : sequenceHref(sq!));
   const title = $derived(at ? at.name : sq!);
 
   let scroller = $state<BaseScroller>();
@@ -121,9 +122,9 @@
 
 <section>
   {#if at}
-    <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href={bookHref(at.book.book)}>{at.book.assembly}</a> / <a href={editionHref(at.label)}>{at.label}</a> / {at.name}</p>
+    <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href="#/catalog/books">Books</a> / <a href={bookHref(at.book.book)}>{at.book.assembly}</a> / <a href={editionHref(at.label)}>{at.label}</a> / {at.name}</p>
   {:else}
-    <p class="crumbs"><a href="#/">Home</a> / <a href="#/sequences">Sequences</a> / {sq}</p>
+    <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href={sequencesHref()}>Sequences</a> / {sq}</p>
   {/if}
   {#await loaded then v}
     {#if !v}
@@ -133,13 +134,13 @@
       {@const { row, stored } = v}
       <h1>{at ? at.name : row.root_id}</h1>
       <p class="lede">
-        {bp(row.length)}, from root <a href={`#/sequences?${new URLSearchParams({ q: row.root_id })}`}><code>{row.root_id}</code></a>{row.operations.length
-          ? ` with ${ops(row.operations)}` : ", as submitted"}{#if row.book && row.operations.some((o) => o === PAD || o === ORIENT)}{" "}(by its placement in {assemblyOf(row.book)}){/if}.
+        {bp(row.length)}, from root <a href={sequencesHref(row.root_id)}><code>{row.root_id}</code></a>{#if ncbiUrl(row.root_id)}{" "}<a class="external" href={ncbiUrl(row.root_id)} target="_blank" rel="noopener" title={`${row.root_id} at NCBI, in a new tab`} aria-label={`${row.root_id} at NCBI`}><Icon name="external" /></a>{/if}{row.operations.length
+          ? ` with ${ops(row.operations)}` : " (original)"}{#if row.book && row.operations.some((o) => o === PAD || o === ORIENT)}{" "}(by its placement in {assemblyOf(row.book)}){/if}.
       </p>
       <dl class="ids">
         <dt>MD5</dt><dd><Digest value={row.md5} /></dd>
         <dt><abbr title="GA4GH refget's sequence identifier (sha512t24u)">Refget digest</abbr></dt><dd><Digest value={row.sha512t24u} />{#if at}
-          <div class="muted">This page by digest: <a href={`#/sequence/${encodeURIComponent(row.sha512t24u)}`}>#/sequence/{row.sha512t24u}</a></div>{/if}</dd>
+          <div class="muted">This page by digest: <a href={sequenceHref(row.sha512t24u)}>{sequenceHref(row.sha512t24u)}</a></div>{/if}</dd>
       </dl>
       {#if !v.hosted}
         <p class="muted">An external root, listed with its digests but not hosted, so its bases aren't shown here.</p>
@@ -167,11 +168,11 @@
         <h3>{assemblyOf(book)}</h3>
         <ul class="plain">{#each uses as u (u.edition + u.name)}<li><a href={editionHref(u.edition)}>{u.edition}</a> as <code>{u.name}</code>{#if at && u.edition === at.label && u.name === at.name}{" "}<span class="muted">(this one)</span>{/if}</li>{/each}</ul>
       {:else}
-        <p class="muted">No edition has it: it is a root as submitted that every edition changes or leaves out.</p>
+        <p class="muted">No edition has it: it is an original root that every edition changes or leaves out.</p>
       {/each}
       {#if stored.ways.length > 1}
         <h2>Ways to make it</h2>
-        <ul>{#each stored.ways as w (w.root_id + w.operations.join() + (w.book ?? ""))}<li>{w.root_id}{w.operations.length ? `, with ${ops(w.operations)}` : ", as submitted"}{#if w.book} ({assemblyOf(w.book)}){/if}</li>{/each}</ul>
+        <ul>{#each stored.ways as w (w.root_id + w.operations.join() + (w.book ?? ""))}<li>{w.root_id}{w.operations.length ? `, with ${ops(w.operations)}` : " (original)"}{#if w.book} ({assemblyOf(w.book)}){/if}</li>{/each}</ul>
       {/if}
     {/if}
   {:catch e}

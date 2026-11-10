@@ -47,7 +47,7 @@
     {#each f.operations as op (op)}
       <div class="entry"><strong>{OPERATION_LABELS[op] ?? op}</strong><div>changes {n(affected(op))} of {n(rows.length)} sequences</div></div>
     {:else}
-      <div class="muted entry">None: the roots' bases as submitted</div>
+      <div class="muted entry">None: the roots' original bases</div>
     {/each}
   </div>
   <div class="arrow" aria-hidden="true">→</div>

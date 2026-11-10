@@ -15,8 +15,8 @@
   import { bookFor, books } from "./data/books.ts";
   import BookView from "./views/BookView.svelte";
   import CatalogView from "./views/CatalogView.svelte";
+  import CatalogHomeView from "./views/CatalogHomeView.svelte";
   import AboutView from "./views/AboutView.svelte";
-  import EditorLandingView from "./views/EditorLandingView.svelte";
   import EditorView from "./views/EditorView.svelte";
   import HomeView from "./views/HomeView.svelte";
   import SequencesView from "./views/SequencesView.svelte";
@@ -57,14 +57,13 @@
   <a class="brand" href="#/"><Mark />refbook</a>
   <!-- <span class="tagline">Genome: Bought the book? Which edition?</span> -->
   <nav>
+    <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
+    <a href="#/editor" class:here={parts[0] === "editor"}>Edit</a>
+    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
     <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
     </button>
-    <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
-    <a href="#/sequences" class:here={parts[0] === "sequences" || parts[0] === "sequence"}>Sequences</a>
-    <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
-    <a href="#/editor" class:here={parts[0] === "editor"}>Editor</a>
     <a href="#/about" class:here={parts[0] === "about"}>About</a>
   </nav>
 </header>
@@ -72,26 +71,30 @@
   {#await opened}
     <p class="muted">Loading the catalog…</p>
   {:then { cat, bs }}
-    {@const book = parts[0] === "catalog" || parts[0] === "editor" ? bookFor(parts[1], bs) : undefined}
+    <!-- The book an address names: #/catalog/books/<assembly>/..., #/editor/<assembly>. -->
+    {@const book = parts[0] === "catalog" && parts[1] === "books" ? bookFor(parts[2], bs)
+                 : parts[0] === "editor" ? bookFor(parts[1], bs) : undefined}
+    {@const p = parts[0] === "catalog" && parts[1] === "books" ? parts.slice(3) : []}
     {#key route.current}
-      {#if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3] && parts[4] === "seq" && parts[5]}
-        <SequenceView {cat} blocks={() => openBlocks(cat)} at={{ book, label: parts[3], name: parts[5] }} query={route.current.query} />
-      {:else if parts[0] === "catalog" && book && parts[2] === "edition" && parts[3]}
-        <EditionView {cat} {book} label={parts[3]} />
-      {:else if parts[0] === "catalog" && book}
+      {#if book && p[0] === "edition" && p[1] && p[2] === "seq" && p[3]}
+        <SequenceView {cat} blocks={() => openBlocks(cat)} at={{ book, label: p[1], name: p[3] }} query={route.current.query} />
+      {:else if book && p[0] === "edition" && p[1]}
+        <EditionView {cat} {book} label={p[1]} />
+      {:else if book && parts[0] === "catalog"}
         <BookView {book} />
-      {:else if parts[0] === "catalog"}
+      {:else if parts[0] === "catalog" && parts[1] === "books"}
         <CatalogView {bs} />
-      {:else if parts[0] === "editor" && book}
-        <EditorView {cat} {book} query={route.current.query} />
+      {:else if parts[0] === "catalog" && parts[1] === "sequences" && parts[2]}
+        <SequenceView {cat} blocks={() => openBlocks(cat)} sq={parts[2]} query={route.current.query} />
+      {:else if parts[0] === "catalog" && parts[1] === "sequences"}
+        <SequencesView {cat} query={route.current.query} />
+      {:else if parts[0] === "catalog"}
+        <CatalogHomeView {bs} />
       {:else if parts[0] === "editor"}
-        <EditorLandingView {bs} />
+        <!-- The Editor: the book the address names, else GRCh38's (the one most used). -->
+        <EditorView {cat} {bs} book={book ?? bs.find((b) => b.book === "grch38") ?? bs[0]} query={route.current.query} />
       {:else if parts[0] === "about"}
         <AboutView {cat} />
-      {:else if parts[0] === "sequences"}
-        <SequencesView {cat} query={route.current.query} />
-      {:else if parts[0] === "sequence" && parts[1]}
-        <SequenceView {cat} blocks={() => openBlocks(cat)} sq={parts[1]} query={route.current.query} />
       {:else if parts[0] === "identify"}
         <IdentifyView {cat} query={route.current.query} />
       {:else}

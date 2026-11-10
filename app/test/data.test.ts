@@ -11,11 +11,11 @@ import { catalogHandler } from "../server/catalog.ts";
 import { Blocks } from "../src/data/blocks.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { chromSizes, inOrder, ordered, sequenceDictionary } from "../src/data/exports.ts";
-import { editions, IUPAC_TO_N, manifest, onSequence, padding, region, targetOrder, targets, verify } from "../src/data/editions.ts";
+import { coordinateSystem, editions, IUPAC_TO_N, manifest, onSequence, padding, region, targetOrder, targets, verify } from "../src/data/editions.ts";
 import { decodeRecipe, design, designTables, encodeRecipe, plainRecipe, rootPlaces } from "../src/data/design.ts";
 import { bookFor, bookHref, books, editionHref, editorHref, familyOf, relations } from "../src/data/books.ts";
 import { search, storedSequence } from "../src/data/sequences.ts";
-import { aliasFile, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
+import { aliasFile, aliasJson, distance, identifyTables, level2, matches, mine, pairs, parseHeader, renameAs, renameTo } from "../src/data/identify.ts";
 import * as edit from "../src/data/recipeEdit.ts";
 import { SHELVES, shelfOf } from "../src/data/shelves.ts";
 import { measure, onMeasure } from "../src/data/meter.ts";
@@ -142,9 +142,9 @@ test("books: each assembly's releases and editions, and an edition's address", {
     [["grch37", "GRCh37", 14, "GRCh37", 17, 20], ["grch38", "GRCh38", 15, "GRCh38", 13, 17],
      ["t2t-chm13", "T2T-CHM13", 3, "T2T-CHM13v1.0", 14, 18]]);
   assert.equal(bs[0].releases.at(-1), "GRCh37.p13");
-  assert.equal(editionHref("hs37d5", "1"), "#/catalog/GRCh37/edition/hs37d5/seq/1");
+  assert.equal(editionHref("hs37d5", "1"), "#/catalog/books/GRCh37/edition/hs37d5/seq/1");
   assert.deepEqual([bookHref("grch38"), editorHref("grch38", new URLSearchParams({ from: "hg38" }))],
-                   ["#/catalog/GRCh38", "#/editor/GRCh38?from=hg38"]);
+                   ["#/catalog/books/GRCh38", "#/editor/GRCh38?from=hg38"]);
   assert.deepEqual(["GRCh37", "grch37", "GRCH37", "hg19", undefined].map((s) => bookFor(s, bs)?.book),
                    ["grch37", "grch37", "grch37", undefined, undefined]);
   const fam = (e: string) => familyOf(e, bs.flatMap((b) => b.targets));
@@ -264,7 +264,8 @@ test("a pasted list against the catalog: matched, ranked and renamed", { skip },
   assert.equal(aliasFile(renameTo(few, "genbank", aliases)), "1\tCM000663.2\nchr2\tCM000664.2\n");
   const ens = await manifest(cat, "ensembl-grch38-primary");
   assert.equal(aliasFile(renameAs(matches(few, ens))), "1\t1\nchr2\t2\n");
-  assert.deepEqual(renameAs(matches(few, ens)).at(-1), { from: "phiX174", to: null, how: "not in it", weak: false });
+  assert.deepEqual(renameAs(matches(few, ens)).at(-1), { from: "phiX174", to: null, how: "not in it", weak: false, kind: "none" });
+  assert.deepEqual(JSON.parse(aliasJson(renameAs(matches(few, ens)))), { 1: "1", chr2: "2" });   // matched names only
   // Other names and other bases (hard-masked against IUPAC → N) still rename by root: every Ensembl primary sequence.
   const dh = paste(sequenceDictionary(await manifest(cat, "hs38dh")));
   assert.equal(renameAs(matches(dh, ens)).filter((r) => r.to !== null).length, ens.length);
@@ -452,11 +453,61 @@ test("the form rebuilds T2T-CHM13's and GRCh37's editions: masks, mitochondria, 
   const added = edit.setNamespace(p0, "genbank");   // p0 with rCRS added: its default name follows the namespace
   assert.equal(added.rename.map?.["J01415.2"], "J01415.2");
   assert.equal(edit.setNamespace(edit.setMitochondrionName(p0, null, "J01415.2", "chrMT"), "genbank").rename.map?.["J01415.2"], "chrMT");
-  const yoruba = SHELVES.grch37.guide.find((x) => x.goal === "Matching UCSC's hg19")!;
+  // The goal that carries the Yoruba mitochondrion (found by what it does, not its wording).
+  const yoruba = SHELVES.grch37.guide.find((x) => edit.mitochondrion(x.set(edit.fromScratch(g.start), true, { hla: [], mito: mito(g.start) }), mito(g.start)) === "AF347015.1")!;
   assert.ok(yoruba.has(hg19, { hla: [], mito: null }));
   let top = edit.fromScratch(g.start);
   for (const role of edit.ROLES.slice(1)) top = edit.setRole(top, role, true);
   top = edit.setLayout(edit.setMask(edit.setNamespace(edit.setChromosomeNames(top, "grc"), "genbank"), "par_y", true), "pad");
   assert.equal(edit.layoutOf(top), "pad");
   assert.ok(design(top, g, fs).rows.some((r) => r.operations.includes("pad")));
+});
+
+
+test("every book's guide goals switch on and off, and compile", { skip }, async () => {
+  const fs = await editions(cat);
+  for (const [book, shelf] of Object.entries(SHELVES)) {
+    const t = await designTables(cat, book, shelf.masks.map((m) => m.layer));
+    const ctx = { hla: t.collections.get(edit.HLA) ?? [], mito: t.mito.get(t.start) ?? null };
+    const start = edit.fromScratch(t.start);
+    for (const g of shelf.guide) {
+      const on = g.set(start, true, ctx), off = g.set(on, false, ctx);
+      assert.ok(g.has(on, ctx) && !g.has(off, ctx), `${book}: ${g.goal}`);
+      assert.notEqual(design(on, t, fs).rows.length, 0, `${book}: ${g.goal}`);   // compiles (throws otherwise)
+      assert.deepEqual(design(off, t, fs).rows, design(start, t, fs).rows, `${book}: ${g.goal} off`);
+    }
+  }
+});
+
+
+test("coordinate systems: names and lengths, whatever the order and bases", { skip }, async () => {
+  const systems = new Map(await Promise.all(["grch38-no-alt", "hg38-analysis-set", "hg38"].map(
+    async (e) => [e, coordinateSystem(await manifest(cat, e))] as const)));
+  // As the Python library computes them (refbook.seqcol.level1_attributes): no-alt and the analysis set differ only
+  // in bases, so they share one; hg38, with the alts, doesn't.
+  assert.equal(systems.get("grch38-no-alt"), "_dMQ5dPUNVx4OGQnDAPmGMkVRWWcYV99");
+  assert.equal(systems.get("hg38-analysis-set"), "_dMQ5dPUNVx4OGQnDAPmGMkVRWWcYV99");
+  assert.equal(systems.get("hg38"), "6zLonuX9GDwI9EQWi1T6Q75pcwBvnM74");
+  const rows = await manifest(cat, "hg38");
+  assert.equal(coordinateSystem([...rows].reverse().map((r) => ({ ...r, sha512t24u: null }))), systems.get("hg38"));   // any order, no bases
+});
+
+
+test("compare: a digest the catalog lacks is a different sequence, whatever root its name and length fit", { skip }, async () => {
+  const tables = await identifyTables(cat);
+  const theirs = await manifest(cat, "grch38-no-alt");
+  const chr1 = theirs.find((r) => r.name === "chr1")!;
+  // chr1 at GRCh38's length, with an MD5 no cataloged sequence has; chr2 with no digest at all.
+  const header = parseHeader(`@SQ\tSN:chr1\tLN:${chr1.length}\tM5:00000000000000000000000000000000\n@SQ\tSN:chr2\tLN:242193529\n`);
+  const ids = rb.identifySequences(header.entries, tables);
+  const ms = mine(header.entries, ids);
+  assert.equal(ms[0].root_id, "CM000663.2");      // its name and length give a root...
+  assert.equal(ms[0].operations, null);           // ...but its bases are no cataloged version of it
+  const kinds = new Map(matches(ms, theirs).filter((m) => "name" in m).map((m) => [(m as { name: string }).name, m.kind]));
+  assert.equal(kinds.get("chr1"), "different");   // not "operations": nothing says it is derived from that root
+  assert.equal(kinds.get("chr2"), "unsure");      // no digest: the root, and which version can't be told
+  // Renamed, by root, needs a root we know: under another name, the uncataloged chr1 matches nothing of theirs.
+  const renamed = parseHeader(`@SQ\tSN:one\tLN:${chr1.length}\tM5:00000000000000000000000000000000\n`);
+  const rs = matches(mine(renamed.entries, rb.identifySequences(renamed.entries, tables)), theirs);
+  assert.ok(!rs.some((m) => m.kind === "renamed"));
 });

@@ -14,10 +14,10 @@
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
-  import { editionHref, editorHref, type Book } from "../data/books.ts";
+  import { editionHref, editorHref, inCatalogOrder, type Book } from "../data/books.ts";
   import { decodeRecipe, design, designTables, encodeRecipe, grcNames, plainRecipe, type Recipe } from "../data/design.ts";
   import { chromSizes, inOrder as fileOrder, ordered, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
-  import { editions, manifest, OPERATION_LABELS, targetOrder, targets, type Edition, type ManifestRow } from "../data/editions.ts";
+  import { coordinateSystem, editions, manifest, OPERATION_LABELS, targetOrder, targets, type Edition, type ManifestRow } from "../data/editions.ts";
   import { pairs } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
   import * as edit from "../data/recipeEdit.ts";
@@ -28,7 +28,9 @@
   import Icon from "../components/Icon.svelte";
   import { role } from "./recipe.ts";
 
-  let { cat, query, book }: { cat: Catalog; query: URLSearchParams; book: Book } = $props();
+  let { cat, query, book, bs }: { cat: Catalog; query: URLSearchParams; book: Book; bs: Book[] } = $props();
+  /** The books to switch between, in the catalog's order. */
+  const switchable = untrack(() => inCatalogOrder(bs));
 
   // The view is made anew for each book (App keys it), so the book is read once.
   const b = untrack(() => book);
@@ -168,7 +170,7 @@
     setTimeout(() => (copied = null), 1200);
   }
 
-  const ops = (o: string[]) => (o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "as submitted");
+  const ops = (o: string[]) => (o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "original");
   const SHORT: Record<string, string> = { ucsc: "UCSC", grc: "GRC", genbank: "GenBank", refseq: "RefSeq" };
   const LAYOUTS: [edit.Layout, string][] = [["none", "as submitted"], ["pad", "N-padded to their parent"], ["orient", "turned to their parent's strand"]];
   /** A namespace's names for the release's first chromosome (and an unlocalized scaffold), as the menu shows them. */
@@ -179,7 +181,16 @@
 </script>
 
 <section class="bench">
-  <p class="crumbs"><a href="#/">Home</a> / <a href="#/editor">Editor</a> / {b.assembly}</p>
+  <div class="bench-head">
+    <p class="crumbs"><a href="#/">Home</a> / Editor</p>
+    <!-- One button per book: switching keeps the tab, and each book keeps its recipe for the session. -->
+    <nav class="book-switch" aria-label="Assembly">
+      {#each switchable as x (x.book)}
+        <a href={editorHref(x.book, tab === "guide" ? undefined : new URLSearchParams({ tab }))} class:here={x.book === b.book}
+           aria-current={x.book === b.book ? "page" : undefined}>{x.assembly}</a>
+      {/each}
+    </nav>
+  </div>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
   {:then { t, fs, listed, publishers, published, manifests }}
@@ -219,7 +230,7 @@
           </p>
           <div class="pane">
           <fieldset>
-            <legend><b>{b.assembly}</b></legend>
+            <legend>Assembly</legend>
             <div class="group names-head">
               <label class="release"><strong>Release</strong>
                 <select value={p?.assembly ?? ""} onchange={(e) => set(edit.setRelease(recipe!, e.currentTarget.value, (a) => t.mito.get(a) ?? null))}>
@@ -428,6 +439,8 @@
                   <dt>Edition digest</dt><dd><Digest value={d.id!} /><div class="muted">doesn't depend on the order of the sequences</div></dd>
                   <dt>Seqcol digest</dt><dd><Digest value={d.seqcolDigest!} /><div class="muted">with the sequences in order by name</div></dd>
                 {/if}
+                <!-- Names and lengths only: known even when some digests aren't. -->
+                <dt>Coordinate system digest</dt><dd><Digest value={coordinateSystem(d.rows)} /><div class="muted">its names and lengths, in any order, whatever the bases</div></dd>
               </dl>
             {/if}
             <div class="notes">

@@ -99,7 +99,7 @@ export const SHELVES: Record<string, Shelf> = {
       iupacGoal("GRCh38"),
     ],
     notes: [
-      ["GRCh38", [
+      ["Assembly", [
         ["Release", "p0 is GRCh38 as first released (GCA_000001405.15). Each patch release adds fix and novel patches; none changes the chromosomes."],
         ROLE_NOTE, NAMES_NOTE,
       ]],
@@ -132,12 +132,12 @@ export const SHELVES: Record<string, Shelf> = {
         "par_y"),
       mitoGoal("Match UCSC's original mitochondrial sequence",
         "Use the Yoruba mitochondrion (NC_001807, AF347015.1), which hg19 carries as chrM instead of GRCh37's rCRS: their coordinates differ, so mitochondrial calls on one don't carry to the other.",
-        "AF347015.1."),
+        "AF347015.1"),
       ALTS,
       iupacGoal("GRCh37"),
     ],
     notes: [
-      ["GRCh37", [
+      ["Assembly", [
         ["Release", "p0 is GRCh37 as first released (GCA_000001405.1), and UCSC's hg19; p13 is the last. Each patch release adds fix and novel patches; none changes the chromosomes. p0 and p1 have no mitochondrion: the GRC added rCRS in p2."],
         ROLE_NOTE, NAMES_NOTE,
       ]],
@@ -186,7 +186,7 @@ export const SHELVES: Record<string, Shelf> = {
         "t2t_5s_rdna"),
     ],
     notes: [
-      ["T2T-CHM13", [
+      ["Assembly", [
         ["Release", "v1.0 and v1.1 are the gapless CHM13 assembly, without chrY: CHM13 has none. v2.0 adds chrY, from a different individual (HG002). The consortium's chm13v2.0_noY is v1.1, for benchmarking assemblies of CHM13."],
         ["Role", "T2T-CHM13 is chromosomes only: no scaffolds, alts or patches."],
         NAMES_NOTE,

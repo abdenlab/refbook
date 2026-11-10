@@ -147,6 +147,8 @@ export interface Mine {
   /** Its SQ. digest: given, or the store's for its MD5. Null without a digest, or for an MD5 the catalog lacks. */
   sq: string | null;
   root_id: string | null;
+  /** What was done to its root, when a cataloged digest pins it (null otherwise). */
+  operations: string[] | null;
   /** The roots it may be: its root, or, for a name several roots of its length go by (chrM: rCRS, and CHM13's own
    * mitochondrion), each of them. */
   candidates: string[];
@@ -160,6 +162,7 @@ export function mine(entries: rb.Entry[], ids: rb.Identity[]): Mine[] {
     digested: !!(e.md5 || e.sq),
     sq: ids[i].sequence ?? e.sq ?? null,
     root_id: ids[i].root_id,
+    operations: ids[i].operations ? [...ids[i].operations!] : null,
     candidates: ids[i].root_id ? [ids[i].root_id!]
       : ((ids[i].notes.find((n) => n.kind === "ambiguous_name") as { roots?: string[] } | undefined)?.roots ?? []),
     evidence: ids[i].evidence,
@@ -187,8 +190,10 @@ export function matches(a: Mine[], b: ManifestRow[]): Match[] {
     const y = byName.get(x.name);
     if (!y || used.has(y.name)) { restA.push(x); continue; }
     used.add(y.name);
+    // Operations: both are cataloged versions of the same root. A digest the catalog lacks pins bases that are no
+    // version of any root it has, so its root (a guess from its name and length) says nothing: different.
     const kind = x.digested
-      ? x.sq === y.sha512t24u ? "same" : x.root_id === y.root_id ? "operations" : "different"
+      ? x.sq === y.sha512t24u ? "same" : x.operations !== null && x.root_id === y.root_id ? "operations" : "different"
       : fits(x, y) ? "unsure" : "different";
     out.push({ kind, name: x.name, a: x, b: y });
   }
@@ -204,7 +209,9 @@ export function matches(a: Mine[], b: ManifestRow[]): Match[] {
   };
   for (const x of restA) {
     const exact = x.sq ? bySq.get(x.sq) : undefined;
-    const y = exact ?? x.candidates.map((c) => byRoot.get(c)?.find((r) => fits(x, r))).find((r) => r);
+    // By root, only for a root we know: a cataloged digest's, or (no digest) the one its name and length give.
+    const rooted = !x.digested || x.operations !== null;
+    const y = exact ?? (rooted ? x.candidates.map((c) => byRoot.get(c)?.find((r) => fits(x, r))).find((r) => r) : undefined);
     if (y) { out.push({ kind: "renamed", a: x, b: y, by: exact ? "digest" : x.digested ? "root" : "root_and_length" }); take(y); }
     else out.push({ kind: "a_only", a: x });
   }
@@ -228,7 +235,12 @@ export function distance(ms: Match[]): { off: number; missing: number; extra: nu
 }
 
 /** A line of an alias file: a pasted name and what it becomes, or why it can't. */
-export interface Rename { from: string; to: string | null; how: string; weak: boolean }
+/** A rename, and how sure it is (kind, as Identify's Match badges show it): exact (a digest), likely (the root, not
+ * its version), other (the same root, other bases), ambiguous (several roots), none (no match). */
+export interface Rename { from: string; to: string | null; how: string; weak: boolean; kind: RenameKind }
+export type RenameKind = "exact" | "likely" | "other" | "ambiguous" | "none";
+
+const KIND: Record<rb.Identity["evidence"], RenameKind> = { digest: "exact", name_and_length: "likely", name: "likely", nothing: "none" };
 
 const HOW: Record<rb.Identity["evidence"], string> = {
   digest: "by digest", name_and_length: "by name and length", name: "by name only", nothing: "",
@@ -238,9 +250,12 @@ const HOW: Record<rb.Identity["evidence"], string> = {
 export function renameTo(ms: Mine[], namespace: string, aliases: { root_id: string; namespace: string; alias: string }[]): Rename[] {
   const of = new Map(aliases.filter((a) => a.namespace === namespace).map((a) => [a.root_id, a.alias]));
   return ms.map((x) => {
-    if (!x.root_id) return { from: x.name, to: null, how: "not identified", weak: false };
+    if (!x.root_id) return x.candidates.length > 1
+      ? { from: x.name, to: null, how: "fits several roots", weak: false, kind: "ambiguous" }
+      : { from: x.name, to: null, how: "not identified", weak: false, kind: "none" };
     const to = of.get(x.root_id) ?? null;
-    return { from: x.name, to, how: to ? HOW[x.evidence] : `${x.root_id} has no ${namespace} name`, weak: x.evidence === "name" };
+    return { from: x.name, to, how: to ? HOW[x.evidence] : `${x.root_id} has no ${namespace} name`, weak: x.evidence === "name",
+             kind: to ? KIND[x.evidence] : "none" };
   });
 }
 
@@ -250,14 +265,22 @@ export function renameAs(ms: Match[]): Rename[] {
   for (const m of ms) {
     if (m.kind === "b_only") continue;
     const from = m.a.name, weak = m.a.evidence === "name";
-    if (m.kind === "same" || m.kind === "unsure") out.push({ from, to: m.b.name, how: m.kind === "same" ? "by digest" : "same root and length", weak });
-    else if (m.kind === "renamed") out.push({ from, to: m.b.name, how: { digest: "by digest", root_and_length: "same root and length", root: "same root, other bases" }[m.by], weak });
-    else if (m.kind === "operations") out.push({ from, to: m.b.name, how: "same root, other bases", weak });
-    else if (m.kind === "different") out.push({ from, to: null, how: "the name is used for another sequence", weak: false });
-    else out.push({ from, to: null, how: "not in it", weak: false });
+    // An unsure match on a name several roots go by: ambiguous, though it fits theirs.
+    const unsure: RenameKind = m.a.candidates.length > 1 ? "ambiguous" : "likely";
+    if (m.kind === "same" || m.kind === "unsure") out.push({ from, to: m.b.name, how: m.kind === "same" ? "by digest" : "same root and length", weak,
+                                                            kind: m.kind === "same" ? "exact" : unsure });
+    else if (m.kind === "renamed") out.push({ from, to: m.b.name, how: { digest: "by digest", root_and_length: "same root and length", root: "same root, other bases" }[m.by], weak,
+                                              kind: m.by === "digest" ? "exact" : m.by === "root" ? "other" : unsure });
+    else if (m.kind === "operations") out.push({ from, to: m.b.name, how: "same root, other bases", weak, kind: "other" });
+    else if (m.kind === "different") out.push({ from, to: null, how: "the name is used for another sequence", weak: false, kind: "none" });
+    else out.push({ from, to: null, how: "not in it", weak: false, kind: "none" });
   }
   return out;
 }
 
 /** An alias file: from and to, tab-separated, one rename a line (as bcftools --rename-chrs reads). */
 export const aliasFile = (rs: Rename[]) => rs.filter((r) => r.to !== null).map((r) => `${r.from}\t${r.to}\n`).join("");
+
+/** The same renames as a dictionary, yours to theirs, as JSON (the matched names only). */
+export const aliasJson = (rs: Rename[]) =>
+  JSON.stringify(Object.fromEntries(rs.filter((r) => r.to !== null).map((r) => [r.from, r.to])), null, 1) + "\n";

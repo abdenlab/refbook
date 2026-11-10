@@ -43,6 +43,12 @@ export async function manifest(cat: Catalog, edition: string): Promise<ManifestR
   return (await cat.table<ManifestRow>("manifests.parquet")).filter((r) => r.edition === edition);
 }
 
+/** A collection's coordinate system digest: seqcol's sorted_name_length_pairs, its names and lengths in any order,
+ * whatever its bases. Collections that share it share coordinates. */
+export const coordinateSystem = (rows: { name: string; length: number; sha512t24u?: string | null }[]): string =>
+  rb.seqcolLevel1(rows.map((r) => r.name), rows.map((r) => r.length), rows.map((r) => r.sha512t24u ?? ""))
+    .sorted_name_length_pairs;
+
 /** A target's sequence names in its own order. */
 export async function targetOrder(cat: Catalog, target: string): Promise<string[]> {
   const rows = await cat.table<{ target: string; position: number; name: string }>("target_sequences.parquet");

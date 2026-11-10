@@ -11,6 +11,13 @@ export function bp(x: number, short = false): string {
   return `${x} bp`;
 }
 
+/** An INSDC accession's record at NCBI (GenBank CM000663.2, RefSeq NC_000001.11, WGS JTFH01000001.1), or null
+ * for an identifier that isn't one (IMGTHLA:3.18.0:HLA05419, 1000G:hs37d5). */
+export function ncbiUrl(accession: string): string | null {
+  return /^[A-Z]{1,6}_?\d+(\.\d+)?$/.test(accession)
+    ? `https://www.ncbi.nlm.nih.gov/nuccore/${encodeURIComponent(accession)}` : null;
+}
+
 export function bytes(x: number): string {
   if (x >= 1e6) return `${(x / 1e6).toFixed(2)} MB`;
   if (x >= 1e3) return `${(x / 1e3).toFixed(1)} kB`;

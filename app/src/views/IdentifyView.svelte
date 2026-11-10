@@ -12,11 +12,11 @@
   import * as rb from "@abdenlab/refbook";
   import { untrack } from "svelte";
   import type { Catalog } from "../data/catalog.ts";
-  import { editionHref } from "../data/books.ts";
+  import { editionHref, sequenceHref } from "../data/books.ts";
   import { inOrder, sequenceDictionary } from "../data/exports.ts";
   import { editions, manifest, OPERATION_LABELS, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
   import {
-    aliasFile, distance, identifyTables, level2, matches, mine, parseHeader, renameAs, renameTo,
+    aliasFile, aliasJson, distance, identifyTables, level2, matches, mine, parseHeader, renameAs, renameTo,
     type Header, type Match, type Mine,
   } from "../data/identify.ts";
   import { measure } from "../data/meter.ts";
@@ -55,12 +55,11 @@
   const LIMIT = 500;
   let text = $state("");
   let source = $state<string | null>(null);   // the catalog file the text came from, while unedited
-  let editing = $state(true);
   let result = $state<{ header: Header; ids: rb.Identity[]; ms: Mine[] } | null>(null);
   let error = $state<unknown>(null);
   let busy = $state(false);
-  let onlyNotes = $state(false);
   let copied = $state(false);
+  let aliasFormat = $state<"tsv" | "json">("tsv");
 
   /** The page's address: the tab and choices, and the catalog file pasted (a pasted list isn't put in the URL). */
   function remember() {
@@ -82,7 +81,6 @@
       const { tables } = await ready;
       const ids = rb.identifySequences(header.entries, tables);
       result = { header, ids, ms: mine(header.entries, ids) };
-      editing = !header.entries.length;
     } catch (e) {
       error = e;
     } finally {
@@ -126,8 +124,6 @@
   });
 
   const rows = $derived(result ? result.header.entries.map((e, i) => ({ e, id: result!.ids[i] })) : []);
-  const shown = $derived(onlyNotes ? rows.filter((r) => r.id.notes.length || r.id.evidence === "nothing") : rows);
-  const tally = $derived(Object.groupBy(rows, (r) => r.id.evidence));
   const digested = $derived(result ? result.ms.filter((m) => m.digested).length : 0);
 
   /** Every edition, nearest first: how many sequences differ, and how many only a digest could confirm. */
@@ -144,28 +140,27 @@
     return out;
   }
 
-  const EVIDENCE: Record<rb.Identity["evidence"], string> = {
-    digest: "by digest", name_and_length: "by name and length", name: "by name only", nothing: "unknown",
-  };
   const KINDS: [Match["kind"], string][] = [
-    ["same", "the same sequence, under the same name"],
-    ["unsure", "the same root and length, under the same name: without a digest, which version can't be told"],
-    ["operations", "the same root under the same name, with other bases"],
-    ["different", "the same name for another sequence"],
-    ["renamed", "the same sequence under another name"],
-    ["a_only", "only in yours"],
-    ["b_only", "only in theirs"],
+    ["same", "share the same sequence, using the same name"],
+    ["unsure", "share same length and name"],
+    ["operations", "share the same name and are derived from the same root"],
+    ["different", "share the same name but describe different sequences"],
+    ["renamed", "share the same sequence under different names"],
+    ["a_only", "exist only in your set"],
+    ["b_only", "exist only in their set"],
   ];
-  const ops = (o: string[] | null) => (o === null ? "" : o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "as submitted");
+  const ops = (o: string[] | null) => (o === null ? "" : o.length ? o.map((x) => OPERATION_LABELS[x] ?? x).join(" + ") : "original");
   const order = (v: boolean | null) => (v === null ? "—" : v ? "yes" : "no");
-  const root = (m: Mine) => m.root_id ?? "unidentified";
   const fileName = (ts: { target: string; publisher: string; alias: string }[], s: string) => {
     const t = ts.find((x) => x.target === s);
     return t ? `${t.publisher}: ${t.alias}` : s;
   };
+  /** What was done to your sequence's root, as far as its digest says: its operations, or that the catalog lacks it. */
+  const yoursOps = (m: Mine) => (m.operations ? ops(m.operations) : "not in the catalog");
+
   function note(x: rb.Note): string {
     switch (x.kind) {
-      case "unknown_digest": return `digest ${x.digest} is not in the catalog`;
+      case "unknown_digest": return `digest not in catalog`;
       case "digests_disagree": return "its MD5 and SQ. digest are of different sequences";
       case "length_differs": return `length should be ${n(x.expected)}`;
       case "name_of_other_roots": return `the name names ${x.roots.join(", ")}`;
@@ -173,7 +168,18 @@
       case "no_root_of_this_length": return `no root of this length named so (${x.roots.join(", ")})`;
     }
   }
-  const editionsOf = (id: rb.Identity) => [...new Set(id.editions.map((u) => u.edition))];
+  /** How sure a row's identity is, as its Match badge shows it. */
+  function matchOf(id: rb.Identity, several: string[]) {
+    if (id.evidence === "digest") return { kind: "exact", icon: "check" as const, label: "exact", title: "By digest: this sequence, base for base" };
+    if (several.length) return { kind: "ambiguous", icon: "question" as const, label: "ambiguous",
+      title: `Its name and length fit ${several.length} roots; a digest would tell which` };
+    if (id.root_id) return { kind: "likely", icon: "question" as const, label: id.evidence === "name" ? "by name" : "by name and length",
+      title: id.cognates.length > 1 ? `The root, but not which of its ${id.cognates.length} cataloged versions: a digest would tell` : "The root; a digest would confirm its bases" };
+    return { kind: "unknown", icon: "info" as const, label: "unknown", title: "Nothing in the catalog matches" };
+  }
+  /** The roots a name and length fit, when they fit several (chrM at 16,569 bp: rCRS, or CHM13's own). */
+  const severalRoots = (id: rb.Identity) =>
+    id.notes.flatMap((x) => (x.kind === "ambiguous_name" ? x.roots : []));
 
   /** Seqcol's comparison, over the attributes the pasted list has. */
   function seqcol(ms: Mine[], theirs: ManifestRow[]) {
@@ -191,35 +197,42 @@
   }
 </script>
 
+<!-- Your sequence, as far as the catalog can say: its root and operations (a cataloged digest), its root (a name and
+     length), or, for a digest the catalog lacks, that it isn't a cataloged sequence (its name and length's root a guess). -->
+{#snippet yours(m: Mine)}
+  {#if m.digested && m.operations === null}not in the catalog{#if m.root_id}{" "}<span class="muted">(its name and length fit <code>{m.root_id}</code>)</span>{/if}
+  {:else if m.root_id}<code>{m.root_id}</code>{#if m.operations}{" "}{ops(m.operations)}{/if}
+  {:else}unidentified{/if}
+{/snippet}
+
 <section class="identify-page">
   <p class="crumbs"><a href="#/">Home</a> / Identify</p>
   <h1>Identify sequences</h1>
   {#await ready}
     <p class="muted">Loading the catalog…</p>
   {:then { fs, ts, manifests, byEdition, aliases, namespaces }}
-    {#if editing}
-      <p class="lede">
-        Paste a <code>.fai</code>, a chrom.sizes, a <code>.dict</code> or SAM header (<code>samtools view -H</code>), VCF
-        <code>##contig</code> lines, a small FASTA, or a seqcol collection (level 2 JSON). A digest pins a sequence; a name and length give its root.
-        Nothing leaves your browser.
-      </p>
-      <textarea class="paste" rows="8" spellcheck="false" aria-label="Sequence list" bind:value={text} oninput={() => (source = null)}
-                placeholder={"chr1\t248956422\nchr2\t242193529\n..."}></textarea>
-      <p class="controls">
-        <button type="button" onclick={run} disabled={busy || !text.trim()}>{busy ? "Identifying…" : "Identify"}</button>
-        <span class="muted">or try</span>
-        <button type="button" onclick={() => example("fai")}>a .fai</button>
-        <button type="button" onclick={() => example("dict")}>a .dict with MD5s</button>
-        <span class="muted">or a file from the catalog</span>
-        <select aria-label="A file from the catalog" value="" onchange={(e) => fill(e.currentTarget.value)}>
-          <option value="">choose…</option>
-          <optgroup label="Editions (by name)">{#each fs as f (f.edition)}<option value={f.edition}>{f.edition}</option>{/each}</optgroup>
-          <optgroup label="Published files (their order)">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
-        </select>
-      </p>
-    {:else if result}
+    <!-- The list stays as pasted: identifying shows what it is below, without hiding the box. -->
+    <p class="lede">
+      Paste a <code>.fai</code>, a chrom.sizes, a <code>.dict</code> or SAM header (<code>samtools view -H</code>), VCF
+      <code>##contig</code> lines, a small FASTA, or a seqcol collection (level 2 JSON). A digest pins a sequence; a name and length give its root.
+      Nothing leaves your browser.
+    </p>
+    <textarea class="paste" rows="8" spellcheck="false" aria-label="Sequence list" bind:value={text} oninput={() => (source = null)}
+              placeholder={"chr1\t248956422\nchr2\t242193529\n..."}></textarea>
+    <p class="controls">
+      <button type="button" onclick={run} disabled={busy || !text.trim()}>{busy ? "Identifying…" : "Identify"}</button>
+      <span class="muted">or try</span>
+      <button type="button" onclick={() => example("fai")}>a .fai</button>
+      <button type="button" onclick={() => example("dict")}>a .dict with MD5s</button>
+      <span class="muted">or a file from the catalog</span>
+      <select aria-label="A file from the catalog" value="" onchange={(e) => fill(e.currentTarget.value)}>
+        <option value="">choose…</option>
+        <optgroup label="Editions (by name)">{#each fs as f (f.edition)}<option value={f.edition}>{f.edition}</option>{/each}</optgroup>
+        <optgroup label="Published files (their order)">{#each ts as t (t.target)}<option value={t.target}>{t.publisher}: {t.alias}</option>{/each}</optgroup>
+      </select>
+    </p>
+    {#if result}
       <p class="pasted">
-        <button type="button" class="icon" title="Edit the list" aria-label="Edit the list" onclick={() => (editing = true)}><Icon name="load" /></button>
         <span><strong>{n(rows.length)} sequences</strong>, {result.header.format}{#if digested}, {digested === rows.length ? "all" : n(digested)} with digests{/if}{#if source}
           <span class="muted">{" · "}the .dict of {fileName(ts, source)}</span>{/if}</span>
       </p>
@@ -238,6 +251,34 @@
       {#if tab === "identify"}
         {@const exact = near.filter((x) => x.off === 0 && x.unsure === 0)}
         {@const fits = near.filter((x) => x.off === 0 && x.unsure > 0)}
+        <!-- The sequences: a box of its own, scrolled within the page, the header kept in view. -->
+        <div class="table-wrap scroller">
+          <table class="identify">
+            <thead><tr><th>Name</th><th class="num">Length</th><th>Match</th><th>Root</th><th>Operations</th><th>Notes</th></tr></thead>
+            <tbody>
+              {#each rows.slice(0, LIMIT) as { e, id }, i (i)}
+                {@const several = severalRoots(id)}
+                {@const m = matchOf(id, several)}
+                <tr class={`m-${m.kind}`}>
+                  <td>{e.name ?? ""}</td>
+                  <td class="num">{e.length != null ? n(e.length) : ""}</td>
+                  <!-- How sure: exact (a digest), the root but not its version (a name and length), several roots, nothing. -->
+                  <td><span class={`match ${m.kind}`} title={m.title}><Icon name={m.icon} /> {m.label}</span></td>
+                  <!-- The root: known (exact: a link to the sequence), or the ones a name and length fit. -->
+                  <td>{#if id.root_id && id.sequence}<a href={sequenceHref(id.sequence)} title={`The sequence ${id.sequence}`}><code>{id.root_id}</code></a>
+                    {:else if id.root_id}<code>{id.root_id}</code>
+                    {:else if several.length}{#each several as r, j (r)}{j ? " or " : ""}<code>{r}</code>{/each}{/if}</td>
+                  <!-- What was done to it: known only from a digest. -->
+                  <td>{#if id.operations}{ops(id.operations)}{:else if id.root_id}<span class="muted">unknown</span>{/if}</td>
+
+                  <td>{#each id.notes.filter((x) => x.kind !== "ambiguous_name") as x, j (j)}<div class="bad">{note(x)}</div>{/each}</td>
+                </tr>
+              {/each}
+              {#if rows.length > LIMIT}<tr><td colspan="6" class="muted">and {n(rows.length - LIMIT)} more</td></tr>{/if}
+            </tbody>
+          </table>
+        </div>
+        <!-- What the list is, as a whole: after its sequences. -->
         <div class="whole" class:match={exact.length > 0}>
           {#if exact.length}
             <p><Icon name="check" /> Exactly the edition <a href={editionHref(exact[0].edition)}>{exact[0].edition}</a>, published as
@@ -251,45 +292,11 @@
             <p>The names and lengths are those of {#each fits as x, i (x.edition)}{i ? (i === fits.length - 1 ? " or " : ", ") : ""}<a href={editionHref(x.edition)}>{x.edition}</a>{/each}.
               <span class="muted">Without digests the bases can't be told apart: paste a .dict with MD5s, or FASTA, to know which.</span></p>
           {:else}
-            <p>Not an edition in the catalog. The nearest:
+            <p>Does not match an edition in the catalog. The most similar ones are 
               {#each near.slice(0, 3) as x, i (x.edition)}{i ? ", " : ""}<button type="button" class="link" onclick={() => { against = x.edition; show("compare"); }}>{x.edition}</button>
-                <span class="muted">({x.missing ? `${n(x.missing)} of yours not in it` : "all of yours"}{x.extra ? `, ${n(x.extra)} more of its own` : ""})</span>{/each}.
+              {/each}.
             </p>
           {/if}
-        </div>
-        <p>
-          {#each Object.entries(EVIDENCE) as [k, label] (k)}
-            {#if tally[k as rb.Identity["evidence"]]?.length}<span class="tag">{n(tally[k as rb.Identity["evidence"]]!.length)} {label}</span>{/if}
-          {/each}
-          <label class="muted"><input type="checkbox" bind:checked={onlyNotes} /> only those with notes or unknown</label>
-        </p>
-        <div class="table-wrap">
-          <table class="identify">
-            <thead><tr><th>Name</th><th class="num">Length</th><th>Evidence</th><th>What it is</th><th>Used by</th><th>Notes</th></tr></thead>
-            <tbody>
-              {#each shown.slice(0, LIMIT) as { e, id }, i (i)}
-                <tr class={`ev-${id.evidence}`}>
-                  <td>{e.name ?? ""}</td>
-                  <td class="num">{e.length != null ? n(e.length) : ""}</td>
-                  <td>{EVIDENCE[id.evidence]}</td>
-                  <td>
-                    {#if id.root_id}<code>{id.root_id}</code>{/if}
-                    {#if id.operations}{" "}{ops(id.operations)}
-                    {:else if id.root_id}{" "}<span class="muted">{id.cognates.length > 1 ? `one of ${id.cognates.length} cataloged versions` : id.cognates.length ? "its one cataloged version" : "a version the catalog lacks"}</span>{/if}
-                  </td>
-                  <td>
-                    {#if id.editions.length}
-                      <details><summary>{editionsOf(id).length} edition{editionsOf(id).length === 1 ? "" : "s"}</summary>
-                        <ul class="plain">{#each id.editions as u (u.edition + u.name + u.sequence)}<li><a href={editionHref(u.edition, u.name)}>{u.edition}</a> as {u.name}</li>{/each}</ul>
-                      </details>
-                    {/if}
-                  </td>
-                  <td>{#each id.notes as x, j (j)}<div class="bad">{note(x)}</div>{/each}</td>
-                </tr>
-              {/each}
-              {#if shown.length > LIMIT}<tr><td colspan="6" class="muted">and {n(shown.length - LIMIT)} more</td></tr>{/if}
-            </tbody>
-          </table>
         </div>
 
       {:else if tab === "compare"}
@@ -307,36 +314,10 @@
           {@const ms = matches(result.ms, b)}
           {@const groups = Object.groupBy(ms, (m) => m.kind)}
           {@const sc = seqcol(result.ms, b)}
-          <h2>What differs, sequence by sequence</h2>
-          {#each KINDS as [kind, label] (kind)}
-            {@const g = groups[kind] ?? []}
-            {#if g.length}
-              <details open={kind !== "same" && g.length <= 50}>
-                <summary><strong>{n(g.length)}</strong> {label}</summary>
-                <div class="table-wrap">
-                  <table>
-                    <tbody>
-                      {#each g.slice(0, LIMIT) as m, i (i)}
-                        <tr>
-                          {#if m.kind === "same" || m.kind === "unsure"}<td>{m.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}</td>
-                          {:else if m.kind === "operations"}<td>{m.name}</td><td><code>{m.b.root_id}</code>: theirs {ops(m.b.operations)}; yours other bases</td>
-                          {:else if m.kind === "different"}<td>{m.name}</td><td>yours <code>{root(m.a)}</code>; theirs <code>{m.b.root_id}</code> {ops(m.b.operations)}</td>
-                          {:else if m.kind === "renamed"}<td>{m.a.name} → {m.b.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}{#if m.by !== "digest"} <span class="muted">({m.by === "root" ? "same root, other bases" : "by root and length"})</span>{/if}</td>
-                          {:else if m.kind === "a_only"}<td>{m.a.name}</td><td><code>{root(m.a)}</code>{#if m.a.length !== null}, {n(m.a.length)} bp{/if}</td>
-                          {:else}<td>{m.b.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}, {n(m.b.length)} bp</td>{/if}
-                        </tr>
-                      {/each}
-                      {#if g.length > LIMIT}<tr><td colspan="2" class="muted">and {n(g.length - LIMIT)} more</td></tr>{/if}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            {/if}
-          {/each}
-
-          <h2>Seqcol comparison</h2>
-          <p class="muted">GA4GH seqcol's <code>/comparison</code>: each attribute counted on its own. Shared elements come in the same order, or not (— when fewer than two are shared).
-            {#if !sc.full}Not every sequence of yours has a digest, so it is compared by names{result.ms.every((m) => m.length !== null) ? " and lengths" : ""} only.{/if}</p>
+          <h2 class="act">GA4GH seqcol comparison
+            <button type="button" class="icon" title="Copy the comparison (JSON)" aria-label="Copy the comparison as JSON"
+                    onclick={() => copy(JSON.stringify(sc.cmp, null, 2))}><Icon name={copied ? "check" : "copy"} /></button></h2>
+                    <p>Comparing against editions orders their sequences by name; against published versions uses their published order.</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Attribute</th><th class="num">Yours</th><th class="num">Theirs</th><th class="num">Shared</th><th>Same order</th></tr></thead>
@@ -349,7 +330,34 @@
               </tbody>
             </table>
           </div>
-          <details><summary>The comparison as JSON</summary><pre class="json">{JSON.stringify(sc.cmp, null, 2)}</pre></details>
+
+          <h2>Differences by sequence</h2>
+          {#each KINDS as [kind, label] (kind)}
+            {@const g = groups[kind] ?? []}
+            {#if g.length}
+              <details class={`kind-${kind}`}>
+                <summary><strong>{n(g.length)}</strong> {label}</summary>
+                <div class="table-wrap">
+                  <table>
+                    <tbody>
+                      {#each g.slice(0, LIMIT) as m, i (i)}
+                        <tr>
+                          {#if m.kind === "same" || m.kind === "unsure"}<td>{m.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}</td>
+                          {:else if m.kind === "operations"}<td>{m.name}</td><td><code>{m.b.root_id}</code>: yours: {yoursOps(m.a)}; theirs: {ops(m.b.operations)}</td>
+                          {:else if m.kind === "different"}<td>{m.name}</td><td>yours: {@render yours(m.a)}; theirs: <code>{m.b.root_id}</code> {ops(m.b.operations)}</td>
+                          {:else if m.kind === "renamed"}<td>{m.a.name} → {m.b.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}{#if m.by === "root"} <span class="muted">(same root; yours {yoursOps(m.a)})</span>{:else if m.by !== "digest"} <span class="muted">(by root and length)</span>{/if}</td>
+                          {:else if m.kind === "a_only"}<td>{m.a.name}</td><td>{@render yours(m.a)}{#if m.a.length !== null}, {n(m.a.length)} bp{/if}</td>
+                          {:else}<td>{m.b.name}</td><td><code>{m.b.root_id}</code> {ops(m.b.operations)}, {n(m.b.length)} bp</td>{/if}
+                        </tr>
+                      {/each}
+                      {#if g.length > LIMIT}<tr><td colspan="2" class="muted">and {n(g.length - LIMIT)} more</td></tr>{/if}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            {/if}
+          {/each}
+
         {:catch e}
           <ErrorBox error={e} />
         {/await}
@@ -366,13 +374,20 @@
             </select>
           </label>
           {#await job then renames}
-            {@const file = aliasFile(renames)}
-            {@const stem = `${ns ?? to}.aliases.tsv`}
+            {@const file = aliasFormat === "tsv" ? aliasFile(renames) : renames.some((r) => r.to !== null) ? aliasJson(renames) : ""}
+            {@const stem = `${ns ?? to}.aliases.${aliasFormat}`}
             <span class="actions">
+              <!-- Two exports: the table (tab-separated, as bcftools reads it), and a dictionary (JSON). -->
+              <span class="formats" role="radiogroup" aria-label="File">
+                {#each [["tsv", "aliases.tsv"], ["json", "aliases.json"]] as [k, label] (k)}
+                  <button type="button" role="radio" aria-checked={aliasFormat === k} class:here={aliasFormat === k}
+                          onclick={() => (aliasFormat = k as "tsv" | "json")}>{label}</button>
+                {/each}
+              </span>
               <button type="button" class="icon" disabled={!file} title="Copy to the clipboard" aria-label="Copy to the clipboard"
                       onclick={() => copy(file)}><Icon name={copied ? "check" : "copy"} /></button>
               <button type="button" class="icon" disabled={!file} title={`Download ${stem}`} aria-label={`Download ${stem}`}
-                      onclick={() => download(stem, file)}><Icon name="download" /></button>
+                      onclick={() => download(stem, file, aliasFormat === "json" ? "application/json" : "text/plain")}><Icon name="download" /></button>
             </span>
           {/await}
         </div>
@@ -381,8 +396,7 @@
         {:then renames}
           {@const missing = renames.filter((r) => r.to === null).length}
           <p class="muted small">
-            {n(renames.length - missing)} of {n(renames.length)} names have a match{#if missing}; the {n(missing)} without one are left out of the file{/if}.
-            One rename a line, tab-separated, as <code>bcftools annotate --rename-chrs</code> reads it.
+            {n(renames.length - missing)} of {n(renames.length)} names have a match{#if missing}; the unmatched sequences are excluded from the export{/if}.
           </p>
           <div class="table-wrap">
             <table class="renames">
@@ -392,7 +406,8 @@
                   <tr>
                     <td>{r.from}</td>
                     <td>{#if r.to !== null}{r.to}{:else}<span class="muted">—</span>{/if}</td>
-                    <td class:bad={r.to === null} class:muted={r.to !== null && !r.weak} class:warn={r.weak}>{r.how}</td>
+                    <td><span class={`match ${r.kind === "other" ? "likely" : r.kind === "none" ? "unknown" : r.kind}`}>
+                      <Icon name={r.kind === "exact" ? "check" : r.kind === "none" ? "info" : "question"} /> {r.how}</span></td>
                   </tr>
                 {/each}
                 {#if renames.length > LIMIT}<tr><td colspan="3" class="muted">and {n(renames.length - LIMIT)} more</td></tr>{/if}

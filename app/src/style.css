@@ -13,6 +13,7 @@
   --ok: #1d7a3e;
   --bad: #b3261e;
   --warn: #8a5a00;
+  --ambiguous: #c2410c;   /* between --warn and --bad: Identify's ambiguous rows */
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* The mark's colours (docs/assets/make_mark.py has the same). */
   --mark-spine: #9097a1; --mark-band: #262a30; --mark-ed: #1f5fa8; --mark-ed-band: #0f3563; --mark-shelf: #1d1f23;
@@ -22,14 +23,14 @@
   :root:not([data-theme="light"]) {
     --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
     --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
-    --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
+    --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; --ambiguous: #fb923c; color-scheme: dark;
     --mark-spine: #a3a9b2; --mark-band: #2a2e34; --mark-ed: #7fb2ec; --mark-ed-band: #2c5c93; --mark-shelf: #e6e6e3;
   }
 }
 :root[data-theme="dark"] {
   --bg: #15171a; --surface: #1d2024; --text: #e6e6e3; --muted: #9aa0a9; --line: #30343a;
   --accent: #7fb2ec; --op-bg: #1f2a38; --op-text: #a9c8ef; --changed-bg: #4a2c12; --changed-text: #ffc58f;
-  --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; color-scheme: dark;
+  --n-text: #5e646d; --ok: #5cc985; --bad: #ff8a80; --warn: #f0b860; --ambiguous: #fb923c; color-scheme: dark;
     --mark-spine: #a3a9b2; --mark-band: #2a2e34; --mark-ed: #7fb2ec; --mark-ed-band: #2c5c93; --mark-shelf: #e6e6e3;
 }
 
@@ -63,14 +64,55 @@ textarea.paste {
   border: 1px solid var(--line); border-radius: 8px; resize: vertical;
 }
 pre.json { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.8rem; }
-table.identify tr.ev-nothing td:first-child { color: var(--bad); }
+/* A row's name takes its Match badge's color. */
+table.identify tr.m-likely td:first-child { color: var(--warn); }
+table.identify tr.m-ambiguous td:first-child { color: var(--ambiguous); }
+table.identify tr.m-unknown td:first-child { color: var(--bad); }
+/* Compare's groups, colored by what they say: the same (green), unconfirmed (amber), different (orange), only yours
+   (blue), only theirs (red). Operations and renamed stay uncolored: neither is one thing (see IdentifyView). */
+details.kind-same > summary { color: var(--ok); }
+details.kind-unsure > summary { color: var(--warn); }
+details.kind-different > summary { color: var(--ambiguous); }
+details.kind-a_only > summary { color: var(--accent); }
+details.kind-b_only > summary { color: var(--bad); }
+/* Identify's Match badges: how sure a row's identity is, at a glance. */
+.match { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.85rem; white-space: nowrap; }
+.match.exact { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
+.match.likely { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.match.ambiguous { color: var(--ambiguous); background: color-mix(in srgb, var(--ambiguous) 12%, var(--surface)); }
+.match.unknown { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--surface)); }
 details > summary { cursor: pointer; }
+/* Doors: the cards a landing page offers (the home page's, the catalog's), a glyph, a title and a line each. */
+.doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.door {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 1rem; row-gap: 0.35rem;
+  padding: 1.4rem 1.5rem; min-height: 9rem; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+}
+.door:hover { text-decoration: none; border-color: var(--accent); box-shadow: 0 2px 12px rgb(0 0 0 / 0.06); transform: translateY(-1px); }
+.door .glyph { grid-row: span 2; font-size: 1.6rem; color: var(--accent); line-height: 1; padding-top: 0.1rem; }
+.door .title { font-weight: 600; font-size: 1.1rem; display: inline-flex; align-items: center; gap: 0.4rem; }
+.door .title .icon { color: var(--muted); font-size: 0.9em; transition: transform 120ms; }
+.door:hover .title .icon { transform: translateX(3px); color: var(--accent); }
+.door .text { color: var(--muted); font-size: 0.95rem; }
+.doors.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 860px) { .doors.three { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .doors { grid-template-columns: 1fr; } }
+
 /* The workbench: one frame, the shelf beside the stage, filling the window below the header and above the meter;
    each side scrolls on its own. A band across the top: the shelf's status, the stage's tabs. */
 #app:has(.workbench) { height: 100dvh; display: flex; flex-direction: column; }
 #app:has(.workbench) > main { max-width: 1240px; flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 2.9rem; }
 section.bench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-section.bench > .crumbs { margin-bottom: 0.6rem; }
+/* The Editor's top line: the crumbs, then a switch between the books. */
+section.bench > .bench-head { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.bench-head .crumbs { margin: 0; }
+.book-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.book-switch a { padding: 0.3rem 0.9rem; color: var(--muted); font-size: 0.92rem; border-left: 1px solid var(--line); }
+.book-switch a:first-child { border-left: none; }
+.book-switch a:hover { color: var(--text); text-decoration: none; background: var(--op-bg); }
+.book-switch a.here { color: var(--accent); background: var(--op-bg); font-weight: 600; }
 .workbench { flex: 1; min-height: 0; display: grid; grid-template-columns: 24.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .workbench > .shelf, .workbench > .stage { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -170,7 +212,7 @@ main { max-width: calc(72rem + 32px); margin: 0 auto; padding: 1.25rem 16px 7rem
 h1 { font-size: 1.7rem; margin: 0.4rem 0 0.5rem; letter-spacing: -0.015em; }
 h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
 h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
-.lede { font-size: 1.02rem; max-width: 70ch; }
+.lede { font-size: 1.02rem; }   /* a page's opening paragraph: as wide as the page's column */
 .muted { color: var(--muted); }
 .crumbs { color: var(--muted); font-size: 0.9rem; margin: 0; }
 
@@ -183,6 +225,9 @@ th { font-weight: 600; color: var(--muted); font-size: 0.82rem; white-space: now
 ul.plain { list-style: none; margin: 0; padding: 0; }
 .publisher { font-weight: 500; }
 table.editions td:first-child { white-space: nowrap; }
+/* A link out of the app (to NCBI): marked by its icon, opening in a new tab. */
+a.external { display: inline-flex; align-items: center; gap: 0.25em; }
+a.external .icon { font-size: 0.75em; opacity: 0.75; }
 .alias { color: var(--muted); font-size: 0.88em; overflow-wrap: anywhere; }   /* long file names break where they must */
 .naming { color: var(--muted); }
 .op, .tag {
@@ -264,6 +309,10 @@ pre.bases .pos { color: var(--muted); user-select: none; }
 .tabs.strip { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 1.2rem 0 1rem; padding: 0; }
 .pasted { display: flex; gap: 0.6rem; align-items: center; margin: 0.6rem 0 0; padding: 0.5rem 0.7rem;
   border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+/* Identify's sequences: at most a screenful, scrolled within the page, the header row kept in view. */
+.table-wrap.scroller { max-height: 28rem; overflow-y: auto; }
+.table-wrap.scroller thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.whole { margin-top: 1rem; }
 .whole p { margin: 0 0 0.8rem; padding: 0.55rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .whole.match p { color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
 .whole.match a { color: inherit; font-weight: 600; }

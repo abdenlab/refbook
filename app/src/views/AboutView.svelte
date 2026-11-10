@@ -1,6 +1,6 @@
 <script lang="ts">
   // About: why one genome has many files, shown with the mitochondrion, and how refbook tells them apart.
-  import { books, editionHref, type Book } from "../data/books.ts";
+  import { books, editionHref, inCatalogOrder, type Book } from "../data/books.ts";
   import type { Catalog } from "../data/catalog.ts";
   import { OPERATION_LABELS, type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
@@ -14,7 +14,7 @@
    * editions that have it; and the editions with none. */
   async function mitochondria(bs: Book[]) {
     const rows = (await cat.table<ManifestRow>("manifests.parquet")).filter((r) => r.root_id in MITOCHONDRIA);
-    return [...bs].sort((a, b) => b.assembly.localeCompare(a.assembly)).map((b) => {
+    return inCatalogOrder(bs).map((b) => {
       const labels = b.editions.map((e) => e.edition);
       const mine = rows.filter((r) => labels.includes(r.edition));
       const versions = [...Map.groupBy(mine, (r) => `${r.root_id}\t${r.name}\t${[...r.operations].join(" ")}`).values()]
@@ -37,22 +37,35 @@
   {#await loaded then { bs, nFiles, nEditions, mito }}
     <h1>One genome, many files</h1>
     <p>
-      An assembly such as GRCh38 is published once, by the Genome Reference Consortium. What people align to is a
-      FASTA file someone made from it, and there are many: UCSC's, Ensembl's, GENCODE's, the GRC's own analysis sets,
-      Broad's, 1000 Genomes', Illumina's. They differ in which sequences they hold, what they call them, and whether
-      some bases are masked or rewritten. Two files that are both "hg19" can disagree on chrM.
+      A reference genome assembly like GRCh38 is deposited by a submitter (the Genome Reference Consortium) to GenBank. 
+      In practice, what users align to is not that original submission but an "analysis set" derived from it.
+      There are many of these, curated by different authorities: UCSC, Ensembl, GENCODE, the Broad, 1000 Genomes, Illumina.
+    </p>
+    <p>Analysis sets differ in which sequences they include or exclude, how the sequences are named, and whether
+      some bases are masked or rewritten. Furthermore, ancillary sequences may be included as decoys or to capture alternative alleles or known species or contaminants.
     </p>
     <p>
-      refbook catalogs {n(nFiles)} such files of {n(bs.length)} assemblies. Rebuilt from the original sequences, they
-      reduce to {n(nEditions)} distinct editions.
+      <i>Refbook</i> catalogs {n(nEditions)} distinct editions covering {n(nFiles)} published collections across {n(bs.length)} genome assemblies. With a small rule set, each can be rebuilt from the original submitted sequences using a simple recipe.
     </p>
+
+    <h2>How refbook sorts it out</h2>
+    <dl class="terms">
+      <dt>Roots</dt>
+      <dd>The original sequences, as submitted to GenBank. These come from the releases of each assembly and ancillary sequences from elsewhere.</dd>
+      <dt>Recipes</dt>
+      <dd>A declarative grammar describing the roots to select, operations to apply to bases, and renaming.</dd>
+      <dt>Editions</dt>
+      <dd>The result of applying a recipe: a set of named sequences, ignoring the order they appear in. Published files that differ
+        only in order are one edition.</dd>
+      <dt>Checks</dt>
+      <dd>An edition is cataloged only when its recipe reproduces each target sequence from its roots.</dd>
+    </dl>
 
     <h2>The mitochondrion, for example</h2>
     <p>
-      Three different mitochondrial genomes travel as <code>chrM</code>: rCRS, the standard reference; the
-      mitochondrion of a Yoruba individual, which UCSC's hg19 carries; and CHM13's own, which starts at another point
-      of the circle. The same rCRS is <code>chrM</code>, <code>MT</code> or <code>chrMT</code>, depending on the file.
-      Some files have none; one has two.
+      Three different mitochondrial genomes appear as <code>chrM</code> in the wild: rCRS, the standard reference; the
+      mitochondrion of a Yoruba individual, and that of CHM13, which has the same length as rCRS but starts at another point
+      along the circular genome. The rCRS sequence itself is variably called <code>chrM</code>, <code>MT</code> or <code>chrMT</code>, depending on the publisher.
     </p>
     {#each mito as c (c.book.book)}
       <h3 class="assembly">{c.book.assembly}</h3>
@@ -77,30 +90,14 @@
         </table>
       </div>
     {/each}
-
-    <h2>How refbook tells them apart</h2>
-    <dl class="terms">
-      <dt>Roots</dt>
-      <dd>The original sequences, as submitted to GenBank: every release of each assembly, and the few sequences
-        files add from elsewhere (EBV, decoys, HLA alleles).</dd>
-      <dt>Recipes</dt>
-      <dd>Each published file, written as which roots it selects, what it does to their bases (masks, IUPAC codes
-        to N, padding), and what it names them.</dd>
-      <dt>Editions</dt>
-      <dd>What a recipe makes: a set of named sequences, identified by digest whatever its order. Files that differ
-        only in order are one edition.</dd>
-      <dt>Checks</dt>
-      <dd>A file is cataloged only when its recipe rebuilds it, sequence by sequence, from the roots.</dd>
-    </dl>
   {:catch e}
     <ErrorBox error={e} />
   {/await}
 </section>
 
 <style>
-  .about > p { max-width: 70ch; }
   .assembly { text-transform: none; letter-spacing: normal; font-size: 1rem; color: var(--text); margin: 1.2rem 0 0.5rem; }
-  .terms { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.2rem; max-width: 70ch; }
+  .terms { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.2rem; }
   .terms dt { font-weight: 600; }
   .which { white-space: nowrap; }
   .terms dd { margin: 0; }

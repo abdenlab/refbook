@@ -7,7 +7,7 @@
   import { bookHref, editionHref, editorHref, relations, type Book } from "../data/books.ts";
   import { chromSizes, ordered as inOrder, ORDERS, sequenceDictionary, type Order } from "../data/exports.ts";
   import { inOrder as fileOrder } from "../data/exports.ts";
-  import { editions, manifest, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
+  import { coordinateSystem, editions, manifest, targetOrder, targets, type ManifestRow } from "../data/editions.ts";
   import { measure } from "../data/meter.ts";
   import { bp, download, n } from "../format.ts";
   import Digest from "../components/Digest.svelte";
@@ -29,7 +29,8 @@
     const [fs, ts, rows, names, pl, rel] = await Promise.all([editions(cat), targets(cat), manifest(cat, label), assemblyNames(),
                                                              places(), relations(cat, label)]);
     const f = fs.find((x) => x.edition === label && x.book === book.book);
-    return { f, rows, names, places: pl, rel, mine: ts.filter((t) => t.edition === label),
+    const coords = coordinateSystem(rows);
+    return { f, rows, names, places: pl, rel, coords, mine: ts.filter((t) => t.edition === label),
              recipe: f ? (JSON.parse(f.recipe) as Recipe) : null };
   }));
 
@@ -61,9 +62,9 @@
   }
 </script>
 
-{#await loaded then { f, rows, names, places, rel, mine, recipe }}
+{#await loaded then { f, rows, names, places, rel, mine, recipe, coords }}
   <section>
-    <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href={bookHref(book.book)}>{book.assembly}</a> / {label}</p>
+    <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href="#/catalog/books">Books</a> / <a href={bookHref(book.book)}>{book.assembly}</a> / {label}</p>
     {#if !f || !recipe}
       <h1>No such edition</h1>
       <p><a href={bookHref(book.book)}>Back to {book.assembly}</a></p>
@@ -83,8 +84,8 @@
       <dl class="ids">
         <dt>Edition digest</dt>
         <dd><Digest value={f.id} /><div class="muted">Identifies the collection of named sequences regardless of sequence order.</div></dd>
-        <dt>Seqcol digest</dt>
-        <dd><Digest value={f.seqcol_digest} /><div class="muted">Identifies the collection of named sequences ordered by sequence name.</div></dd>
+        <dt>Coordinate system digest</dt>
+        <dd><Digest value={coords} /><div class="muted">Identifies the sequence names and lengths regardless of order and content.</div></dd>
       </dl>
 
       <h2 class="act">Recipe
@@ -114,8 +115,7 @@
       <SequencesTable edition={label} rows={sorted ?? rows} {places} orders={tableOrders(mine)} bind:order={tableOrder} />
 
       {#if rel.length}
-        <h2>Related editions</h2>
-        <p class="muted">How this edition stands to the other {book.assembly} editions it is simply related to, nearest first.</p>
+        <h2>Similar editions</h2>
         <ul class="relations">
           {#each rel as r (r.other)}
             <li>{#if r.kind === "within"}

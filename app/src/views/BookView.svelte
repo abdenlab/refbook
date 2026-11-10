@@ -17,14 +17,11 @@
 </script>
 
 <section>
-  <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / {book.assembly}</p>
-  <h1 class="act">{book.assembly}, as published
+  <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / <a href="#/catalog/books">Books</a> / {book.assembly}</p>
+  <h1 class="act">{book.assembly}
     <a class="action" href={editorHref(book.book, new URLSearchParams({ tab: "catalog" }))} title={`Design a ${book.assembly} edition of your own, starting from the catalog's`}><Icon name="load" /> Editor</a></h1>
   <p class="lede">
-    {n(book.targets.length)} published files reduce to {n(book.editions.length)} editions: distinct sets of named
-    sequences, each a recipe over the same original sequences, checked by rebuilding the file. They are drawn from
-    {n(book.releases.length)} releases ({book.releases[0]} – {book.releases.at(-1)}), {n(book.nSequences)} sequences
-    in all.
+    {book.assembly} ({n(book.releases.length)} releases) is published as {n(book.targets.length)} different collections by the authorities listed below. Ignoring sequence order, they reduce to {n(book.editions.length)} distinct editions.
   </p>
 
   {#each groups as g (g.key)}
@@ -59,3 +56,4 @@
     </div>
   {/each}
 </section>
+

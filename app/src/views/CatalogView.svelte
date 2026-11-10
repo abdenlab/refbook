@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The catalog: one card per assembly, newest first. Each opens its book.
-  import { bookHref, familyOf, FAMILIES, type Book } from "../data/books.ts";
+  // The catalog: one card per assembly, GRCh37 first. Each opens its book.
+  import { bookHref, familyOf, FAMILIES, inCatalogOrder, type Book } from "../data/books.ts";
   import { n } from "../format.ts";
   import Icon from "../components/Icon.svelte";
 
@@ -19,16 +19,16 @@
   const spine = (bands: number[][]) =>
     `linear-gradient(to bottom, ${bands.flatMap(([a, b]) => [`transparent ${a}%`, `var(--band) ${a}%`, `var(--band) ${b}%`, `transparent ${b}%`]).join(", ")})`;
 
-  const cards = $derived([...bs].sort((a, b) => b.assembly.localeCompare(a.assembly)).map((b, i) => {
+  const cards = $derived(inCatalogOrder(bs).map((b, i) => {
     const fams = new Set(b.editions.map((e) => familyOf(e.edition, b.targets)));
     return { b, publishers: FAMILIES.filter((f) => fams.has(f.key)).map((f) => f.name), bands: spine(BANDS[i % BANDS.length]) };
   }));
 </script>
 
 <section class="catalog">
-  <p class="crumbs"><a href="#/">Home</a> / Catalog</p>
-  <h1>Catalog</h1>
-  <p class="lede">Each <b>book</b> in <i>refbook</i> corresponds to a reference genome assembly. Published FASTA files and their summaries and digests reduce to <b>editions</b>, independent of sequence order.</p>
+  <p class="crumbs"><a href="#/">Home</a> / <a href="#/catalog">Catalog</a> / Books</p>
+  <h1>Books</h1>
+  <p class="lede">Each <b>book</b> in <i>refbook</i> corresponds to a reference genome assembly, along with commonly included ancillary sequences.<br>Ignoring the order of the sequences, the collections appearing in published FASTA files reduce to <b>editions</b>.</p>
   <div class="books">
     {#each cards as { b, publishers, bands } (b.book)}
       <a class="book" href={bookHref(b.book)}>
