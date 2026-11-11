@@ -35,17 +35,17 @@
 <section class="about">
   <p class="crumbs"><a href="#/">Home</a> / About</p>
   {#await loaded then { bs, nFiles, nEditions, mito }}
-    <h1>One genome, one "version", many versions</h1>
+    <h1>One genome, same "version", many versions</h1>
     <p>
       A reference genome assembly like GRCh38 is deposited by a submitter (the Genome Reference Consortium) to GenBank. 
-      In practice, what users align to is not that original submission but an "analysis set" derived from it.
-      There are many of these, curated by different authorities: UCSC, Ensembl, GENCODE, the Broad, 1000 Genomes, Illumina.
+      In practice, what users align to is not that original submission but an <b>analysis set</b> derived from it.
+      There are many of these, curated by different authorities such as UCSC, Ensembl, GENCODE, the Broad, 1000 Genomes, and Illumina.
     </p>
     <p>Analysis sets differ in which sequences they include or exclude, how the sequences are named, and whether
       some bases are masked or rewritten. Furthermore, ancillary sequences may be included as "decoys" or to capture reads mapping to alternative alleles or known species or contaminants.
     </p>
     <p>
-      <i>Refbook</i> catalogs {n(nEditions)} distinct editions covering {n(nFiles)} published collections across {n(bs.length)} genome assemblies. With a small rule set, each can be rebuilt from the original submitted sequences using a simple recipe.
+      <i>Refbook</i> catalogs {n(nEditions)} distinct editions covering {n(nFiles)} published sequence collections across {n(bs.length)} genome assemblies. With a small rule set, each can be rebuilt from the original submitted sequences using a simple recipe.
     </p>
 
     <h2>How refbook sorts it out</h2>
@@ -56,15 +56,15 @@
       <dd>A declarative grammar describing the roots to select, operations to apply to bases, and renaming.</dd>
       <dt>Editions</dt>
       <dd>The result of applying a recipe: a set of named sequences, ignoring the order they appear in. Published files that differ
-        only in order are one edition.</dd>
+        only in order are the same edition.</dd>
       <dt>Checks</dt>
       <dd>An edition is cataloged only when its recipe reproduces each target sequence from its roots.</dd>
     </dl>
 
     <h2>The mitochondrion, for example</h2>
     <p>
-      Three different mitochondrial genomes appear as <code>chrM</code> in the wild: rCRS, the standard reference; the
-      mitochondrion of a Yoruba individual, and that of CHM13, which has the same length as rCRS but starts at another point
+      Three different mitochondrial genomes appear as <code>chrM</code> in the wild: the standard reference, rCRS; the
+      mitochondrion of a Yoruba individual; and that of CHM13, which has the same length as rCRS but starts at another point
       along the circular genome. The rCRS sequence itself is variably called <code>chrM</code>, <code>MT</code> or <code>chrMT</code>, depending on the publisher.
     </p>
     {#each mito as c (c.book.book)}

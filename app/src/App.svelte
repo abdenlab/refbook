@@ -57,6 +57,7 @@
   <a class="brand" href="#/"><Mark />refbook</a>
   <!-- <span class="tagline">Genome: Bought the book? Which edition?</span> -->
   <nav>
+    <a href="#/about" class:here={parts[0] === "about"}>About</a>
     <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
     <a href="#/editor" class:here={parts[0] === "editor"}>Edit</a>
     <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
@@ -64,7 +65,6 @@
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
     </button>
-    <a href="#/about" class:here={parts[0] === "about"}>About</a>
   </nav>
 </header>
 <main>

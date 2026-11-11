@@ -52,7 +52,7 @@
   }));
 
   type Tab = "catalog" | "guide" | "recipe" | "export" | "info";
-  const TABS: [Tab, string][] = [["guide", "Guide"], ["catalog", "Catalog"], ["recipe", "Recipe"], ["export", "Export"], ["info", "Info"]];
+  const TABS: [Tab, string][] = [["guide", "Guide"], ["catalog", "Catalog"], ["recipe", "Recipe"], ["info", "Info"], ["export", "Export"]];
   type Format = "sizes" | "dict" | "seqcol";
   const FORMATS: [Format, string][] = [["sizes", "chrom.sizes"], ["dict", ".dict"], ["seqcol", "seqcol.json"]];
 

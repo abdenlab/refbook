@@ -214,8 +214,7 @@
     <!-- The list stays as pasted: identifying shows what it is below, without hiding the box. -->
     <p class="lede">
       Paste a <code>.fai</code>, a chrom.sizes, a <code>.dict</code> or SAM header (<code>samtools view -H</code>), VCF
-      <code>##contig</code> lines, a small FASTA, or a seqcol collection (level 2 JSON). A digest pins a sequence; a name and length give its root.
-      Nothing leaves your browser.
+      <code>##contig</code> lines, a small FASTA, or a seqcol collection (level 2 JSON). A digest pins down a sequence exactly; a name and length can identify a likely root.
     </p>
     <textarea class="paste" rows="8" spellcheck="false" aria-label="Sequence list" bind:value={text} oninput={() => (source = null)}
               placeholder={"chr1\t248956422\nchr2\t242193529\n..."}></textarea>
