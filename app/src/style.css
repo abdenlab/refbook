@@ -54,6 +54,10 @@ code.small { font-size: 0.8em; color: var(--muted); }
 .top nav { align-items: center; }
 .top nav button.theme { border: none; background: none; color: var(--muted); padding: 0.25rem; font-size: 1rem; line-height: 1; display: inline-flex; }
 .top nav button.theme:hover { color: var(--text); }
+.top nav a.icon-link { padding: 0.25rem; font-size: 1rem; line-height: 1; display: inline-flex; }
+.top nav a.icon-link:hover { color: var(--text); text-decoration: none; }
+/* The GitHub mark is top-heavy (the head above, a thin tail below): lowered to look centred. */
+.top nav a.icon-link .icon { transform: translateY(1px); }
 .tagline { color: var(--muted); font-size: 0.9rem; }
 .top nav { margin-left: auto; display: flex; gap: 1rem; font-size: 0.95rem; }
 .top nav a { color: var(--muted); }

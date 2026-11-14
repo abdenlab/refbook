@@ -65,6 +65,7 @@
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
     </button>
+    <a class="icon-link" href="https://github.com/abdenlab/refbook" title="refbook on GitHub" aria-label="refbook on GitHub"><Icon name="github" /></a>
   </nav>
 </header>
 <main>
