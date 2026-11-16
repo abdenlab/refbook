@@ -1,10 +1,6 @@
-# Assembly registry: scoping
+# Design notes: the original scope
 
-|             |                                    |
-| ----------- | ---------------------------------- |
-| **Status**  | Scoping draft                      |
-| **Created** | 2026-10-29                         |
-| **Notes**   | [_scratch/prior-art.md](_scratch/prior-art.md), [_scratch/hg38-flavor-survey.md](_scratch/hg38-flavor-survey.md) |
+!!! note "A historical document"
 
 ## The problem in one paragraph
 
@@ -24,8 +20,7 @@ purpose?"
 
 We checked about a dozen GRCh38 distributions. We read only their metadata,
 plus individual contigs fetched by byte range, without downloading whole
-FASTAs. Details are in
-[_scratch/hg38-flavor-survey.md](_scratch/hg38-flavor-survey.md).
+FASTAs.
 
 **One chr21, four sequences.** Every source below names it `chr21` (or `21`) at
 length 46,709,983:
@@ -69,8 +64,7 @@ The other things that would trip a user up:
 ## What already exists, and what it leaves open
 
 The standards side is better than its reputation, but nobody has curated the
-content or made it easy to use. Full notes with sources are in
-[_scratch/prior-art.md](_scratch/prior-art.md).
+content or made it easy to use.
 
 | Layer | Standard / tool | Gap |
 | --- | --- | --- |
@@ -81,7 +75,7 @@ content or made it easy to use. Full notes with sources are in
 | Name conventions | UCSC chromAlias, GenomeInfoDb, dpryan79/ChromosomeMappings | Map names to names only, with no digests, so they can't detect that two "chr1"s differ |
 | Sequence aliases | biocommons SeqRepo | Sequence-level only. No collections |
 
-None of these tools stores where an edition came from. Each records what a
+None of these tools stores where an edition came from. Each records what an
 edition is (its digests, its names), not how it was made. That is the approach
 taken here: store the lossless sources once, and treat every edition as a recipe
 applied to them.
@@ -240,7 +234,7 @@ against.
 
 ### Recipes
 
-A **edition** is a recipe applied to roots. The operations:
+An **edition** is a recipe applied to roots. The operations:
 
 1. **select** sequences, by identifier, role, molecule or assembly unit;
 2. **place** sequences onto a coordinate frame. In AGP terms this covers
@@ -250,7 +244,7 @@ A **edition** is a recipe applied to roots. The operations:
 4. **change the alphabet**: IUPAC→`N`, or a change of case;
 5. **rename** into a namespace, or with an explicit map;
 6. ~~**order** the sequences~~ and 7. ~~**format** the output~~: removed
-   2026-11-04. An edition is a named sequence set (docs/GLOSSARY.md), so order and
+   2026-11-04. An edition is a named sequence set ([glossary](../concepts/glossary.md)), so order and
    formatting are recorded from each published file, not reproduced.
 
 A root after the sequence-level operations (mask, alphabet) is a
@@ -259,7 +253,7 @@ sequences in published files are a root as submitted, the identity
 derivative. The others are, for example, chrY with the GRC hard-mask, or chr1
 with IUPAC→`N`. ("Variant" would read as a mutation, so it isn't used.)
 
-**Reconstruction is the verification.** An edition counts as catalogd only
+**Reconstruction is the verification.** An edition counts as cataloged only
 once running its recipe reproduces the per-sequence digests of the published
 file. A label can't be wrong because it isn't asserted; it is the name of a
 recipe that has been checked. An edition that doesn't reproduce is a finding in
@@ -379,19 +373,6 @@ Both depend on the catalog knowing the MD5. A CRAM aligned to an edition that
 hasn't been reproduced (milestone 2) can't be resolved. Hosting the most-used
 derived sequences, or running a recipe-applying edge function as a public
 `REF_PATH`, is possible later. It is a hosting decision, not a design one.
-
-## Fit with CompoSeq
-
-- **Transport.** Region fetches return the Sequence schema. An edition's digest
-  is the obvious value to put in schema metadata (the sequence RFC's unresolved
-  question 1). CRAM readers get a way to find their reference.
-- **Execution.** The digest kernels listed in the sequence RFC (refget
-  MD5/`SQ.`, SAM `M5`, seqcol aggregates) are needed here first.
-- **GIQL.** Joins can check that both sides share a coordinate system, and
-  rename when they don't. The gap and component layers are interval tables that
-  can be joined like any other.
-- **Agents.** "Which reference is this BAM aligned to, and can I join it with
-  that BED?" gets a deterministic answer.
 
 ## Scope
 

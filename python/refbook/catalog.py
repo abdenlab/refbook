@@ -5,7 +5,7 @@ digest, findable by MD5), how to make its bases: a root and the nucleotide
 operations applied to it. The collection store holds named collections by
 seqcol digest. Editions (cataloged named sequence sets, with labels, recipes and
 facets) and targets (the files that reproduce them) are curated entries on top;
-see docs/GLOSSARY.md.
+see docs/concepts/glossary.md.
 
 A catalog is a directory of the pipeline's outputs: a release made by
 the pipeline's export (`doit export`, with a catalog.json manifest), or a

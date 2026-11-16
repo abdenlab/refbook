@@ -1,0 +1,37 @@
+/* The header's App link (docs/.overrides/partials/source.html), beside the
+   repository link, as in the app's own header. */
+.md-header__source {
+  display: flex;
+  align-items: center;
+  width: auto;
+  gap: 1.2rem;
+}
+
+.md-header__source .md-source {
+  flex: none;
+  width: 9rem;
+}
+
+.refbook-app {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.refbook-app:hover {
+  text-decoration: underline;
+}
+
+/* In the phone menu, the same link as a row above the repository's. */
+.md-nav__source .refbook-app {
+  display: block;
+  padding: 0.5rem 0.8rem 0.2rem;
+  font-size: 0.7rem;
+}
+
+/* The logo: the mark drawn for light backgrounds, swapped for the one drawn
+   for dark backgrounds in the dark scheme. */
+[data-md-color-scheme="slate"] .md-logo img {
+  content: url("../assets/refbook-mark-dark.svg");
+}

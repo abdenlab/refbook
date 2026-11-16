@@ -470,8 +470,8 @@ def task_check_roots():
 
 
 def task_check_roots_ena():
-    """check_roots, consulting ENA's refget server too (3,097 requests; a release needs it; never run unless asked,
-    or by an export)."""
+    """check_roots, consulting ENA's refget server too (one request per root, 3,417 in release 0.2.0; a release
+    needs it; never run unless asked, or by an export)."""
     return roots_check(ena=True)
 
 

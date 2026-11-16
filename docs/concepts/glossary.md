@@ -72,6 +72,19 @@ The terms refbook uses, grouped from the genome outward.
   UCSC/hg38") are **aliases** of the edition, and one edition often has several:
   the GRC no-alt analysis set and iGenomes NCBI/GRCh38 are the same edition.
 
+**book**
+: An assembly, every release of it, the sequences its editions add from
+  outside it (decoys, EBV, another mitochondrion, HLA alleles), and the
+  editions made from them: GRCh37, GRCh38 and T2T-CHM13 so far. Declared in
+  `catalog/books/<book>/book.toml`, which also holds what is particular to the
+  book (where its hard-masks come from, its placements, names beyond the
+  assembly reports). One pool of roots serves every book.
+
+**publisher**
+: Whoever distributes a target: the GRC, UCSC, Ensembl, GENCODE, the Broad
+  Institute, 1000 Genomes, Illumina iGenomes, the T2T consortium, NCBI RefSeq.
+  Publishers are recorded, not part of an edition's identity.
+
 **sequence collection**
 : An ordered collection of named sequences. Identifiable by a digest that
   depends on the names, the sequences and their order (the seqcol top-level
@@ -217,9 +230,14 @@ built from `name_length_pairs`.
 : Another name for a root sequence in a naming convention (namespace):
   `genbank`, `refseq`, `ucsc`, `grc` (the GRC Sequence-Name), `ensembl`,
   `imgt`. The seqcol spec also uses "alias" for a human-readable name of a
-  collection; refbook uses it that way for editions.
+  collection; refbook uses it that way for editions. The refget server
+  (`refbook serve`) answers under refget's own namespace names, so `genbank`
+  is `insdc` there and `imgt` is `imgt.hla`.
 
-## Assemblies (GRCh38)
+## Assemblies
+
+The GRC's GRCh37 and GRCh38 share a release model, described here with GRCh38;
+T2T-CHM13 differs, as noted at the end of this section.
 
 **assembly**, **major release**, **patch release**
 : GRCh38, officially with no `.p` suffix (`.p0` is shorthand used by others),
@@ -298,5 +316,14 @@ built from `name_length_pairs`.
 
 **analysis set**
 : A reference built for alignment pipelines: the GRC's four sets, UCSC's
-  `analysisSet`, Broad's and 1000 Genomes' versions of hs38DH. Typically
-  hard-masked, with EBV and sometimes decoys.
+  `analysisSet`, Broad's and 1000 Genomes' versions of hs38DH, the T2T
+  consortium's masked sets. Typically hard-masked, with EBV and sometimes
+  decoys.
+
+**T2T-CHM13**
+: The telomere-to-telomere assembly of the CHM13 cell line, which is 46,XX:
+  v1.0 and v1.1 have no chrY, and v2.0 (`GCA_009914755.4`) adds HG002's chrY,
+  so "the T2T reference" is a composite of two people. Its releases are whole
+  assemblies of chromosomes only: no scaffolds, alts or patches. Its own
+  mitochondrion (`CP068254.1`) is the same length as rCRS but starts 576 bases
+  further along the circle; several editions swap rCRS in for it.

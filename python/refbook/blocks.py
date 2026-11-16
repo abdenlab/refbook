@@ -3,7 +3,7 @@
 Rows are (root_id, start, bases): fixed 64 kb blocks of uppercase bases, IUPAC
 codes kept, sorted by root and start. The layout is tuned for fetching small
 regions, locally or over HTTP range reads (measured in
-the experiment recorded in docs/SCOPE.md):
+the experiment recorded in docs/design/scope.md):
 
 - row groups of 32 blocks (~2 MB uncompressed) that never span roots, so every
   engine can skip to the right ~0.5 MB with row-group statistics;

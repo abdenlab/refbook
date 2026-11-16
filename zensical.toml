@@ -1,0 +1,88 @@
+# The documentation site, built with Zensical (https://zensical.org) from
+# the Markdown in docs/. Preview with `uvx --with mkdocstrings-python zensical serve`.
+
+[project]
+site_name = "refbook"
+site_description = "A catalog of human reference genome editions, and a library to identify, fetch and reconstruct them"
+site_url = "https://abdenlab.org/refbook/"
+repo_url = "https://github.com/abdenlab/refbook"
+edit_uri = "edit/main/docs/"
+nav = [
+  { "Home" = "index.md" },
+  { "Concepts" = [
+    { "The model" = "concepts/model.md" },
+    { "The catalog" = "concepts/catalog.md" },
+    { "Glossary" = "concepts/glossary.md" },
+  ] },
+  { "Guides" = [
+    { "Python" = "guides/python.md" },
+    { "Refget server" = "guides/refget-server.md" },
+    { "Decoding CRAMs" = "guides/cram.md" },
+    { "Building the catalog" = "guides/building-the-catalog.md" },
+  ] },
+  { "API reference" = "reference/python.md" },
+  { "CLI reference" = "reference/command-line.md" },
+  { "Development" = "development.md" },
+]
+extra_css = ["stylesheets/extra.css"]
+
+[project.theme]
+# Template overrides: an App link next to the repository link in the header.
+custom_dir = "docs/.overrides"
+language = "en"
+logo = "assets/refbook-mark.svg"
+favicon = "assets/refbook-mark.svg"
+features = [
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+def_list = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+toc.toc_depth = 3
+pymdownx.details = {}
+pymdownx.highlight = {}
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
+
+# The Python API reference, read statically from python/refbook (no compiled
+# extension needed). The docstrings are prose for now; numpydoc is planned.
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["python"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+allow_inspection = false
+docstring_style = "google"
+heading_level = 2
+show_root_heading = true
+show_root_full_path = false
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+members_order = "source"
+merge_init_into_class = true
+filters = ["!^_"]
+separate_signature = true
+show_signature_annotations = true
+show_source = false
