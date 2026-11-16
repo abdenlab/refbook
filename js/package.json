@@ -1,6 +1,6 @@
 {
   "name": "@abdenlab/refbook",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "refbook's core in the browser and Node: refget and seqcol digests, nucleotide operations, the recipe compiler",
   "license": "MIT",
   "type": "module",

@@ -1,14 +1,30 @@
 [project]
 name = "refbook"
-version = "0.0.0"
-description = "Catalog of human reference genome sequences: identify, resolve and materialize reference sequence sets"
+version = "0.1.0"
+description = "A catalog of human reference genome editions, and tools to identify, fetch and reconstruct them"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.13"
+authors = [{ name = "Nezar Abdennur" }]
+keywords = ["reference genome", "genome assembly", "GRCh38", "T2T-CHM13", "refget", "seqcol", "CRAM"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "pyarrow>=25",
 ]
+
+[project.urls]
+Homepage = "https://abdenlab.org/refbook/"
+Documentation = "https://abdenlab.org/refbook/"
+Repository = "https://github.com/abdenlab/refbook"
+App = "https://refbook.abdenlab.org/"
+Catalog = "https://huggingface.co/datasets/abdenlab/refbook"
 
 [project.optional-dependencies]
 # Faster fetch: page-index pruning and parallel reads (the engine under polars-bio).

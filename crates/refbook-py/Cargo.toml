@@ -1,6 +1,6 @@
 [package]
 name = "refbook-py"
-version = "0.0.0"
+version = "0.1.0"
 description = "Python bindings of refbook-core (refbook._core)"
 edition.workspace = true
 license.workspace = true

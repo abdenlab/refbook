@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "refbook-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "base64",
  "md-5",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "refbook-py"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pyo3",
  "refbook-core",
@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "refbook-wasm"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "refbook-core",
  "serde",

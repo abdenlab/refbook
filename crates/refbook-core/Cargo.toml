@@ -1,6 +1,6 @@
 [package]
 name = "refbook-core"
-version = "0.0.0"
+version = "0.1.0"
 description = "refbook's core: refget and seqcol digests, nucleotide operations, the recipe compiler"
 edition.workspace = true
 license.workspace = true
