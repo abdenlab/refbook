@@ -309,7 +309,10 @@ def test_fetch_matches_materialize(cat):
     import pyarrow as pa
 
     from refbook import fetch
+    from refbook.fetch import _have_datafusion
     from refbook.materialize import materialize
+    # DataFusion is an optional extra: compare the engines when it is installed.
+    engines = ("pyarrow", "datafusion") if _have_datafusion() else ("pyarrow",)
     rng = random.Random(7)
     for edition in ("grch38-no-alt", "hg38-analysis-set", "ensembl-grch38-primary"):
         names = ["21", "Y", "1"] if edition.startswith("ensembl") else ["chr21", "chrY", "chr1"]
@@ -326,11 +329,13 @@ def test_fetch_matches_materialize(cat):
                      (n, L - 10, L, None), (n, 5, 5, "+")]            # the end, and an empty interval
         iv = pa.table({"chrom": [r[0] for r in rows], "start": [r[1] for r in rows],
                        "end": [r[2] for r in rows], "strand": [r[3] for r in rows]})
-        for engine in ("pyarrow", "datafusion"):
+        for engine in engines:
             got = fetch(cat, edition, iv, strand="strand", engine=engine)
             for (n, a, b, st), seq in zip(rows, got["sequence"].to_pylist()):
                 want = full[n][a:b]
                 assert seq == (_revcomp(want) if st == "-" else want), (engine, edition, n, a, b, st)
+        if "datafusion" not in engines:
+            continue
         few = iv.slice(0, 3)  # few blocks per sequence: the per-sequence IN-list path
         assert (fetch(cat, edition, few, strand="strand", engine="datafusion")["sequence"].to_pylist()
                 == fetch(cat, edition, few, strand="strand", engine="pyarrow")["sequence"].to_pylist())
