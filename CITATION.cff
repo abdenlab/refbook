@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use refbook in your work, please cite it as below."
+type: software
+title: "refbook: a catalog of human reference genome editions"
+abstract: >-
+  A catalog of the many published versions of the human reference genome,
+  each described as a recipe applied to the original deposited sequences
+  and verified by rebuilding the published file. In addition to the catalog
+  itself, refbook provides utilities to search, identify, compare, fetch, and
+  reconstruct any sequence or edition. These are exposed as a Python library
+  and command line tool with a Rust core, as well as a web application
+  (WebAssembly and TypeScript).
+authors:
+  - given-names: Nezar
+    family-names: Abdennur
+    orcid: "https://orcid.org/0000-0001-5814-0864"
+    affiliation: "UMass Chan Medical School"
+repository-code: "https://github.com/abdenlab/refbook"
+url: "https://abdenlab.org/refbook/"
+license: MIT
+keywords:
+  - reference genome
+  - genome assembly
+  - GRCh38
+  - T2T-CHM13
+  - refget
+  - sequence collections
+  - provenance
