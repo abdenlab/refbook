@@ -61,6 +61,7 @@
     <a href="#/catalog" class:here={parts[0] === "catalog"}>Catalog</a>
     <a href="#/editor" class:here={parts[0] === "editor"}>Edit</a>
     <a href="#/identify" class:here={parts[0] === "identify"}>Identify</a>
+    <a href="https://abdenlab.org/refbook/" target="_blank" rel="noopener" title="The documentation: the library, the command line and the catalog">Docs</a>
     <button type="button" class="theme" title={`${LABEL[theme.current]} (click for ${NEXT[theme.current] === "system" ? "the system's" : NEXT[theme.current]})`}
             aria-label={LABEL[theme.current]} onclick={() => setTheme(NEXT[theme.current])}>
       <Icon name={theme.current === "system" ? "system" : theme.current === "light" ? "sun" : "moon"} />
