@@ -114,3 +114,16 @@ release. If you use the HLA entries, please cite IPD-IMGT/HLA (Barker et al.,
 
 Each release is a tag (`v{version}`, …). Pin URLs to a tag, for example
 `https://huggingface.co/datasets/abdenlab/refbook/resolve/v{version}/catalog.json`.
+
+## Citation
+
+Each catalog release has its own DOI, minted after it is published. A DOI
+links to this repository's current state, so cite the version with it:
+
+| Release | DOI |
+| --- | --- |
+| 0.2.0 | [10.57967/hf/11657](https://doi.org/10.57967/hf/11657) |
+
+The refbook software is archived on Zenodo:
+[10.5281/zenodo.24268815](https://doi.org/10.5281/zenodo.24268815) (all
+versions).

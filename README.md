@@ -5,6 +5,8 @@
 
 # refbook
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24268815.svg)](https://doi.org/10.5281/zenodo.24268815)
+
 **A catalog of human reference genome editions, and tools to identify, fetch and reconstruct them.**
 
 Naming a genome assembly like "GRCh38", even a specific release, doesn't pin the sequences people actually use for analysis. Several authorities publish their own versions, with different sequences included, different names and order, and some bases masked or rewritten.

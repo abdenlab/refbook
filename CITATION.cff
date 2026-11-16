@@ -15,6 +15,7 @@ authors:
     family-names: Abdennur
     orcid: "https://orcid.org/0000-0001-5814-0864"
     affiliation: "UMass Chan Medical School"
+doi: 10.5281/zenodo.24268815
 repository-code: "https://github.com/abdenlab/refbook"
 url: "https://abdenlab.org/refbook/"
 license: MIT
@@ -26,3 +27,18 @@ keywords:
   - refget
   - sequence collections
   - provenance
+references:
+  - type: data
+    title: "refbook catalog"
+    abstract: >-
+      The raw catalog of human reference genome editions.
+    authors:
+      - given-names: Nezar
+        family-names: Abdennur
+        orcid: "https://orcid.org/0000-0001-5814-0864"
+        affiliation: "UMass Chan Medical School"
+    version: "0.2.0"
+    doi: 10.57967/hf/11657
+    url: "https://huggingface.co/datasets/abdenlab/refbook"
+    repository: "https://huggingface.co/datasets/abdenlab/refbook/tree/v0.2.0"
+    license: CC-BY-4.0
